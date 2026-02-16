@@ -1,0 +1,20 @@
+# Node
+node_modules/
+
+# clasp credentials (sensitive)
+.clasp.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.swp
+*.swo
+
+# Generated HTML docs
+docs/*.html
+
+# Claude Code internal
+.claude/

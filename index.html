@@ -1,0 +1,1411 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>タダサポ管理</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230d9488'/><text x='50%25' y='55%25' dominant-baseline='middle' text-anchor='middle' fill='white' font-size='18' font-weight='bold'>T</text></svg>">
+
+  <!-- CDN警告を抑制 -->
+  <script>
+    (function(){
+      var origWarn = console.warn;
+      console.warn = function() {
+        var msg = arguments[0] || '';
+        if (typeof msg === 'string' && (
+          msg.indexOf('cdn.tailwindcss.com') !== -1 ||
+          msg.indexOf('in-browser Babel') !== -1
+        )) return;
+        origWarn.apply(console, arguments);
+      };
+    })();
+  </script>
+
+  <!-- Styling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', 'Noto Sans JP', sans-serif; background-color: #f3f4f6; }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f1f1; }
+    ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+
+    .animate-in { animation-duration: 0.3s; animation-fill-mode: both; }
+    .fade-in { animation-name: fadeIn; }
+    .zoom-in { animation-name: zoomIn; }
+    .slide-in-from-bottom-4 { animation-name: slideInBottom; }
+    .toast-enter { animation: slideInBottom 0.3s ease-out both; }
+    .toast-exit { animation: fadeOut 0.3s ease-in both; }
+
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+    @keyframes zoomIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+    @keyframes slideInBottom { from { transform: translateY(1rem); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  </style>
+
+  <!-- Babel for JSX transformation in browser -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Import Map: React 18.2.0 固定 (ADR-004) -->
+  <script type="importmap">
+  {
+    "imports": {
+      "react": "https://esm.sh/react@18.2.0",
+      "react-dom/client": "https://esm.sh/react-dom@18.2.0/client?deps=react@18.2.0",
+      "lucide-react": "https://esm.sh/lucide-react@0.330.0?deps=react@18.2.0"
+    }
+  }
+  </script>
+</head>
+<body class="antialiased text-slate-900">
+  <div id="root"></div>
+
+  <script type="text/babel" data-type="module" data-presets="react">
+    import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+    import { createRoot } from 'react-dom/client';
+    import {
+      Activity, User as UserIcon, CheckCircle,
+      Video, MapPin, Edit, Loader2, Calendar,
+      MessageSquare, ChevronRight, X, Eye, Lock,
+      AlertTriangle, FileText, Clock, Info, CheckCircle2,
+      Mail, Send, Reply, RotateCcw, Search, Filter, XCircle
+    } from 'lucide-react';
+
+    // ======================================================================
+    // 1. Constants
+    // ======================================================================
+    const STATUS_LABELS = {
+      unhandled: '未対応',
+      inProgress: '対応中',
+      completed: '完了',
+      rejected: '対応不可'
+    };
+    const STATUS_KEYS = ['unhandled', 'inProgress', 'completed', 'rejected'];
+
+    // ======================================================================
+    // 2. Mock Data
+    // ======================================================================
+    const IS_LOCAL = typeof google === 'undefined';
+    const MOCK_USER = { name: 'テスト太郎', email: 'test@tadakayo.jp', isAdmin: true };
+    const MOCK_MASTERS = {
+      methods: ['GoogleMeet', '電話等', '対面'],
+      businessTypes: ['訪問介護', '通所介護', '居宅介護支援', '福祉用具貸与', '小規模多機能', '有料老人ホーム', 'その他'],
+      prefectures: ['東京都', '神奈川県', '大阪府', '愛知県', '福岡県', '北海道', 'その他'],
+      allStaff: [
+        { email: 'test@tadakayo.jp', name: 'テスト太郎' },
+        { email: 'tanaka@tadakayo.jp', name: '田中花子' }
+      ],
+      emailTemplates: {
+        initialSubject: 'タダサポ｜ご相談を承りました',
+        initialBody: '{{名前}} 様\n\nこの度はタダサポへご相談いただきありがとうございます。\n担当させていただきます{{担当者名}}と申します。\n\nご相談内容を確認いたしました。\n追ってサポート日時のご連絡をさせていただきます。\n\n何かご不明な点がございましたら、お気軽にお問い合わせください。\n\n今後ともよろしくお願いいたします。',
+        declinedSubject: 'タダサポ｜ご利用回数上限のお知らせ',
+        declinedBody: '{{名前}} 様\n\nいつもタダサポをご利用いただきありがとうございます。\n\n誠に恐れ入りますが、{{事業所名}} 様の今年度のご利用回数が上限（10回）に達しております。\nそのため、今回のご相談につきましては対応を見送らせていただくこととなりました。\n\n大変申し訳ございませんが、何卒ご理解くださいますようお願い申し上げます。\n次年度のご利用をお待ちしております。'
+      }
+    };
+    let mockCases = [
+      // ── パターン1: 未対応（通常） ──
+      { id: '2026-01-15T10:30:00', timestamp: '2026-01-15T10:30:00', email: 'yamada@kaigo.jp', officeName: 'やまだ訪問介護ステーション', requesterName: '山田一郎', prefecture: '東京都', details: 'パソコンの操作方法について教えてほしい。利用者記録の入力方法がわからず困っている。', serviceType: '訪問介護', status: 'unhandled', staffEmail: null, staffName: null, scheduledDateTime: null, supportCount: 1, method: null, businessType: '訪問介護', content: null, remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 3, supportHistory: [], emails: [] },
+      // ── パターン2: 未対応（新規） ──
+      { id: '2026-01-10T09:00:00', timestamp: '2026-01-10T09:00:00', email: 'suzuki@daycare.jp', officeName: 'すずきデイサービスセンター', requesterName: '鈴木美咲', prefecture: '神奈川県', details: 'Wi-Fiの設定と、タブレットでのオンライン研修の受け方を教えてほしい。', serviceType: '通所介護', status: 'unhandled', staffEmail: null, staffName: null, scheduledDateTime: null, supportCount: 1, method: null, businessType: '通所介護', content: null, remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 1, supportHistory: [], emails: [] },
+      // ── パターン3: 未対応（年間上限超過 → 回数超過ボタン表示） ──
+      { id: '2025-10-01T09:30:00', timestamp: '2025-10-01T09:30:00', email: 'limit@kaigo.jp', officeName: 'リミット介護サービス', requesterName: '制限太郎', prefecture: '愛知県', details: '請求ソフトの使い方を教えてほしい。', serviceType: '居宅介護支援', status: 'unhandled', staffEmail: null, staffName: null, scheduledDateTime: null, supportCount: 1, method: null, businessType: '居宅介護支援', content: null, remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 10, supportHistory: [], emails: [] },
+      // ── パターン4: 対応中（1回目・日程決定済み） ──
+      { id: '2025-12-20T14:00:00', timestamp: '2025-12-20T14:00:00', email: 'tanaka@helper.jp', officeName: 'たなかヘルパーセンター', requesterName: '田中次郎', prefecture: '東京都', details: 'Excelでのシフト表作成を手伝ってほしい。マクロの使い方も知りたい。', serviceType: '訪問介護', status: 'inProgress', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: '2026-01-20T13:00:00', supportCount: 1, method: 'GoogleMeet', businessType: '訪問介護', content: null, remarks: null, eventId: 'evt001', meetUrl: 'https://meet.google.com/abc-defg-hij', currentFiscalYearCount: 5, supportHistory: [], threadIds: ['mock-thread-1'], threads: [
+        { threadId: 'mock-thread-1', subject: 'タダサポ｜ご相談を承りました', messages: [
+          { sendDate: '2025-12-21T10:00:00', senderName: 'テスト太郎', subject: 'タダサポ｜ご相談を承りました', body: '田中次郎 様\n\nこの度はタダサポへご相談いただきありがとうございます。\n担当させていただきますテスト太郎と申します。', isStaff: true },
+          { sendDate: '2025-12-22T14:30:00', senderName: '田中次郎', subject: 'Re: タダサポ｜ご相談を承りました', body: 'テスト太郎 様\n\nご連絡ありがとうございます。\n平日の午後であれば対応可能です。\n\n田中次郎', isStaff: false }
+        ]}
+      ] },
+      // ── パターン5: 対応中（2回目・過去履歴あり） ──
+      { id: '2025-12-01T11:00:00', timestamp: '2025-12-01T11:00:00', email: 'sato@welfare.jp', officeName: 'さとう福祉用具', requesterName: '佐藤健一', prefecture: '大阪府', details: 'ホームページの更新作業と、Googleマイビジネスの登録方法について相談したい。', serviceType: '福祉用具貸与', status: 'inProgress', staffEmail: 'tanaka@tadakayo.jp', staffName: '田中花子', scheduledDateTime: '2026-01-18T10:00:00', supportCount: 2, method: 'GoogleMeet', businessType: '福祉用具貸与', content: null, remarks: null, eventId: 'evt002', meetUrl: 'https://meet.google.com/def-ghij-klm', currentFiscalYearCount: 8, supportHistory: [
+        { round: 1, scheduledDateTime: '2025-12-10T14:00:00', method: '対面', content: 'Googleマイビジネスの初期登録とホームページの更新手順をレクチャー。写真のアップロード方法も説明。', remarks: null, meetUrl: null, staffName: '田中花子', staffEmail: 'tanaka@tadakayo.jp' }
+      ], threadIds: ['mock-thread-2'], threads: [
+        { threadId: 'mock-thread-2', subject: 'タダサポ｜ご相談を承りました', messages: [
+          { sendDate: '2025-12-02T09:00:00', senderName: '田中花子', subject: 'タダサポ｜ご相談を承りました', body: '佐藤健一 様\n\nタダサポをご利用いただきありがとうございます。\n担当の田中花子です。', isStaff: true }
+        ]}
+      ] },
+      // ── パターン6: 対応中（3回目・上限到達中・過去2回分履歴あり） ──
+      { id: '2025-09-01T10:00:00', timestamp: '2025-09-01T10:00:00', email: 'mori@smallmulti.jp', officeName: 'もり小規模多機能ホーム', requesterName: '森田和也', prefecture: '福岡県', details: 'オンライン面談ツールの導入と、スタッフ向けマニュアル作成を手伝ってほしい。', serviceType: '小規模多機能', status: 'inProgress', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: '2026-02-01T10:00:00', supportCount: 3, method: '電話等', businessType: '小規模多機能', content: null, remarks: null, eventId: 'evt005', meetUrl: null, currentFiscalYearCount: 6, supportHistory: [
+        { round: 1, scheduledDateTime: '2025-10-05T13:00:00', method: 'GoogleMeet', content: 'Zoomの基本操作とアカウント作成を支援。テスト通話で動作確認完了。', remarks: null, meetUrl: 'https://meet.google.com/old-meet-001', staffName: 'テスト太郎', staffEmail: 'test@tadakayo.jp' },
+        { round: 2, scheduledDateTime: '2025-11-20T15:00:00', method: '対面', content: 'スタッフ向けのZoom操作マニュアルを作成。画面共有やチャット機能の使い方を説明。印刷して配布。', remarks: '次回は応用編の研修も検討', meetUrl: null, staffName: 'テスト太郎', staffEmail: 'test@tadakayo.jp' }
+      ], threadIds: [], threads: [] },
+      // ── パターン7: 完了（2回目で完了・まだ再開可能・過去履歴あり） ──
+      { id: '2025-11-15T16:00:00', timestamp: '2025-11-15T16:00:00', email: 'yamada@kaigo.jp', officeName: 'やまだ訪問介護ステーション', requesterName: '山田一郎', prefecture: '東京都', details: 'メールの設定と、Googleカレンダーの共有設定を教えてほしい。', serviceType: '訪問介護', status: 'completed', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: '2025-12-05T14:00:00', supportCount: 2, method: 'GoogleMeet', businessType: '訪問介護', content: 'Gmailの設定とGoogleカレンダーの共有設定を実施。操作手順書を作成して渡した。', remarks: null, eventId: 'evt003', meetUrl: 'https://meet.google.com/xyz-uvwx-yz', currentFiscalYearCount: 3, supportHistory: [
+        { round: 1, scheduledDateTime: '2025-11-25T10:00:00', method: 'GoogleMeet', content: 'Gmailの初期設定（署名・フィルタ設定）を実施。基本操作をレクチャー。', remarks: null, meetUrl: 'https://meet.google.com/first-meet-001', staffName: 'テスト太郎', staffEmail: 'test@tadakayo.jp' }
+      ], threadIds: ['mock-thread-3', 'mock-thread-3b'], threads: [
+        { threadId: 'mock-thread-3b', subject: '操作手順書の追加送付', messages: [
+          { sendDate: '2025-12-20T10:00:00', senderName: 'テスト太郎', subject: '操作手順書の追加送付', body: '山田一郎 様\n\nカレンダー共有の手順書を追加でお送りいたします。', isStaff: true },
+          { sendDate: '2025-12-21T09:00:00', senderName: '山田一郎', subject: 'Re: 操作手順書の追加送付', body: 'テスト太郎 様\n\nありがとうございます。確認いたしました。\n\n山田一郎', isStaff: false }
+        ]},
+        { threadId: 'mock-thread-3', subject: 'タダサポ｜ご相談を承りました', messages: [
+          { sendDate: '2025-11-16T09:00:00', senderName: 'テスト太郎', subject: 'タダサポ｜ご相談を承りました', body: '山田一郎 様\n\nこの度はタダサポへご相談いただきありがとうございます。', isStaff: true },
+          { sendDate: '2025-11-18T11:00:00', senderName: '山田一郎', subject: 'Re: タダサポ｜ご相談を承りました', body: 'テスト太郎 様\n\nお世話になります。\n12月上旬でお願いしたいのですが、可能でしょうか？\n\n山田一郎', isStaff: false }
+        ]}
+      ] },
+      // ── パターン8: 完了（3回目で完了・上限到達・再開不可） ──
+      { id: '2025-08-01T09:00:00', timestamp: '2025-08-01T09:00:00', email: 'ito@homecare.jp', officeName: 'いとう在宅ケアセンター', requesterName: '伊藤美和', prefecture: '大阪府', details: 'LINEWORKSの導入支援と、スタッフ間の情報共有の仕組みを作りたい。', serviceType: '居宅介護支援', status: 'completed', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: '2025-12-15T11:00:00', supportCount: 3, method: '対面', businessType: '居宅介護支援', content: 'LINEWORKSの管理者設定とグループ作成、掲示板活用法を指導。全スタッフのアカウント作成完了。', remarks: '3回の対応ですべて完了', eventId: 'evt006', meetUrl: null, currentFiscalYearCount: 5, supportHistory: [
+        { round: 1, scheduledDateTime: '2025-09-10T13:00:00', method: 'GoogleMeet', content: 'LINEWORKSの概要説明とアカウント開設支援。管理者アカウントの設定を実施。', remarks: null, meetUrl: 'https://meet.google.com/hist-meet-001', staffName: 'テスト太郎', staffEmail: 'test@tadakayo.jp' },
+        { round: 2, scheduledDateTime: '2025-10-25T14:00:00', method: 'GoogleMeet', content: 'グループチャットの運用ルール策定と、カレンダー共有機能の設定を実施。テスト運用開始。', remarks: '次回は対面で全スタッフ向け研修を実施予定', meetUrl: 'https://meet.google.com/hist-meet-002', staffName: 'テスト太郎', staffEmail: 'test@tadakayo.jp' }
+      ], threadIds: ['mock-thread-6'], threads: [
+        { threadId: 'mock-thread-6', subject: 'タダサポ｜ご相談を承りました', messages: [
+          { sendDate: '2025-08-02T09:00:00', senderName: 'テスト太郎', subject: 'タダサポ｜ご相談を承りました', body: '伊藤美和 様\n\nタダサポをご利用いただきありがとうございます。\n担当のテスト太郎です。', isStaff: true }
+        ]}
+      ] },
+      // ── パターン9: 対応不可（年間上限で拒否済み） ──
+      { id: '2025-11-01T08:00:00', timestamp: '2025-11-01T08:00:00', email: 'limit@kaigo.jp', officeName: 'リミット介護サービス', requesterName: '制限太郎', prefecture: '愛知県', details: '新しいプリンターの設定をお願いしたい。', serviceType: '居宅介護支援', status: 'rejected', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: null, supportCount: 1, method: null, businessType: '居宅介護支援', content: null, remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 10, supportHistory: [], threadIds: ['mock-thread-7'], threads: [
+        { threadId: 'mock-thread-7', subject: 'タダサポ｜ご利用回数上限のお知らせ', messages: [
+          { sendDate: '2025-11-02T10:00:00', senderName: 'テスト太郎', subject: 'タダサポ｜ご利用回数上限のお知らせ', body: '制限太郎 様\n\nいつもタダサポをご利用いただきありがとうございます。\n\n誠に恐れ入りますが、リミット介護サービス 様の今年度のご利用回数が上限（10回）に達しております。\nそのため、今回のご相談につきましては対応を見送らせていただくこととなりました。\n\n次年度のご利用をお待ちしております。', isStaff: true }
+        ]}
+      ] },
+      // ── パターン10〜13: limit@kaigo.jp の完了案件（年間計11回分を構成） ──
+      { id: '2025-04-10T10:00:00', timestamp: '2025-04-10T10:00:00', email: 'limit@kaigo.jp', officeName: 'リミット介護サービス', requesterName: '制限太郎', prefecture: '愛知県', details: 'パソコンの買い替え相談と初期設定。', serviceType: '居宅介護支援', status: 'completed', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: '2025-05-01T10:00:00', supportCount: 3, method: 'GoogleMeet', businessType: '居宅介護支援', content: '3回にわたりPC選定・初期設定・データ移行を支援。', remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 10, supportHistory: [
+        { round: 1, scheduledDateTime: '2025-04-20T10:00:00', method: 'GoogleMeet', content: 'PCの要件ヒアリングと推奨機種を提案。', remarks: null, meetUrl: null, staffName: 'テスト太郎', staffEmail: 'test@tadakayo.jp' },
+        { round: 2, scheduledDateTime: '2025-04-28T14:00:00', method: '対面', content: '新PCの初期設定とソフトウェアインストール。', remarks: null, meetUrl: null, staffName: 'テスト太郎', staffEmail: 'test@tadakayo.jp' }
+      ], threadIds: [], threads: [] },
+      { id: '2025-06-01T09:00:00', timestamp: '2025-06-01T09:00:00', email: 'limit@kaigo.jp', officeName: 'リミット介護サービス', requesterName: '制限太郎', prefecture: '愛知県', details: 'メールソフトの設定変更。', serviceType: '居宅介護支援', status: 'completed', staffEmail: 'tanaka@tadakayo.jp', staffName: '田中花子', scheduledDateTime: '2025-06-15T11:00:00', supportCount: 3, method: '電話等', businessType: '居宅介護支援', content: 'メールアカウント設定3回対応。', remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 10, supportHistory: [
+        { round: 1, scheduledDateTime: '2025-06-05T10:00:00', method: '電話等', content: '現在の設定状況をヒアリング。', remarks: null, meetUrl: null, staffName: '田中花子', staffEmail: 'tanaka@tadakayo.jp' },
+        { round: 2, scheduledDateTime: '2025-06-10T14:00:00', method: '電話等', content: '新しいメール設定を適用。', remarks: null, meetUrl: null, staffName: '田中花子', staffEmail: 'tanaka@tadakayo.jp' }
+      ], threadIds: [], threads: [] },
+      { id: '2025-07-15T10:00:00', timestamp: '2025-07-15T10:00:00', email: 'limit@kaigo.jp', officeName: 'リミット介護サービス', requesterName: '制限太郎', prefecture: '愛知県', details: 'クラウドストレージの導入支援。', serviceType: '居宅介護支援', status: 'completed', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: '2025-08-01T13:00:00', supportCount: 3, method: 'GoogleMeet', businessType: '居宅介護支援', content: 'Google Drive導入3回対応。', remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 10, supportHistory: [
+        { round: 1, scheduledDateTime: '2025-07-22T10:00:00', method: 'GoogleMeet', content: 'Google Driveのアカウント作成と基本操作説明。', remarks: null, meetUrl: null, staffName: 'テスト太郎', staffEmail: 'test@tadakayo.jp' },
+        { round: 2, scheduledDateTime: '2025-07-28T14:00:00', method: 'GoogleMeet', content: 'フォルダ構成と共有設定を策定。', remarks: null, meetUrl: null, staffName: 'テスト太郎', staffEmail: 'test@tadakayo.jp' }
+      ], threadIds: [], threads: [] },
+      { id: '2025-09-01T08:00:00', timestamp: '2025-09-01T08:00:00', email: 'limit@kaigo.jp', officeName: 'リミット介護サービス', requesterName: '制限太郎', prefecture: '愛知県', details: 'セキュリティソフト更新の相談。', serviceType: '居宅介護支援', status: 'completed', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: '2025-09-10T10:00:00', supportCount: 1, method: '対面', businessType: '居宅介護支援', content: 'セキュリティソフトの更新手順をレクチャー。', remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 10, supportHistory: [], threadIds: [], threads: [] },
+      // ── パターン14: 完了（1回目で完了・再開可能） ──
+      { id: '2025-12-10T11:00:00', timestamp: '2025-12-10T11:00:00', email: 'nakamura@group.jp', officeName: 'なかむらグループホーム', requesterName: '中村太一', prefecture: '北海道', details: 'Googleフォームでの満足度アンケート作成を手伝ってほしい。', serviceType: '有料老人ホーム', status: 'completed', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: '2025-12-20T10:00:00', supportCount: 1, method: 'GoogleMeet', businessType: '有料老人ホーム', content: 'Googleフォームで満足度アンケートを作成。回答の集計方法と共有設定を説明。', remarks: null, eventId: 'evt008', meetUrl: 'https://meet.google.com/form-meet-001', currentFiscalYearCount: 2, supportHistory: [], threadIds: [], threads: [] }
+    ];
+
+    // ======================================================================
+    // 3. API Adapter
+    // ======================================================================
+    const Api = {
+      getInitialData: () => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            var getFY = function(ts) { var d = new Date(ts); return d.getMonth() < 3 ? d.getFullYear() - 1 : d.getFullYear(); };
+            var fyCounts = {};
+            mockCases.forEach(function(c) {
+              if (c.status === 'inProgress' || c.status === 'completed') {
+                var key = c.email + '_' + getFY(c.timestamp);
+                fyCounts[key] = (fyCounts[key] || 0) + (c.supportCount || 1);
+              }
+            });
+            var cases = mockCases.map(function(c) {
+              var key = c.email + '_' + getFY(c.timestamp);
+              return { ...c, currentFiscalYearCount: fyCounts[key] || 0 };
+            });
+            resolve({ user: MOCK_USER, cases: cases, masters: MOCK_MASTERS });
+          }, 300));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message || "Unknown error"))).getInitialData();
+        });
+      },
+      getAllCases: () => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            // 年度カウント再計算（バックエンドと同じロジック）
+            var getFY = function(ts) { var d = new Date(ts); return d.getMonth() < 3 ? d.getFullYear() - 1 : d.getFullYear(); };
+            var fyCounts = {};
+            mockCases.forEach(function(c) {
+              if (c.status === 'inProgress' || c.status === 'completed') {
+                var key = c.email + '_' + getFY(c.timestamp);
+                fyCounts[key] = (fyCounts[key] || 0) + (c.supportCount || 1);
+              }
+            });
+            var result = mockCases.map(function(c) {
+              var key = c.email + '_' + getFY(c.timestamp);
+              return { ...c, currentFiscalYearCount: fyCounts[key] || 0 };
+            });
+            resolve(result);
+          }, 200));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).getAllCasesJoined();
+        });
+      },
+      declineCase: (caseId, user, subject, body) => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            mockCases = mockCases.map(c => {
+              if (c.id !== caseId) return c;
+              return { ...c, status: 'rejected', staffEmail: user.email, staffName: user.name };
+            });
+            console.log('=== 回数超過メール送信（モック） ===\n件名:', subject);
+            resolve();
+          }, 500));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).declineCase(caseId, user, subject, body);
+        });
+      },
+      assignCase: (caseId, user) => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            mockCases = mockCases.map(c => c.id === caseId ? { ...c, status: 'inProgress', staffEmail: user.email, staffName: user.name } : c);
+            resolve();
+          }, 300));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).assignCase(caseId, user);
+        });
+      },
+      reopenCase: (caseId, user) => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            mockCases = mockCases.map(c => {
+              if (c.id !== caseId) return c;
+              var history = [...(c.supportHistory || [])];
+              history.push({
+                round: c.supportCount || 1,
+                scheduledDateTime: c.scheduledDateTime || null,
+                method: c.method || null,
+                content: c.content || null,
+                remarks: c.remarks || null,
+                meetUrl: c.meetUrl || null,
+                staffName: c.staffName || null,
+                staffEmail: c.staffEmail || null
+              });
+              return { ...c, status: 'inProgress', supportCount: (c.supportCount || 1) + 1,
+                supportHistory: history,
+                scheduledDateTime: null, method: null, content: null, remarks: null, eventId: null, meetUrl: null };
+            });
+            resolve();
+          }, 300));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).reopenCase(caseId, user);
+        });
+      },
+      assignAndSendEmail: (caseId, user, subject, body) => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            var newThreadId = 'mock-thread-' + Date.now();
+            mockCases = mockCases.map(c => {
+              if (c.id !== caseId) return c;
+              var newThread = { threadId: newThreadId, subject, messages: [{ sendDate: new Date().toISOString(), senderName: user.name, subject, body, isStaff: true }] };
+              return { ...c, status: 'inProgress', staffEmail: user.email, staffName: user.name,
+                threadIds: [newThreadId], threads: [newThread]
+              };
+            });
+            console.log('=== 初回メール送信（モック） ===\n件名:', subject);
+            resolve();
+          }, 500));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).assignAndSendEmail(caseId, user, subject, body);
+        });
+      },
+      sendNewCaseEmail: (caseId, user, subject, body) => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            var newThreadId = 'mock-thread-' + Date.now();
+            mockCases = mockCases.map(c => {
+              if (c.id !== caseId) return c;
+              var newThread = { threadId: newThreadId, subject, messages: [{ sendDate: new Date().toISOString(), senderName: user.name, subject, body, isStaff: true }] };
+              return { ...c, threadIds: [...(c.threadIds || []), newThreadId], threads: [newThread, ...(c.threads || [])] };
+            });
+            console.log('=== 新規メール送信（モック） ===\n件名:', subject);
+            resolve();
+          }, 500));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).sendNewCaseEmail(caseId, user, subject, body);
+        });
+      },
+      sendCaseEmail: (caseId, user, subject, body, threadId) => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            mockCases = mockCases.map(c => {
+              if (c.id !== caseId) return c;
+              return { ...c,
+                threads: (c.threads || []).map(th => th.threadId === threadId
+                  ? { ...th, messages: [...th.messages, { sendDate: new Date().toISOString(), senderName: user.name, subject, body, isStaff: true }] }
+                  : th)
+              };
+            });
+            console.log('=== スレッド返信（モック） ===\nスレッド:', threadId, '\n件名:', subject);
+            resolve();
+          }, 500));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).sendCaseEmail(caseId, user, subject, body, threadId);
+        });
+      },
+      getThreadMessages: (caseId) => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            var c = mockCases.find(x => x.id === caseId);
+            resolve(c?.threads || []);
+          }, 200));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).getThreadMessages(caseId);
+        });
+      },
+      updateSupportRecord: (recordData) => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            mockCases = mockCases.map(c => {
+              if (c.id !== recordData.id) return c;
+              var newUrl = c.meetUrl;
+              if (recordData.scheduledDateTime && !c.meetUrl) {
+                var rand = Math.random().toString(36).substring(2, 10);
+                if (recordData.method === 'GoogleMeet') newUrl = 'https://meet.google.com/mock-' + rand;
+                else if (recordData.method === 'Zoom') newUrl = 'https://zoom.us/j/' + Math.floor(Math.random() * 9000000000 + 1000000000);
+              }
+              return { ...c, ...recordData, meetUrl: newUrl };
+            });
+            resolve();
+          }, 300));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).updateSupportRecord(recordData);
+        });
+      }
+    };
+
+    // ======================================================================
+    // 4. Dialog Components (alert/confirm の代替)
+    // ======================================================================
+
+    // --- トースト通知 (alert の代替) ---
+    function Toast({ toasts, onDismiss }) {
+      return (
+        <div className="fixed top-4 right-4 z-[200] space-y-2 pointer-events-none" style={{ maxWidth: '420px' }}>
+          {toasts.map(t => (
+            <div key={t.id}
+              className={`pointer-events-auto p-4 rounded-2xl shadow-xl border flex items-start gap-3 toast-enter ${
+                t.type === 'error' ? 'bg-rose-50 border-rose-200 text-rose-800' :
+                t.type === 'warning' ? 'bg-amber-50 border-amber-200 text-amber-800' :
+                t.type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' :
+                'bg-white border-slate-200 text-slate-800'
+              }`}>
+              <div className="shrink-0 mt-0.5">
+                {t.type === 'error' ? <X size={18} className="text-rose-500"/> :
+                 t.type === 'warning' ? <AlertTriangle size={18} className="text-amber-500"/> :
+                 t.type === 'success' ? <CheckCircle2 size={18} className="text-emerald-500"/> :
+                 <Info size={18} className="text-sky-500"/>}
+              </div>
+              <div className="flex-1 min-w-0">
+                {t.title && <p className="text-sm font-black mb-0.5">{t.title}</p>}
+                <p className="text-xs font-bold leading-relaxed whitespace-pre-wrap">{t.message}</p>
+              </div>
+              <button onClick={() => onDismiss(t.id)} className="shrink-0 p-1 rounded-lg hover:bg-black/5 transition-colors">
+                <X size={14} className="opacity-40"/>
+              </button>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // --- 確認ダイアログ (confirm の代替) ---
+    function ConfirmDialog({ dialog, onClose }) {
+      if (!dialog) return null;
+      return (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[200] p-4 animate-in fade-in">
+          <div className="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl animate-in zoom-in duration-200">
+            {dialog.title && <h3 className="font-black text-base text-slate-800 mb-2">{dialog.title}</h3>}
+            <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap mb-6">{dialog.message}</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { onClose(); dialog.onCancel && dialog.onCancel(); }}
+                className="flex-1 py-3 rounded-xl text-sm font-black border-2 border-slate-200 text-slate-500 hover:bg-slate-50 transition-all">
+                キャンセル
+              </button>
+              <button
+                onClick={() => { onClose(); dialog.onConfirm(); }}
+                className={`flex-1 py-3 rounded-xl text-sm font-black text-white transition-all ${
+                  dialog.variant === 'danger' ? 'bg-rose-500 hover:bg-rose-600' : 'bg-teal-500 hover:bg-teal-600'
+                }`}>
+                {dialog.confirmLabel || '確認'}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ======================================================================
+    // 5. Main Component (App)
+    // ======================================================================
+    function App() {
+      const [loading, setLoading] = useState(true);
+      const [authError, setAuthError] = useState(null);
+      const [user, setUser] = useState(null);
+      const [cases, setCases] = useState([]);
+      const [masters, setMasters] = useState(null);
+
+      const [activeTab, setActiveTab] = useState('unhandled');
+      const [selectedCaseId, setSelectedCaseId] = useState(null);
+      const [isDashboardMode, setIsDashboardMode] = useState(false);
+
+      // 検索
+      const [searchOpen, setSearchOpen] = useState(false);
+      const [searchWord, setSearchWord] = useState('');
+      const [searchDateFrom, setSearchDateFrom] = useState('');
+      const [searchDateTo, setSearchDateTo] = useState('');
+      const searchInputRef = useRef(null);
+
+      const [modalMode, setModalMode] = useState(null);
+      const [editFormData, setEditFormData] = useState({});
+      const [submitting, setSubmitting] = useState(false);
+      const [emailModal, setEmailModal] = useState(null);
+      const [expandedEmailIdx, setExpandedEmailIdx] = useState(null);
+      const [threadGroups, setThreadGroups] = useState([]);
+      const [threadLoading, setThreadLoading] = useState(false);
+      const [openThreadId, setOpenThreadId] = useState(null);
+
+      // Dialog state
+      const [toasts, setToasts] = useState([]);
+      const [confirmDialog, setConfirmDialog] = useState(null);
+      const toastIdRef = useRef(0);
+
+      const showToast = useCallback((message, options = {}) => {
+        const id = ++toastIdRef.current;
+        setToasts(prev => [...prev, { id, message, type: options.type || 'info', title: options.title || null }]);
+        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), options.duration || 5000);
+      }, []);
+
+      const dismissToast = useCallback((id) => {
+        setToasts(prev => prev.filter(t => t.id !== id));
+      }, []);
+
+      const showConfirm = useCallback((message, onConfirm, options = {}) => {
+        setConfirmDialog({ message, onConfirm, title: options.title, confirmLabel: options.confirmLabel, variant: options.variant, onCancel: options.onCancel });
+      }, []);
+
+      useEffect(() => {
+        Api.getInitialData()
+          .then(data => {
+            setUser(data.user);
+            setCases(data.cases);
+            setMasters(data.masters);
+            setLoading(false);
+          })
+          .catch(err => {
+            setAuthError(err.message || "データの読み込みに失敗しました");
+            setLoading(false);
+          });
+      }, []);
+
+      const hasActiveSearch = searchWord.trim() !== '' || searchDateFrom !== '' || searchDateTo !== '';
+      const clearSearch = useCallback(() => { setSearchWord(''); setSearchDateFrom(''); setSearchDateTo(''); }, []);
+
+      const filteredCases = useMemo(() => {
+        if (!user) return [];
+        return cases.filter(c => {
+          if (c.status !== activeTab) return false;
+          if (activeTab !== 'unhandled' && !isDashboardMode && c.staffEmail !== user.email) return false;
+          // キーワード検索
+          if (searchWord.trim()) {
+            var kw = searchWord.trim().toLowerCase();
+            var haystack = [c.officeName, c.requesterName, c.email, c.details, c.serviceType, c.prefecture, c.staffName].filter(Boolean).join(' ').toLowerCase();
+            if (haystack.indexOf(kw) === -1) return false;
+          }
+          // 期間検索
+          if (searchDateFrom) {
+            var from = new Date(searchDateFrom); from.setHours(0,0,0,0);
+            if (new Date(c.timestamp) < from) return false;
+          }
+          if (searchDateTo) {
+            var to = new Date(searchDateTo); to.setHours(23,59,59,999);
+            if (new Date(c.timestamp) > to) return false;
+          }
+          return true;
+        }).sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+      }, [cases, activeTab, isDashboardMode, user, searchWord, searchDateFrom, searchDateTo]);
+
+      const selectedCase = useMemo(() => cases.find(c => c.id === selectedCaseId) || null, [cases, selectedCaseId]);
+
+      // 案件切り替え時にスレッドを読み込み
+      useEffect(() => {
+        setExpandedEmailIdx(null);
+        setOpenThreadId(null);
+        setThreadGroups([]);
+        if (!selectedCaseId) return;
+        const sc = cases.find(c => c.id === selectedCaseId);
+        if (!sc || sc.status === 'unhandled') return;
+        setThreadLoading(true);
+        Api.getThreadMessages(selectedCaseId)
+          .then(groups => setThreadGroups(groups || []))
+          .catch(() => setThreadGroups([]))
+          .finally(() => setThreadLoading(false));
+      }, [selectedCaseId, cases]);
+
+      const replaceCaseTags = (str) => {
+        if (!selectedCase || !user) return str || '';
+        const tags = {
+          '{{事業所名}}': selectedCase.officeName || '',
+          '{{名前}}': selectedCase.requesterName || '',
+          '{{担当者名}}': user.name || '',
+          '{{相談内容}}': selectedCase.details || ''
+        };
+        var result = str || '';
+        Object.keys(tags).forEach(tag => { result = result.split(tag).join(tags[tag]); });
+        return result;
+      };
+
+      const handleDecline = () => {
+        if (!selectedCase || !user) return;
+        const tpl = masters?.emailTemplates || {};
+        setEmailModal({
+          mode: 'decline',
+          caseId: selectedCase.timestamp,
+          to: selectedCase.email,
+          subject: replaceCaseTags(tpl.declinedSubject || 'タダサポ｜ご利用回数上限のお知らせ'),
+          body: replaceCaseTags(tpl.declinedBody || '')
+        });
+      };
+
+      const handleAssign = () => {
+        if (!selectedCase || !user) return;
+
+        // タグ置換用マッピング
+        const tags = {
+          '{{事業所名}}': selectedCase.officeName || '',
+          '{{名前}}': selectedCase.requesterName || '',
+          '{{担当者名}}': user.name || '',
+          '{{相談内容}}': selectedCase.details || ''
+        };
+        const replaceTags = (str) => {
+          var result = str || '';
+          Object.keys(tags).forEach(tag => { result = result.split(tag).join(tags[tag]); });
+          return result;
+        };
+
+        const tpl = masters?.emailTemplates || {};
+        setEmailModal({
+          mode: 'initial',
+          caseId: selectedCase.timestamp,
+          to: selectedCase.email,
+          subject: replaceTags(tpl.initialSubject || 'タダサポ｜ご相談を承りました'),
+          body: replaceTags(tpl.initialBody || '')
+        });
+      };
+
+      // 新規メール作成（新しいスレッドを立てる）
+      const handleComposeNewEmail = () => {
+        if (!selectedCase || !user) return;
+        setEmailModal({
+          mode: 'new',
+          caseId: selectedCase.timestamp,
+          to: selectedCase.email,
+          subject: '',
+          body: selectedCase.requesterName + ' 様\n\n\n\n' + user.name
+        });
+      };
+
+      // スレッド内返信
+      const handleReplyEmail = (replyToMessage, threadId) => {
+        if (!selectedCase || !user) return;
+        var origSubject = replyToMessage.subject || '';
+        var reSubject = origSubject.startsWith('Re:') ? origSubject : 'Re: ' + origSubject;
+        var quotedDate = replyToMessage.sendDate ? new Date(replyToMessage.sendDate).toLocaleString() : '';
+        var quotedFrom = replyToMessage.senderName || replyToMessage.fromEmail || '';
+        var quotedBody = (replyToMessage.body || '').split('\n').map(l => '> ' + l).join('\n');
+
+        setEmailModal({
+          mode: 'reply',
+          caseId: selectedCase.timestamp,
+          to: selectedCase.email,
+          threadId: threadId,
+          subject: reSubject,
+          body: selectedCase.requesterName + ' 様\n\n\n\n' + user.name
+            + '\n\n--- ' + quotedDate + ' ' + quotedFrom + ' ---\n' + quotedBody
+        });
+      };
+
+      const handleSendEmail = async () => {
+        if (!emailModal || !user) return;
+        setSubmitting(true);
+        try {
+          if (emailModal.mode === 'initial') {
+            await Api.assignAndSendEmail(emailModal.caseId, user, emailModal.subject, emailModal.body);
+          } else if (emailModal.mode === 'decline') {
+            await Api.declineCase(emailModal.caseId, user, emailModal.subject, emailModal.body);
+          } else if (emailModal.mode === 'new') {
+            await Api.sendNewCaseEmail(emailModal.caseId, user, emailModal.subject, emailModal.body);
+          } else {
+            await Api.sendCaseEmail(emailModal.caseId, user, emailModal.subject, emailModal.body, emailModal.threadId);
+          }
+          const updatedCases = await Api.getAllCases();
+          setCases(updatedCases);
+          setEmailModal(null);
+          if (emailModal.mode === 'initial') {
+            setActiveTab('inProgress');
+            showToast('メールを送信し、担当に設定しました。', { type: 'success', title: '担当設定完了' });
+          } else if (emailModal.mode === 'decline') {
+            setActiveTab('rejected');
+            showToast('回数超過の連絡を送信し、対応不可に設定しました。', { type: 'success', title: '対応不可' });
+          } else {
+            showToast('メールを送信しました。', { type: 'success', title: '送信完了' });
+          }
+          // スレッド一覧を再読み込み
+          if (emailModal.mode !== 'initial') {
+            Api.getThreadMessages(emailModal.caseId)
+              .then(groups => setThreadGroups(groups || []))
+              .catch(() => {});
+          }
+        } catch(e) {
+          showToast(e.message || String(e), { type: 'error', title: 'メール送信エラー' });
+        } finally {
+          setSubmitting(false);
+        }
+      };
+
+      const handleEditSave = async (ev) => {
+        ev.preventDefault();
+        if (!selectedCase) return;
+        setSubmitting(true);
+
+        try {
+          let payload = Object.assign({}, selectedCase, editFormData);
+          if (modalMode === 'report') {
+            payload.status = 'completed';
+          }
+          await Api.updateSupportRecord(payload);
+          const updatedCases = await Api.getAllCases();
+          setCases(updatedCases);
+          setModalMode(null);
+
+          if (payload.status === 'completed') {
+            setActiveTab('completed');
+            showToast('完了報告を保存しました。', { type: 'success', title: '保存完了' });
+          } else {
+            showToast('記録を保存しました。', { type: 'success', title: '保存完了' });
+          }
+        } catch (err) {
+          showToast(err.message || String(err), { type: 'error', title: '保存エラー' });
+        } finally {
+          setSubmitting(false);
+        }
+      };
+
+      const handleReopen = async () => {
+        if (!selectedCase || !user) return;
+        if ((selectedCase.supportCount || 1) >= 3) {
+          showToast('この案件は対応上限（3回）に達しています。', { type: 'error', title: '再開不可' });
+          return;
+        }
+        if (selectedCase.currentFiscalYearCount >= 10) {
+          showToast('今年度の利用回数が上限（10回）に達しているため再開できません。', { type: 'error', title: '再開不可' });
+          return;
+        }
+        setSubmitting(true);
+        try {
+          await Api.reopenCase(selectedCase.timestamp, user);
+          const updatedCases = await Api.getAllCases();
+          setCases(updatedCases);
+          setActiveTab('inProgress');
+          showToast((selectedCase.supportCount || 1) + 1 + '回目の対応を開始しました。', { type: 'success', title: '案件再開' });
+        } catch(e) {
+          showToast(e.message || String(e), { type: 'error', title: '再開エラー' });
+        } finally {
+          setSubmitting(false);
+        }
+      };
+
+      const openModal = (mode) => {
+        if (!selectedCase) return;
+        setModalMode(mode);
+        setEditFormData({
+          scheduledDateTime: selectedCase.scheduledDateTime ? new Date(selectedCase.scheduledDateTime).toISOString().substring(0,16) : '',
+          method: selectedCase.method || 'GoogleMeet',
+          content: selectedCase.content || '',
+          status: selectedCase.status
+        });
+      };
+
+      if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-teal-600 w-8 h-8"/></div>;
+      if (authError) return <div className="h-screen flex items-center justify-center bg-rose-50 text-rose-600 font-bold p-10">{authError}</div>;
+
+      return (
+        <div className="h-screen flex flex-col bg-slate-50 text-slate-900 font-sans overflow-hidden relative">
+          {/* Toast Notifications */}
+          <Toast toasts={toasts} onDismiss={dismissToast} />
+          {/* Confirm Dialog */}
+          <ConfirmDialog dialog={confirmDialog} onClose={() => setConfirmDialog(null)} />
+
+          {/* Header */}
+          <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 z-20 shadow-sm relative">
+            <div className="flex items-center gap-3">
+              <div className="bg-teal-600 text-white p-1.5 rounded-lg"><Activity size={18} /></div>
+              <span className="font-black text-base tracking-tighter hidden sm:inline">タダサポ管理</span>
+            </div>
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+               <button
+                 onClick={() => { setIsDashboardMode(!isDashboardMode); setSelectedCaseId(null); }}
+                 className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-black transition-all border ${
+                   isDashboardMode ? 'bg-slate-800 text-white border-slate-900 shadow-md' : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
+                 }`}>
+                 {isDashboardMode ? <Eye size={14} className="text-emerald-400"/> : <Lock size={14}/>}
+                 {isDashboardMode ? '閲覧モード (全体)' : '通常モード (自分)'}
+               </button>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="text-right hidden sm:block">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ログイン中</p>
+                <p className="text-xs font-bold text-slate-700">{user?.name}</p>
+              </div>
+              <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+                <UserIcon size={16} className="text-slate-400" />
+              </div>
+            </div>
+          </header>
+
+          <main className="flex-1 flex overflow-hidden">
+            {/* Sidebar */}
+            <div className={`flex-none w-full md:w-[320px] lg:w-[380px] bg-white border-r border-slate-200 flex flex-col z-10 ${selectedCaseId ? 'hidden md:flex' : 'flex'}`}
+              role="region" aria-label="案件一覧">
+              {/* ステータスタブ + 検索トグル */}
+              <div className="p-3 border-b border-slate-100 bg-slate-50/50">
+                <div className="flex items-center gap-1">
+                  <div className="flex gap-1 flex-1 overflow-x-auto" role="tablist" aria-label="ステータス切替">
+                    {STATUS_KEYS.map(s => (
+                      <button key={s} role="tab" aria-selected={activeTab === s} aria-controls="case-list-panel"
+                        onClick={() => setActiveTab(s)}
+                        className={`px-3 py-2 rounded-lg text-[10px] font-black whitespace-nowrap transition-all ${activeTab === s ? 'bg-white shadow-sm text-teal-700 ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}>
+                        {STATUS_LABELS[s]}
+                        <span className="ml-1 opacity-50">
+                          ({cases.filter(c => {
+                            if (c.status !== s) return false;
+                            if (s === 'unhandled') return true;
+                            if (isDashboardMode) return true;
+                            return c.staffEmail === user?.email;
+                          }).length})
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => { setSearchOpen(!searchOpen); if (!searchOpen) setTimeout(() => searchInputRef.current?.focus(), 100); }}
+                    aria-expanded={searchOpen} aria-controls="search-panel" aria-label="検索パネルを開く"
+                    className={`shrink-0 p-2 rounded-lg transition-all ${searchOpen || hasActiveSearch ? 'bg-teal-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'}`}>
+                    <Search size={14} />
+                  </button>
+                </div>
+              </div>
+              {/* 検索パネル */}
+              {searchOpen && (
+                <div id="search-panel" role="search" aria-label="案件検索" className="border-b border-slate-200 bg-white animate-in fade-in duration-200">
+                  <div className="p-3 space-y-3">
+                    {/* キーワード */}
+                    <div>
+                      <label htmlFor="search-keyword" className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">
+                        キーワード検索
+                      </label>
+                      <div className="relative">
+                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" aria-hidden="true" />
+                        <input
+                          id="search-keyword" ref={searchInputRef} type="search" autoComplete="off"
+                          value={searchWord} onChange={e => setSearchWord(e.target.value)}
+                          placeholder="事業所名、担当者名、メール、内容..."
+                          aria-label="キーワードで案件を検索"
+                          className="w-full pl-9 pr-8 py-2.5 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all placeholder:text-slate-300"
+                        />
+                        {searchWord && (
+                          <button onClick={() => setSearchWord('')} aria-label="キーワードをクリア"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-slate-300 hover:text-slate-500 transition-colors">
+                            <XCircle size={14} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {/* 期間 */}
+                    <fieldset>
+                      <legend className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">
+                        期間で絞り込み
+                      </legend>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <label htmlFor="search-date-from" className="sr-only">開始日</label>
+                          <input id="search-date-from" type="date" value={searchDateFrom}
+                            onChange={e => setSearchDateFrom(e.target.value)}
+                            aria-label="検索開始日"
+                            className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all"
+                          />
+                        </div>
+                        <span className="text-xs font-black text-slate-300 shrink-0" aria-hidden="true">〜</span>
+                        <div className="flex-1">
+                          <label htmlFor="search-date-to" className="sr-only">終了日</label>
+                          <input id="search-date-to" type="date" value={searchDateTo}
+                            onChange={e => setSearchDateTo(e.target.value)}
+                            aria-label="検索終了日"
+                            className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all"
+                          />
+                        </div>
+                      </div>
+                    </fieldset>
+                    {/* クリアボタン + 件数 */}
+                    <div className="flex items-center justify-between">
+                      <p className="text-[10px] font-bold text-slate-400" role="status" aria-live="polite" aria-atomic="true">
+                        {hasActiveSearch ? `${filteredCases.length} 件ヒット` : '条件を入力してください'}
+                      </p>
+                      {hasActiveSearch && (
+                        <button onClick={clearSearch} aria-label="検索条件をすべてクリア"
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-black text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors">
+                          <X size={12} /> クリア
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+              {/* 検索中バッジ（パネル閉じてても条件があれば表示） */}
+              {!searchOpen && hasActiveSearch && (
+                <div className="px-3 py-1.5 bg-teal-50 border-b border-teal-100 flex items-center justify-between">
+                  <p className="text-[10px] font-black text-teal-700 flex items-center gap-1" role="status" aria-live="polite">
+                    <Filter size={10} /> 検索中: {filteredCases.length} 件
+                    {searchWord.trim() && <span className="bg-teal-100 px-1.5 py-0.5 rounded ml-1">「{searchWord.trim()}」</span>}
+                    {(searchDateFrom || searchDateTo) && <span className="bg-teal-100 px-1.5 py-0.5 rounded ml-1">{searchDateFrom || '...'} 〜 {searchDateTo || '...'}</span>}
+                  </p>
+                  <button onClick={clearSearch} aria-label="検索条件をすべてクリア"
+                    className="p-1 rounded hover:bg-teal-100 text-teal-600 transition-colors">
+                    <X size={12} />
+                  </button>
+                </div>
+              )}
+              {isDashboardMode && (
+                <div className="px-4 py-2 bg-slate-800 text-white text-[10px] font-bold text-center flex items-center justify-center gap-2" role="status">
+                  <Eye size={12} className="text-emerald-400"/> 全体を表示中（閲覧専用）
+                </div>
+              )}
+              <div id="case-list-panel" role="tabpanel" aria-label={STATUS_LABELS[activeTab] + 'の案件一覧'} className="flex-1 overflow-y-auto p-3 space-y-2">
+                {filteredCases.map(c => (
+                  <button key={c.id} onClick={() => setSelectedCaseId(c.id)}
+                    aria-current={selectedCaseId === c.id ? 'true' : undefined}
+                    aria-label={`${c.officeName} ${c.requesterName}様 ${new Date(c.timestamp).toLocaleDateString()}`}
+                    className={`w-full text-left p-4 rounded-xl border transition-all flex items-start gap-3 focus:outline-none focus:ring-2 focus:ring-teal-500/40 ${selectedCaseId === c.id ? 'bg-teal-50 border-teal-200 shadow-sm' : 'bg-white border-slate-100 hover:bg-slate-50'}`}>
+                    <div className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center font-black text-[10px] shrink-0 ${c.status === 'completed' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}
+                      aria-hidden="true">
+                      {c.status === 'completed' ? <CheckCircle size={12} /> : (c.supportCount || 1)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-[9px] font-black text-slate-400">{new Date(c.timestamp).toLocaleDateString()}</span>
+                        {c.staffName && <span className="text-[9px] font-bold text-indigo-500 flex items-center gap-0.5"><UserIcon size={8} aria-hidden="true"/> {c.staffName}</span>}
+                      </div>
+                      <h4 className="text-sm font-black text-slate-800 truncate">{c.officeName}</h4>
+                      <p className="text-[10px] text-slate-500 font-bold mt-0.5 truncate">{c.requesterName} 様</p>
+                      {c.currentFiscalYearCount >= 10 && (
+                        <div className="mt-1 inline-flex items-center gap-1 bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded text-[9px] font-black">
+                           <AlertTriangle size={8} aria-hidden="true" /> 上限注意 ({c.currentFiscalYearCount}回)
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                ))}
+                {filteredCases.length === 0 && (
+                  <div className="py-20 text-center text-slate-300" role="status">
+                    <p className="text-xs font-bold">{hasActiveSearch ? '検索条件に一致する案件がありません' : '案件はありません'}</p>
+                    {hasActiveSearch && <p className="text-[10px] mt-2">条件を変更してお試しください</p>}
+                    {!hasActiveSearch && !isDashboardMode && activeTab !== 'unhandled' && <p className="text-[10px] mt-2">※自分の担当分のみ表示中</p>}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Main Content */}
+            <div className={`flex-1 overflow-y-auto bg-slate-50 p-4 lg:p-10 ${!selectedCaseId ? 'hidden md:block' : ''}`}>
+              {selectedCase ? (
+                <div className="max-w-3xl mx-auto space-y-6 pb-28 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                  <button onClick={() => setSelectedCaseId(null)} className="md:hidden flex items-center gap-2 text-slate-500 text-xs font-bold mb-2">
+                    <ChevronRight className="rotate-180" size={14} /> 一覧に戻る
+                  </button>
+                  <div className="bg-white p-6 lg:p-10 rounded-[2rem] shadow-sm border border-slate-100 relative overflow-hidden">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex items-center gap-3">
+                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${
+                          selectedCase.status === 'unhandled' ? 'bg-rose-50 text-rose-600 border-rose-100' :
+                          selectedCase.status === 'inProgress' ? 'bg-sky-50 text-sky-600 border-sky-100' :
+                          selectedCase.status === 'completed' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                          'bg-slate-100 text-slate-500 border-slate-200'
+                        }`}>{STATUS_LABELS[selectedCase.status]}</span>
+                        {selectedCase.staffName && (
+                          <span className="flex items-center gap-1.5 text-xs font-black text-indigo-600">
+                            <UserIcon size={14}/> {selectedCase.staffName}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex gap-3 sm:gap-6 shrink-0">
+                        {selectedCase.status !== 'unhandled' && (
+                          <div className="text-right">
+                            <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase">案件回数</p>
+                            <div className={`text-lg sm:text-xl font-black flex items-center justify-end gap-1 ${(selectedCase.supportCount || 1) >= 3 ? 'text-rose-600' : 'text-slate-800'}`}>
+                              {(selectedCase.supportCount || 1) >= 3 && <AlertTriangle size={16}/>}
+                              {selectedCase.supportCount || 1} / 3
+                            </div>
+                          </div>
+                        )}
+                        <div className="text-right">
+                          <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase">今年度利用数</p>
+                          <div className={`text-lg sm:text-xl font-black flex items-center justify-end gap-1 ${selectedCase.currentFiscalYearCount >= 10 ? 'text-rose-600' : 'text-slate-800'}`}>
+                            {selectedCase.currentFiscalYearCount >= 10 && <AlertTriangle size={16}/>}
+                            {selectedCase.currentFiscalYearCount} / 10
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <h1 className="text-2xl lg:text-3xl font-black text-slate-900 leading-tight">{selectedCase.officeName}</h1>
+                    <p className="text-base font-black text-slate-600 mt-1 mb-4">{selectedCase.requesterName} 様</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                       <div className="bg-slate-50 p-3 rounded-xl">
+                         <span className="text-[9px] font-black text-slate-400 uppercase flex items-center gap-1 mb-1"><Activity size={10}/> サービス種別</span>
+                         <span className="text-xs font-black text-slate-700">{selectedCase.serviceType || '—'}</span>
+                       </div>
+                       <div className="bg-slate-50 p-3 rounded-xl cursor-pointer hover:bg-indigo-50 transition-colors"
+                         onClick={() => {
+                           if (selectedCase.status === 'unhandled') {
+                             selectedCase.currentFiscalYearCount >= 10 ? handleDecline() : handleAssign();
+                           } else {
+                             handleComposeNewEmail();
+                           }
+                         }}>
+                         <span className="text-[9px] font-black text-slate-400 uppercase flex items-center gap-1 mb-1"><Mail size={10}/> メールアドレス</span>
+                         <span className="text-xs font-black text-indigo-600 flex items-center gap-1">{selectedCase.email} <Send size={10}/></span>
+                       </div>
+                       <div className="bg-slate-50 p-3 rounded-xl">
+                         <span className="text-[9px] font-black text-slate-400 uppercase flex items-center gap-1 mb-1"><MapPin size={10}/> 都道府県</span>
+                         <span className="text-xs font-black text-slate-700">{selectedCase.prefecture || '—'}</span>
+                       </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-6">
+                    {selectedCase.currentFiscalYearCount >= 10 && (
+                      <div className="bg-rose-50 border border-rose-100 p-4 rounded-2xl flex items-start gap-3">
+                        <AlertTriangle className="text-rose-500 shrink-0 mt-0.5" size={20} />
+                        <div>
+                          <h4 className="text-sm font-black text-rose-700">年間利用制限（10回）に達しています</h4>
+                          <p className="text-xs text-rose-600 mt-1 leading-relaxed">この事業所は今年度の利用回数が上限に達しています。原則として新規の受付はお断りしてください。<br/>※例外的に対応する場合は、管理者へ承認を得てください。</p>
+                        </div>
+                      </div>
+                    )}
+                    <section className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-4">
+                      <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><MessageSquare size={12} /> 相談内容</h3>
+                      <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap bg-slate-50 p-4 rounded-2xl border border-slate-50">{selectedCase.details}</div>
+                    </section>
+                    {selectedCase.status !== 'unhandled' && (
+                    <section className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-4">
+                      <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                        <Calendar size={12} />
+                        {(selectedCase.supportCount || 1) > 1
+                          ? `${selectedCase.supportCount || 1}回目の実施情報（現在）`
+                          : '実施情報'}
+                      </h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="p-4 bg-slate-50 rounded-2xl">
+                          <span className="text-xs font-bold text-slate-500 block mb-1">日時</span>
+                          <span className="text-sm font-black">{selectedCase.scheduledDateTime ? new Date(selectedCase.scheduledDateTime).toLocaleString() : <span className="text-slate-400">未定</span>}</span>
+                        </div>
+                        <div className="p-4 bg-slate-50 rounded-2xl">
+                          <span className="text-xs font-bold text-slate-500 block mb-1">方法</span>
+                          <span className="text-sm font-black">{selectedCase.method || <span className="text-slate-400">未定</span>}</span>
+                        </div>
+                      </div>
+                      {selectedCase.meetUrl && (
+                        <div className={`border p-4 rounded-2xl flex items-center gap-3 ${
+                          selectedCase.meetUrl.includes('zoom.us') ? 'bg-blue-50 border-blue-100' : 'bg-indigo-50 border-indigo-100'
+                        }`}>
+                          <div className={`text-white p-2 rounded-lg ${selectedCase.meetUrl.includes('zoom.us') ? 'bg-blue-500' : 'bg-indigo-500'}`}><Video size={16}/></div>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-[10px] font-black uppercase ${selectedCase.meetUrl.includes('zoom.us') ? 'text-blue-400' : 'text-indigo-400'}`}>
+                              {selectedCase.meetUrl.includes('zoom.us') ? 'Zoom URL' : 'Google Meet URL'}
+                            </p>
+                            <a href={selectedCase.meetUrl} target="_blank" rel="noreferrer" className={`text-sm font-bold truncate block hover:underline ${selectedCase.meetUrl.includes('zoom.us') ? 'text-blue-700' : 'text-indigo-700'}`}>{selectedCase.meetUrl}</a>
+                          </div>
+                        </div>
+                      )}
+                      {selectedCase.content && (
+                        <div className="bg-slate-50 p-4 rounded-2xl text-xs text-slate-600">
+                          <span className="font-bold block mb-1">記録:</span>{selectedCase.content}
+                        </div>
+                      )}
+                    </section>
+                    )}
+                    {/* 過去の対応記録 */}
+                    {selectedCase.supportHistory && selectedCase.supportHistory.length > 0 && (
+                    <section className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-4">
+                      <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                        <Clock size={12} /> 過去の対応記録（{selectedCase.supportHistory.length}件）
+                      </h3>
+                      <div className="space-y-3">
+                        {[...selectedCase.supportHistory].reverse().map((hist, idx) => (
+                          <details key={idx} className="group border border-slate-100 rounded-2xl overflow-hidden">
+                            <summary className="flex items-center gap-3 p-4 cursor-pointer hover:bg-slate-50 transition-colors select-none list-none [&::-webkit-details-marker]:hidden">
+                              <div className="w-8 h-8 rounded-full bg-violet-50 flex items-center justify-center shrink-0 font-black text-sm text-violet-600">
+                                {hist.round}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-xs font-black text-slate-700">{hist.round}回目</span>
+                                  {hist.method && <span className="text-[9px] font-black px-2 py-0.5 rounded bg-indigo-50 text-indigo-600">{hist.method}</span>}
+                                  {hist.scheduledDateTime && <span className="text-[9px] font-bold text-slate-400">{new Date(hist.scheduledDateTime).toLocaleDateString()}</span>}
+                                  {hist.staffName && <span className="text-[9px] font-bold text-indigo-500 flex items-center gap-0.5"><UserIcon size={8}/> {hist.staffName}</span>}
+                                </div>
+                                {hist.content && <p className="text-[10px] text-slate-500 mt-0.5 truncate">{hist.content}</p>}
+                              </div>
+                              <ChevronRight size={14} className="text-slate-300 shrink-0 transition-transform group-open:rotate-90"/>
+                            </summary>
+                            <div className="px-4 pb-4 pt-0 space-y-3 border-t border-slate-50">
+                              <div className="grid grid-cols-2 gap-3 mt-3">
+                                <div className="p-3 bg-slate-50 rounded-xl">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase block mb-1">実施日時</span>
+                                  <span className="text-xs font-black text-slate-700">{hist.scheduledDateTime ? new Date(hist.scheduledDateTime).toLocaleString() : '—'}</span>
+                                </div>
+                                <div className="p-3 bg-slate-50 rounded-xl">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase block mb-1">方法</span>
+                                  <span className="text-xs font-black text-slate-700">{hist.method || '—'}</span>
+                                </div>
+                              </div>
+                              {hist.meetUrl && (
+                                <div className="p-3 bg-indigo-50 rounded-xl">
+                                  <span className="text-[9px] font-black text-indigo-400 uppercase block mb-1">Meet URL</span>
+                                  <span className="text-xs font-bold text-indigo-600 break-all">{hist.meetUrl}</span>
+                                </div>
+                              )}
+                              {hist.content && (
+                                <div className="p-3 bg-slate-50 rounded-xl">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase block mb-1">実施記録</span>
+                                  <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-wrap">{hist.content}</p>
+                                </div>
+                              )}
+                              {hist.remarks && (
+                                <div className="p-3 bg-amber-50 rounded-xl">
+                                  <span className="text-[9px] font-black text-amber-500 uppercase block mb-1">備考</span>
+                                  <p className="text-xs text-amber-700 leading-relaxed whitespace-pre-wrap">{hist.remarks}</p>
+                                </div>
+                              )}
+                              {hist.staffName && (
+                                <div className="flex items-center gap-1.5 px-1">
+                                  <UserIcon size={10} className="text-slate-400"/>
+                                  <span className="text-[10px] font-bold text-slate-500">担当: {hist.staffName}</span>
+                                </div>
+                              )}
+                            </div>
+                          </details>
+                        ))}
+                      </div>
+                    </section>
+                    )}
+                    {/* メールスレッド一覧 */}
+                    {threadLoading && (
+                      <section className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center justify-center gap-2">
+                        <Loader2 size={18} className="animate-spin text-teal-500"/>
+                        <span className="text-xs font-bold text-slate-400">メールスレッドを読み込み中...</span>
+                      </section>
+                    )}
+                    {!threadLoading && threadGroups.length > 0 && (
+                      <section className="space-y-3">
+                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                          <Mail size={12} /> メール ({threadGroups.length}スレッド)
+                        </h3>
+                        {threadGroups.map((tg, tIdx) => {
+                          var msgs = tg.messages || [];
+                          if (!msgs.length) return null;
+                          var latest = msgs[msgs.length - 1];
+                          var isOpen = openThreadId === tg.threadId;
+                          return (
+                            <div key={tg.threadId || tIdx} className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+                              {/* スレッドサマリー */}
+                              <button
+                                onClick={() => { setOpenThreadId(isOpen ? null : tg.threadId); setExpandedEmailIdx(null); }}
+                                className="w-full text-left p-5 flex items-center gap-4 hover:bg-slate-50 transition-colors cursor-pointer"
+                              >
+                                <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center shrink-0">
+                                  <Mail size={18} className="text-indigo-500"/>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <span className="text-[9px] font-black px-2 py-0.5 rounded bg-indigo-50 text-indigo-600">
+                                      {msgs.length}件
+                                    </span>
+                                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${
+                                      latest.isStaff ? 'bg-teal-50 text-teal-600' : 'bg-amber-50 text-amber-600'
+                                    }`}>{latest.isStaff ? '最新: 送信' : '最新: 受信'}</span>
+                                    <span className="text-[9px] font-black text-slate-400">
+                                      {latest.sendDate ? new Date(latest.sendDate).toLocaleString() : ''}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs font-black text-slate-700 truncate">{tg.subject || 'メールスレッド'}</p>
+                                  <p className="text-[10px] text-slate-400 truncate mt-0.5">{latest.senderName}: {(latest.body || '').slice(0, 60)}{latest.body && latest.body.length > 60 ? '...' : ''}</p>
+                                </div>
+                                <ChevronRight size={16} className={`text-slate-300 transition-transform shrink-0 ${isOpen ? 'rotate-90' : ''}`}/>
+                              </button>
+
+                              {/* スレッド内メッセージ */}
+                              {isOpen && (
+                                <div className="border-t border-slate-100 px-5 pb-5 pt-3 space-y-2">
+                                  {[...msgs].reverse().map((em, idx) => {
+                                    var emailKey = tg.threadId + '-' + idx;
+                                    return (
+                                      <div key={idx} className={`border rounded-2xl overflow-hidden ${
+                                        em.isStaff ? 'border-teal-100' : 'border-amber-200'
+                                      }`}>
+                                        <button
+                                          onClick={() => setExpandedEmailIdx(expandedEmailIdx === emailKey ? null : emailKey)}
+                                          className="w-full text-left p-3 flex items-center gap-3 hover:bg-slate-50 transition-colors"
+                                        >
+                                          <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
+                                            em.isStaff ? 'bg-teal-50' : 'bg-amber-50'
+                                          }`}>
+                                            {em.isStaff
+                                              ? <Send size={12} className="text-teal-500"/>
+                                              : <Mail size={12} className="text-amber-500"/>
+                                            }
+                                          </div>
+                                          <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 mb-0.5">
+                                              <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${
+                                                em.isStaff ? 'bg-teal-50 text-teal-600' : 'bg-amber-50 text-amber-600'
+                                              }`}>{em.isStaff ? '送信' : '受信'}</span>
+                                              <span className="text-[9px] font-black text-slate-400">
+                                                {em.sendDate ? new Date(em.sendDate).toLocaleString() : ''}
+                                              </span>
+                                              <span className="text-[9px] font-bold text-slate-500">{em.senderName}</span>
+                                            </div>
+                                            <p className="text-[11px] font-black text-slate-700 truncate">{em.subject}</p>
+                                          </div>
+                                          <ChevronRight size={12} className={`text-slate-300 transition-transform shrink-0 ${expandedEmailIdx === emailKey ? 'rotate-90' : ''}`}/>
+                                        </button>
+                                        {expandedEmailIdx === emailKey && (
+                                          <div className="px-3 pb-3 pt-0 space-y-2">
+                                            <div className={`p-3 rounded-xl text-xs leading-relaxed whitespace-pre-wrap border ${
+                                              em.isStaff ? 'bg-teal-50/50 border-teal-100 text-slate-600' : 'bg-amber-50/50 border-amber-200 text-slate-600'
+                                            }`}>
+                                              {em.body}
+                                            </div>
+                                            {selectedCase.status !== 'unhandled' && (
+                                              <button
+                                                onClick={(e) => { e.stopPropagation(); handleReplyEmail(em, tg.threadId); }}
+                                                className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black text-sky-600 bg-sky-50 hover:bg-sky-100 rounded-lg transition-colors cursor-pointer"
+                                              >
+                                                <Reply size={12}/> 返信する
+                                              </button>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </section>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center text-slate-300">
+                  <Activity size={48} className="mb-4 opacity-20" />
+                  <p className="text-sm font-black uppercase tracking-widest">案件を選択してください</p>
+                </div>
+              )}
+            </div>
+          </main>
+
+          {/* Fixed Action Buttons */}
+          {selectedCase && !isDashboardMode && (
+            <div className="fixed bottom-6 left-0 right-0 px-6 flex justify-center pointer-events-none z-[100]">
+              <div className="bg-slate-900/90 backdrop-blur-md p-2 rounded-2xl shadow-2xl flex flex-wrap justify-center gap-2 pointer-events-auto ring-4 ring-white/50 max-w-[90vw]">
+                {selectedCase.status === 'unhandled' && (
+                  selectedCase.currentFiscalYearCount >= 10 ? (
+                    <button onClick={handleDecline} className="px-6 py-3 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-sm font-black flex items-center gap-2 transition-all active:scale-95 cursor-pointer ring-2 ring-rose-400">
+                      <AlertTriangle size={18}/> 回数超過
+                    </button>
+                  ) : (
+                    <button onClick={handleAssign} className="px-6 py-3 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-sm font-black flex items-center gap-2 transition-all active:scale-95 cursor-pointer">
+                      <UserIcon size={18} /> 担当する
+                    </button>
+                  )
+                )}
+                {selectedCase.status === 'inProgress' && (
+                  <>
+                    <button onClick={() => openModal('schedule')} className="px-5 py-3 bg-indigo-500 text-white rounded-xl text-sm font-black flex items-center gap-2 hover:bg-indigo-600 transition-all active:scale-95 cursor-pointer">
+                      <Calendar size={18} /> {selectedCase.scheduledDateTime ? '日時変更' : '日時決定'}
+                    </button>
+                    <button onClick={handleComposeNewEmail} className="px-5 py-3 bg-sky-500 text-white rounded-xl text-sm font-black flex items-center gap-2 hover:bg-sky-600 transition-all active:scale-95 cursor-pointer">
+                      <Mail size={18} /> メール送信
+                    </button>
+                    <button onClick={() => openModal('report')} className={`px-5 py-3 rounded-xl text-sm font-black flex items-center gap-2 transition-all active:scale-95 cursor-pointer ${
+                      !selectedCase.scheduledDateTime ? 'bg-slate-700 text-slate-400 opacity-50 cursor-not-allowed' : 'bg-emerald-500 text-white hover:bg-emerald-600'
+                    }`} disabled={!selectedCase.scheduledDateTime}>
+                      <CheckCircle size={18} /> 完了報告
+                    </button>
+                  </>
+                )}
+                {selectedCase.status === 'completed' && (
+                  <>
+                    {(selectedCase.supportCount || 1) < 3 && selectedCase.currentFiscalYearCount < 10 && (
+                      <button onClick={handleReopen} disabled={submitting} className="px-5 py-3 bg-violet-500 text-white rounded-xl text-sm font-black flex items-center gap-2 hover:bg-violet-600 transition-all active:scale-95 cursor-pointer">
+                        <RotateCcw size={18} /> {(selectedCase.supportCount || 1) + 1}回目を開始
+                      </button>
+                    )}
+                    <button onClick={handleComposeNewEmail} className="px-5 py-3 bg-sky-500 text-white rounded-xl text-sm font-black flex items-center gap-2 hover:bg-sky-600 transition-all active:scale-95 cursor-pointer">
+                      <Mail size={18} /> メール送信
+                    </button>
+                    <button onClick={() => openModal('edit')} className="px-6 py-3 bg-white text-slate-900 rounded-xl text-sm font-black flex items-center gap-2 hover:bg-slate-100 transition-all active:scale-95 cursor-pointer">
+                      <Edit size={18} /> 記録修正
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {selectedCase && isDashboardMode && (
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 pointer-events-none z-[100]">
+              <div className="bg-slate-800/80 backdrop-blur text-white px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2">
+                <Lock size={12}/> 閲覧専用モード (操作不可)
+              </div>
+            </div>
+          )}
+
+          {/* Email Compose Modal */}
+          {emailModal && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[110] p-4">
+              <div className="bg-white w-full max-w-lg rounded-[2rem] p-8 shadow-2xl animate-in zoom-in duration-200">
+                <div className="flex justify-between items-center mb-6">
+                  <div>
+                    <h3 className="font-black text-lg text-slate-800 flex items-center gap-2">
+                      <Mail size={20} className={emailModal.mode === 'initial' ? 'text-teal-500' : emailModal.mode === 'decline' ? 'text-rose-500' : emailModal.mode === 'reply' ? 'text-amber-500' : 'text-sky-500'}/>
+                      {emailModal.mode === 'initial' ? '初回メール送信' : emailModal.mode === 'decline' ? '回数超過の連絡' : emailModal.mode === 'reply' ? 'スレッド返信' : '新規メール送信'}
+                    </h3>
+                    <p className="text-[10px] font-bold text-slate-400 mt-0.5">
+                      {emailModal.mode === 'initial' ? 'メール送信と同時に担当が確定します' : emailModal.mode === 'decline' ? '回数超過のメールを送信し、対応不可に設定します' : emailModal.mode === 'reply' ? '既存スレッドに返信します' : '新しいスレッドでメールを送信します'}
+                    </p>
+                  </div>
+                  <button onClick={() => setEmailModal(null)}>
+                    <X size={20} className="text-slate-400 hover:text-slate-600"/>
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><Mail size={10}/> 送信先</label>
+                    <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 text-xs font-bold text-slate-600">
+                      {emailModal.to}
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><FileText size={10}/> 件名</label>
+                    <input
+                      type="text"
+                      value={emailModal.subject}
+                      onChange={e => setEmailModal({...emailModal, subject: e.target.value})}
+                      className="w-full border-2 border-slate-100 rounded-xl p-3 text-xs font-bold outline-none focus:border-teal-500"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><MessageSquare size={10}/> 本文</label>
+                    <textarea
+                      rows={10}
+                      value={emailModal.body}
+                      onChange={e => setEmailModal({...emailModal, body: e.target.value})}
+                      className="w-full border-2 border-slate-100 rounded-xl p-3 text-xs font-bold outline-none focus:border-teal-500 leading-relaxed"
+                    />
+                  </div>
+                  <button
+                    onClick={handleSendEmail}
+                    disabled={submitting}
+                    className={`w-full py-4 text-white rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${
+                      emailModal.mode === 'initial' ? 'bg-teal-600 hover:bg-teal-700 shadow-lg shadow-teal-200'
+                      : emailModal.mode === 'decline' ? 'bg-rose-600 hover:bg-rose-700 shadow-lg shadow-rose-200'
+                      : emailModal.mode === 'reply' ? 'bg-amber-500 hover:bg-amber-600 shadow-lg shadow-amber-200'
+                      : 'bg-sky-600 hover:bg-sky-700 shadow-lg shadow-sky-200'
+                    }`}
+                  >
+                    {submitting
+                      ? <><Loader2 size={16} className="animate-spin"/> 送信中...</>
+                      : emailModal.mode === 'initial'
+                        ? <><Send size={16}/> 送信して担当する</>
+                        : emailModal.mode === 'decline'
+                          ? <><AlertTriangle size={16}/> 送信して対応不可にする</>
+                          : emailModal.mode === 'reply'
+                            ? <><Reply size={16}/> 返信する</>
+                            : <><Send size={16}/> 送信する</>
+                    }
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Unified Modal */}
+          {modalMode && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[110] p-4">
+              <div className="bg-white w-full max-w-lg rounded-[2rem] p-8 shadow-2xl animate-in zoom-in duration-200">
+                <div className="flex justify-between items-center mb-6">
+                  <div>
+                    <h3 className="font-black text-lg text-slate-800">
+                      {modalMode === 'schedule' ? '日程の確定・変更' : modalMode === 'report' ? '実施記録・完了報告' : '記録の修正'}
+                    </h3>
+                    <p className="text-[10px] font-bold text-slate-400 mt-0.5">
+                      {modalMode === 'schedule' ? 'Googleカレンダー予定を作成します' : modalMode === 'report' ? 'ステータスを「完了」に変更します' : 'データを上書き保存します'}
+                    </p>
+                  </div>
+                  <button onClick={() => setModalMode(null)}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
+                </div>
+                <form onSubmit={handleEditSave} className="space-y-6">
+                  {(modalMode === 'schedule' || modalMode === 'edit') && (
+                    <div className="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100 space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black text-indigo-400 uppercase flex items-center gap-1"><Clock size={10}/> 日時</label>
+                          <input type="datetime-local" required={modalMode === 'schedule'} value={editFormData.scheduledDateTime || ''} onChange={e => setEditFormData({...editFormData, scheduledDateTime: e.target.value})} className="w-full border-2 border-white bg-white rounded-xl p-3 text-xs font-bold outline-none focus:border-indigo-500 shadow-sm" />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black text-indigo-400 uppercase flex items-center gap-1"><Video size={10}/> 方法</label>
+                          <select value={editFormData.method || ''} onChange={e => setEditFormData({...editFormData, method: e.target.value})} className="w-full border-2 border-white bg-white rounded-xl p-3 text-xs font-bold outline-none focus:border-indigo-500 shadow-sm">
+                            {masters?.methods.map(m => <option key={m} value={m}>{m}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                      {modalMode === 'schedule' && (
+                        <p className="text-[10px] text-indigo-600 font-bold flex items-start gap-1">
+                          <Video size={12} className="shrink-0 mt-0.5"/>
+                          {editFormData.method === 'Zoom'
+                            ? '保存後、自動的にZoom会議URLが発行されカレンダーに登録されます。'
+                            : editFormData.method === 'GoogleMeet'
+                            ? '保存後、自動的にMeet URLが発行されカレンダーに登録されます。'
+                            : '保存後、カレンダーに予定を登録します。'}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {(modalMode === 'report' || modalMode === 'edit') && (
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><FileText size={10}/> 実施記録・メモ</label>
+                      <textarea rows={6} required={modalMode === 'report'} value={editFormData.content || ''} onChange={e => setEditFormData({...editFormData, content: e.target.value})} className="w-full border-2 border-slate-100 rounded-xl p-3 text-xs font-bold outline-none focus:border-teal-500" placeholder="実施したサポート内容や、次回の引継ぎ事項を入力してください..." />
+                    </div>
+                  )}
+                  {modalMode === 'edit' && (
+                    <div className="space-y-1 pt-4 border-t border-slate-100">
+                      <label className="text-[10px] font-black text-slate-400 uppercase">ステータス (手動変更)</label>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => setEditFormData({...editFormData, status: 'inProgress'})} className={`flex-1 py-3 rounded-xl text-xs font-black border-2 ${editFormData.status !== 'completed' ? 'border-sky-500 bg-sky-50 text-sky-600' : 'border-slate-100 text-slate-400'}`}>対応中</button>
+                        <button type="button" onClick={() => setEditFormData({...editFormData, status: 'completed'})} className={`flex-1 py-3 rounded-xl text-xs font-black border-2 ${editFormData.status === 'completed' ? 'border-emerald-500 bg-emerald-50 text-emerald-600' : 'border-slate-100 text-slate-400'}`}>完了</button>
+                      </div>
+                    </div>
+                  )}
+                  <button disabled={submitting} className={`w-full py-4 text-white rounded-xl font-black text-sm transition-all shadow-lg shadow-slate-200 ${
+                    modalMode === 'schedule' ? 'bg-indigo-600 hover:bg-indigo-700' : modalMode === 'report' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-900 hover:bg-slate-800'
+                  }`}>
+                    {submitting ? '処理中...' : modalMode === 'schedule' ? '日時を確定してカレンダー作成' : modalMode === 'report' ? '記録を保存して完了にする' : '変更を保存'}
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    const root = createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
