@@ -42,8 +42,8 @@
 | 2 | C列 | 介護事業所名 | `OFFICE_NAME` | String | YES | |
 | 3 | D列 | お名前 | `REQUESTER_NAME` | String | YES | |
 | 4 | E列 | 困りごと詳細 | `DETAILS` | String | YES | |
-| 6 | G列 | 都道府県 | `PREFECTURE` | String | NO | 事業所の所在地域 |
-| 8 | **I列** | サービス種別 | `SERVICE_TYPE` | String | NO | **重要: 9列目に配置** |
+| 5 | F列 | 都道府県 | `PREFECTURE` | String | NO | 事業所の所在地域 |
+| 6 | G列 | サービス種別 | `SERVICE_TYPE` | String | NO | |
 
 ### S-02: サポート記録 (Support Records)
 *   **用途**: タダサポ側の対応ステータス管理。
@@ -53,19 +53,27 @@
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | 0 | A列 | 案件ID | `CASE_ID` | String | **FK** (Case List.TIMESTAMP) |
 | 1 | B列 | ステータス | `STATUS` | `unhandled` \| `inProgress` \| `completed` | |
+| 2 | C列 | 担当者メール | `STAFF_EMAIL` | String | |
+| 3 | D列 | 担当者名 | `STAFF_NAME` | String | |
+| 4 | E列 | 日時 | `DATE` | Date | 実施予定日時 |
 | 5 | F列 | 対応回数 | `SUPPORT_COUNT` | Number | 現在の対応回数（1〜3）。初回担当時に `1` を設定 |
-| 7 | **H列** | 事業種別 | `BUSINESS_TYPE` | String | **案件リストのI列 (Service Type) を引き継ぐ** |
-| 13 | N列 | EventID | `EVENT_ID` | String | カレンダー連携ID |
-| 14 | O列 | Meet URL | `MEET_URL` | String | 自動発行URL |
-| 15 | P列 | スレッドID | `THREAD_ID` | String | GmailスレッドID（カンマ区切りで複数） |
+| 6 | G列 | 方法 | `METHOD` | String | GoogleMeet / Zoom / 訪問 等 |
+| 7 | H列 | 事業種別 | `BUSINESS_TYPE` | String | 案件リストのサービス種別を引き継ぐ |
+| 8 | I列 | 実施内容 | `CONTENT` | String | |
+| 9 | J列 | 備考 | `REMARKS` | String | |
+| 10 | K列 | 履歴JSON | `HISTORY` | String | 過去回の記録JSON |
+| 11 | L列 | EventID | `EVENT_ID` | String | カレンダー連携ID |
+| 12 | M列 | Meet URL | `MEET_URL` | String | 自動発行URL |
+| 13 | N列 | スレッドID | `THREAD_ID` | String | GmailスレッドID（カンマ区切りで複数） |
 
 ### S-03: タダメンマスタ (Staff Master)
 *   **用途**: 認証および担当者候補リスト。
 
 | インデックス | 物理列 | 項目名 | 論理名 | 型 | 備考 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| 5 | F列 | ニックネーム | `NICKNAME` | String | 画面表示名 |
-| 6 | G列 | GWSアカウント | `EMAIL` | Email | **認証キー** |
+| 0 | A列 | タダメンID | `STAFF_ID` | String | 一意識別子 |
+| 1 | B列 | ニックネーム | `NICKNAME` | String | 画面表示名 |
+| 2 | C列 | GWSアカウント | `EMAIL` | Email | **認証キー** |
 
 ---
 

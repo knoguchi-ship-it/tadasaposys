@@ -559,6 +559,24 @@
         });
       };
 
+      const handleAssignOnly = () => {
+        if (!selectedCase || !user) return;
+        showConfirm('メールを送信せずに担当しますか？', async () => {
+          setSubmitting(true);
+          try {
+            await Api.assignCase(selectedCase.timestamp, user);
+            const updatedCases = await Api.getAllCases();
+            setCases(updatedCases);
+            setActiveTab('inProgress');
+            showToast('担当に設定しました（メール未送信）。', { type: 'success', title: '担当設定完了' });
+          } catch(e) {
+            showToast(e.message || String(e), { type: 'error', title: '担当設定エラー' });
+          } finally {
+            setSubmitting(false);
+          }
+        }, { title: '担当設定', confirmLabel: '担当する' });
+      };
+
       const handleAssign = () => {
         if (!selectedCase || !user) return;
 
@@ -1218,9 +1236,14 @@
                       <AlertTriangle size={18}/> 回数超過
                     </button>
                   ) : (
-                    <button onClick={handleAssign} className="px-6 py-3 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-sm font-black flex items-center gap-2 transition-all active:scale-95 cursor-pointer">
-                      <UserIcon size={18} /> 担当する
-                    </button>
+                    <>
+                      <button onClick={handleAssign} className="px-6 py-3 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-sm font-black flex items-center gap-2 transition-all active:scale-95 cursor-pointer">
+                        <Mail size={18} /> メール送信して担当
+                      </button>
+                      <button onClick={handleAssignOnly} disabled={submitting} className="px-6 py-3 bg-slate-600 hover:bg-slate-700 text-white rounded-xl text-sm font-black flex items-center gap-2 transition-all active:scale-95 cursor-pointer">
+                        <UserIcon size={18} /> 担当する（メールなし）
+                      </button>
+                    </>
                   )
                 )}
                 {selectedCase.status === 'inProgress' && (

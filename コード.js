@@ -26,9 +26,9 @@ var SHEET_NAMES = {
 };
 
 var IDX = {
-  CASES: { PK: 0, EMAIL: 1, OFFICE: 2, NAME: 3, DETAILS: 4, PREFECTURE: 6, SERVICE: 8 },
-  RECORDS: { FK: 0, STATUS: 1, STAFF_EMAIL: 2, STAFF_NAME: 3, DATE: 4, COUNT: 5, METHOD: 6, BUSINESS: 7, CONTENT: 8, REMARKS: 9, HISTORY: 10, EVENT_ID: 13, MEET_URL: 14, THREAD_ID: 15 },
-  STAFF: { NAME: 5, EMAIL: 6 },
+  CASES: { PK: 0, EMAIL: 1, OFFICE: 2, NAME: 3, DETAILS: 4, PREFECTURE: 5, SERVICE: 6 },
+  RECORDS: { FK: 0, STATUS: 1, STAFF_EMAIL: 2, STAFF_NAME: 3, DATE: 4, COUNT: 5, METHOD: 6, BUSINESS: 7, CONTENT: 8, REMARKS: 9, HISTORY: 10, EVENT_ID: 11, MEET_URL: 12, THREAD_ID: 13 },
+  STAFF: { NAME: 1, EMAIL: 2 },
   EMAIL: { CASE_ID: 0, SEND_DATE: 1, SENDER_EMAIL: 2, SENDER_NAME: 3, RECIPIENT_EMAIL: 4, SUBJECT: 5, BODY: 6 }
 };
 
@@ -251,7 +251,7 @@ function assignCase(caseId, user) {
   if (rowIndex === -1) {
     sheet.appendRow([
       caseId, 'inProgress', user.email, user.name,
-      null, 1, null, null, null, null, null, null, null, null, null, null
+      null, 1, null, null, null, null, null, null, null, null
     ]);
   } else {
     sheet.getRange(rowIndex, IDX.RECORDS.STATUS + 1).setValue('inProgress');
@@ -341,7 +341,7 @@ function declineCase(caseId, user, subject, body) {
     // レコードが無い場合は新規作成
     sheet.appendRow([
       caseId, 'rejected', user.email, user.name,
-      null, 1, null, null, null, null, null, null, null, null, null, null
+      null, 1, null, null, null, null, null, null, null, null
     ]);
   } else {
     sheet.getRange(rowIndex, IDX.RECORDS.STATUS + 1).setValue('rejected');
