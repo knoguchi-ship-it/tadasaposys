@@ -1,5 +1,5 @@
 /**
- * タダサポ管理システム - Backend Logic (v1.7.1)
+ * タダサポ管理システム - Backend Logic (v1.8.1)
  *
  * 概要:
  * - Google Spreadsheets をデータベースとして利用
@@ -99,7 +99,7 @@ function getAdminEmails_() {
 function doGet() {
   return HtmlService.createTemplateFromFile('index')
     .evaluate()
-    .setTitle('タダサポ管理 v1.7')
+    .setTitle('タダサポ管理 v1.8.1')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }

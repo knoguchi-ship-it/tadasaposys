@@ -1,15 +1,33 @@
 # 開発者向け引継ぎ資料 (HANDOVER.md)
 
 **Project:** タダサポ管理システム
-**Version:** 1.8.0
-**Date:** 2026/02/16
+**Version:** 1.8.1（現行リリース）
+**Date:** 2026/02/20
 **Author:** Development Team
 
 ---
 
-## 1. プロジェクト概要
+## 1. 現行システムの状態
 
-介護事業所向けの無料ITサポート管理システム。Google Apps Script (GAS) 上で動作するReact SPAで、Googleスプレッドシートをデータストアとして使用する。
+### 本番稼働中
+- **URL**: `https://script.google.com/a/macros/tadakayo.jp/s/AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ/exec`
+- **デプロイ**: GAS Version 7、`executeAs: USER_DEPLOYING`、`access: ANYONE`
+- **認証**: タダメンマスタ（B列=氏名, C列=メールアドレス）で認証
+- **案件数**: 28件（未対応）が稼働中
+
+### 実装済み機能
+| 機能 | 状態 |
+|------|------|
+| 案件一覧（4タブ: 未対応/対応中/完了/対応不可） | ✅ |
+| 担当アサイン（メール付き / メールなし の2方式） | ✅ |
+| 日程確定（カレンダー連携 + Meet/Zoom URL自動発行） | ✅ |
+| 完了報告・記録修正 | ✅ |
+| 案件再開（最大3回、履歴JSON保存） | ✅ |
+| 年間利用制限（10回/年度） | ✅ |
+| 回数超過メール送信 → 対応不可 | ✅ |
+| メール機能（初回/新規/返信/回数超過 の4モード） | ✅ |
+| ダッシュボード（全件閲覧・操作不可） | ✅ |
+| キーワード検索 + 期間検索 | ✅ |
 
 ---
 
@@ -17,65 +35,46 @@
 
 ```
 tadasaposys/
-├── index.html          ← フロントエンド（React SPA、Babel in-browser）
-├── コード.js            ← バックエンド（GAS サーバーサイド）
-├── appsscript.json      ← GAS マニフェスト（Gmail Advanced Service有効）
-├── .clasp.json          ← clasp 設定
-├── .claspignore         ← clasp 除外設定
-├── docs/
-│   ├── SDD.md           ← システム詳細設計書 v1.7
-│   ├── HANDOVER.md      ← 本ドキュメント
-│   ├── ADR.md           ← アーキテクチャ判断記録
-│   ├── SOW.md           ← 作業範囲定義
-│   ├── RD.md            ← 要件定義
-│   └── Manual.md        ← 操作マニュアル
+├── index.html          ← フロントエンド（React SPA、単一ファイル）
+├── コード.js            ← バックエンド（GAS）
+├── appsscript.json      ← GASマニフェスト
+├── CLAUDE.md            ← AI開発指示書
+├── .clasp.json          ← clasp設定（.gitignore対象）
+├── .claspignore         ← clasp除外設定
+├── .gitignore
+└── docs/
+    ├── SDD.md           ← 設計書 v1.8.1（データモデル・関数仕様・UI仕様）
+    ├── HANDOVER.md      ← 本ドキュメント
+    ├── ADR.md           ← アーキテクチャ判断記録
+    ├── RD.md            ← 要件定義
+    └── Manual.md        ← 操作マニュアル
 ```
-
-**重要**: `src/` フォルダ構成は廃止済み。現在はルート直下の `index.html` + `コード.js` の2ファイル構成。
 
 ---
 
 ## 3. 技術スタック
 
-| 項目 | 技術 | 備考 |
-|------|------|------|
-| フロントエンド | React 18.2.0 + Babel standalone | CDN経由、importmap使用 |
-| アイコン | lucide-react 0.330.0 | `?deps=react@18.2.0` 必須 |
-| CSS | Tailwind CSS (CDN) | `cdn.tailwindcss.com` |
-| バックエンド | Google Apps Script (V8) | `コード.js` |
-| データストア | Google スプレッドシート | 単一ソース |
-| メール | Gmail Advanced Service (API v1) | スレッド対応 |
-| カレンダー | Google Calendar API | Meet URL 自動発行 |
-| ビデオ会議 | Google Meet / Zoom（条件付き） | 設定シートで制御 |
-| デプロイ | clasp | `clasp push && clasp deploy` |
+| 項目 | 技術 |
+|------|------|
+| フロントエンド | React 18.2.0 + Babel standalone（CDN、importmap） |
+| アイコン | lucide-react 0.330.0（`?deps=react@18.2.0` 必須） |
+| CSS | Tailwind CSS（CDN） |
+| バックエンド | Google Apps Script (V8) |
+| データストア | Google スプレッドシート |
+| メール | Gmail Advanced Service (API v1) |
+| カレンダー | Google Calendar API |
+| デプロイ | clasp（`clasp push --force` 必須） |
 
-### ⚠️ React バージョン固定（絶対厳守）
-```json
-"imports": {
-  "react": "https://esm.sh/react@18.2.0",
-  "react-dom/client": "https://esm.sh/react-dom@18.2.0/client?deps=react@18.2.0",
-  "lucide-react": "https://esm.sh/lucide-react@0.330.0?deps=react@18.2.0"
-}
-```
-React 19 を混在させると `Minified React error #31` でクラッシュする。
+### ⚠️ 絶対厳守
+- **React 18.2.0 固定**: React 19系混在で `Minified React error #31` クラッシュ
+- **clasp push --force**: `--force` なしだとサイレントにスキップされる
+- **clasp pull 前に git commit**: ローカルファイルが上書きされる
 
 ---
 
-## 4. ローカル開発
+## 4. データモデル
 
-```bash
-# 静的サーバー起動（npx serve 等）
-npx serve -s . -l 3000
-# → http://localhost:3000 でプレビュー
-```
-
-`typeof google === 'undefined'` でローカル判定し、モックデータで動作する。
-
----
-
-## 5. データモデル（スプレッドシート列マッピング）
-
-### IDX定数（コード.js 30行目付近）
+### IDX定数（コード.js 28行目）
 ```javascript
 var IDX = {
   CASES: { PK: 0, EMAIL: 1, OFFICE: 2, NAME: 3, DETAILS: 4, PREFECTURE: 5, SERVICE: 6 },
@@ -88,213 +87,134 @@ var IDX = {
 };
 ```
 
-### 主要列の説明
-| 列 | シート | 用途 |
-|----|--------|------|
-| RECORDS.COUNT (F列) | サポート記録 | 案件ごとの対応回数 (1〜3) |
-| RECORDS.HISTORY (K列) | サポート記録 | 過去回の記録JSON配列 |
-| RECORDS.THREAD_ID (P列) | サポート記録 | GmailスレッドID（カンマ区切りで複数） |
-
-### HISTORY列のJSON形式
-```json
-[
-  {
-    "round": 1,
-    "scheduledDateTime": "2025-10-05T13:00:00",
-    "method": "GoogleMeet",
-    "content": "実施内容...",
-    "remarks": null,
-    "meetUrl": "https://meet.google.com/...",
-    "staffName": "テスト太郎",
-    "staffEmail": "test@tadakayo.jp"
-  }
-]
+### ステータス遷移
+```
+unhandled → inProgress → completed → (reopenで inProgress に戻る、最大3回)
+unhandled → rejected（回数超過時）
 ```
 
 ---
 
-## 6. 実装済み機能一覧 (v1.8)
-
-### コア機能
-| 機能 | 概要 |
-|------|------|
-| 認証 | タダメンマスタのメールアドレスで認証 |
-| 案件一覧 | ステータスタブ (未対応/対応中/完了/対応不可) |
-| ダッシュボード | 全件閲覧モード（操作不可） |
-| 担当アサイン | 未対応→対応中 + 初回メール送信 |
-| 日程確定 | カレンダー連携 + Meet/Zoom URL自動発行 |
-| 完了報告 | 実施記録入力 + ステータス変更 |
-| 記録修正 | 完了案件の記録・ステータス編集 |
-
-### メール機能（Gmail API）
-| 機能 | モード | 説明 |
-|------|--------|------|
-| 初回メール | `initial` | アサインと同時にテンプレートメール送信 |
-| 新規メール | `new` | 新しいスレッドを作成して送信 |
-| スレッド返信 | `reply` | 既存スレッド内で返信 |
-| 回数超過通知 | `decline` | 設定シートのテンプレートで送信→対応不可 |
-
-- スレッドは案件ごとに複数保持可能（カンマ区切り）
-- UI上でスレッド単位で折りたたみ表示、最新メッセージ順
-
-### 案件回数管理
-| ルール | 実装 |
-|--------|------|
-| 案件ごと最大3回 | `supportCount` で管理。完了後に再開ボタンで2回目/3回目開始 |
-| 年間最大10回 | 同一メールアドレス＋年度で `supportCount` を合算 |
-| 再開時の履歴保存 | `reopenCase` で現在の回の記録を `HISTORY` 列にJSON追記 |
-| 過去記録の閲覧 | 詳細画面で `<details>` 展開式で各回の記録を表示 |
-
-### 年間制限 (10回) の振る舞い
-| ステータス | 年間 >= 10 の場合 |
-|------------|-------------------|
-| 未対応 | 「担当する」非表示 →「回数超過」ボタン表示 |
-| 対応中 | そのまま対応可能（既に受けている） |
-| 完了 | 再開ボタン非表示（2回目/3回目不可） |
-
-### 検索機能
-- キーワード検索: 事業所名、担当者名、メール、内容、種別、都道府県を横断検索
-- 期間検索: 開始日〜終了日でタイムスタンプフィルタ
-- WCAG 2.1 AA準拠のアクセシビリティ対応
-
-### Zoom条件付き表示
-- 設定シートの `ZOOM_ACCOUNT_ID` が存在する場合のみ方法選択肢に「Zoom」を追加
-- 未設定時は「GoogleMeet / 電話等 / 対面」の3択
-
----
-
-## 7. 設定シート（S-00）テンプレート
-
-| キー | 用途 |
-|------|------|
-| `ADMIN_EMAILS` | 管理者メール（カンマ区切り） |
-| `ZOOM_ACCOUNT_ID` | Zoom OAuth ID（空欄=Zoom無効） |
-| `ZOOM_CLIENT_ID` | Zoom Client ID |
-| `ZOOM_CLIENT_SECRET` | Zoom Client Secret |
-| `SHARED_CALENDAR_ID` | 共有カレンダーID |
-| `MAIL_DECLINED_SUBJECT` | 回数超過メール件名テンプレート |
-| `MAIL_DECLINED_BODY` | 回数超過メール本文テンプレート |
-
-テンプレートタグ: `{{名前}}`, `{{事業所名}}`, `{{担当者名}}`, `{{相談内容}}`
-
----
-
-## 8. バックエンド主要関数（コード.js）
+## 5. バックエンド関数一覧（コード.js）
 
 | 関数 | 説明 |
 |------|------|
-| `getInitialData()` | 起動時データ取得（user/cases/masters） |
+| `getInitialData()` | 起動時データ取得。各案件に `currentFiscalYearCount` を付与 |
 | `getAllCasesJoined()` | 全案件結合データ取得 |
-| `assignCase(caseId, user)` | 案件アサイン |
-| `assignAndSendEmail(caseId, user, subject, body)` | アサイン＋初回メール |
+| `assignCase(caseId, user)` | 案件アサイン（メール送信なし） |
+| `assignAndSendEmail(caseId, user, subject, body)` | アサイン＋初回メール送信 |
 | `updateSupportRecord(recordData)` | 記録更新＋カレンダー連携 |
 | `reopenCase(caseId, user)` | 案件再開（履歴保存→フィールドクリア） |
-| `declineCase(caseId, user, subject, body)` | 回数超過メール送信→rejected |
+| `declineCase(caseId, user, subject, body)` | 回数超過メール→rejected |
 | `sendNewCaseEmail(caseId, user, subject, body)` | 新規スレッドメール送信 |
-| `sendCaseEmail(caseId, user, subject, body, threadId)` | スレッド返信メール |
+| `sendCaseEmail(caseId, user, subject, body, threadId)` | スレッド返信 |
 | `getThreadMessages(caseId)` | スレッドグループ取得 |
-| `getMasters()` | マスタデータ（方法/種別/スタッフ/テンプレート） |
+| `getMasters()` | マスタデータ取得 |
 
 ---
 
-## 9. フロントエンド構造（index.html）
+## 6. 既知の課題・制約
 
-### コンポーネント構成
-```
-App
-├── Toast（通知）
-├── ConfirmDialog（確認ダイアログ）
-├── Header（モード切替、ユーザー情報）
-├── Sidebar
-│   ├── StatusTabs（ステータスタブ）
-│   ├── SearchPanel（検索パネル）
-│   └── CaseList（案件リスト）
-├── MainContent
-│   ├── CaseHeader（ステータス/担当者/回数カウンター）
-│   ├── RequesterInfo（事業所名/相談者名）
-│   ├── InfoGrid（種別/メール/都道府県）
-│   ├── LimitWarning（年間制限警告）
-│   ├── CaseDetails（相談内容）
-│   ├── CurrentRecord（現在の実施情報）
-│   ├── SupportHistory（過去の対応記録）
-│   └── ThreadGroups（メールスレッド一覧）
-├── ActionBar（ステータス別アクションボタン）
-├── EmailModal（メール作成/返信/回数超過通知）
-└── EditModal（日程確定/完了報告/記録修正）
-```
-
-### 主要state変数
-| 変数 | 型 | 用途 |
-|------|-----|------|
-| `activeTab` | string | 現在のステータスタブ |
-| `selectedCaseId` | string | 選択中の案件ID |
-| `isDashboardMode` | boolean | 全件閲覧モード |
-| `searchOpen` | boolean | 検索パネル開閉 |
-| `searchWord` | string | キーワード検索 |
-| `searchDateFrom/To` | string | 期間検索 |
-| `threadGroups` | array | メールスレッドグループ |
-| `emailModal` | object | メールモーダル状態（mode: initial/new/reply/decline） |
-| `modalMode` | string | 編集モーダル状態（schedule/report/edit） |
+| 項目 | 状態 | 備考 |
+|------|------|------|
+| ADMIN_EMAILS | 未設定 | 管理者権限チェックが無効状態 |
+| Gmail Advanced Service | 手動有効化必要 | GASエディタで設定済み |
+| `Session.getActiveUser()` | ドメイン外で空文字リスク | `executeAs: USER_DEPLOYING` + `access: ANYONE` の制約 |
+| 全機能テスト | 未実施 | 基本起動・認証のみ確認済み |
 
 ---
 
-## 10. モックデータパターン（全14件）
+## 7. 次フェーズ開発ロードマップ
 
-| # | ステータス | 事業所 | 回数 | 年間 | 特徴 |
-|---|-----------|--------|------|------|------|
-| 1 | 未対応 | やまだ訪問介護 | 1/3 | 3 | 通常の新規案件 |
-| 2 | 未対応 | すずきデイサービス | 1/3 | 1 | 初回利用 |
-| 3 | 未対応 | リミット介護 | 1/3 | 10 | **年間上限 → 回数超過ボタン** |
-| 4 | 対応中 | たなかヘルパー | 1/3 | 5 | 日程済み・メールスレッドあり |
-| 5 | 対応中 | さとう福祉用具 | 2/3 | 8 | 1回目の履歴あり |
-| 6 | 対応中 | もり小規模多機能 | 3/3 | 6 | 2回分の履歴・案件上限 |
-| 7 | 完了 | やまだ訪問介護 | 2/3 | 3 | 再開可能・1回目履歴 |
-| 8 | 完了 | いとう在宅ケア | 3/3 | 5 | 再開不可・2回分履歴 |
-| 9 | 対応不可 | リミット介護 | — | 10 | 回数超過で拒否済み |
-| 10-13 | 完了 | リミット介護 | 各種 | 10 | 年間10回分を構成する案件群 |
-| 14 | 完了 | なかむらグループ | 1/3 | 2 | 再開可能 |
+### 7-1. 管理者機能の搭載
+
+**目的**: ADMIN_EMAILSに登録された管理者が、他タダメンの案件を操作・管理できるようにする。
+
+**想定スコープ**:
+- 管理者による他者の案件への担当者変更（再アサイン）
+- タダメンマスタの管理（追加・編集・削除）UI
+- 設定シートの値をUI上から編集できる管理画面
+- 管理者ダッシュボード（統計・集計表示）
+
+**実装上のポイント**:
+- `getInitialData()` で `user.isAdmin` は既に返却されている（`コード.js:119`）
+- `SEC-02` で管理者権限チェックの枠組みは定義済み（SDD.md参照）
+- フロントエンドで `user.isAdmin` による条件分岐を追加する形
+- バックエンドに管理者専用関数（`updateStaffMaster`, `updateSettings` 等）を新設
+
+### 7-2. スプレッドシートへエクスポート機能
+
+**目的**: 案件データをCSV/スプレッドシート形式でエクスポートし、外部報告や集計に活用する。
+
+**想定スコープ**:
+- 現在表示中の案件一覧をCSVダウンロード
+- フィルタ条件（ステータス・期間・担当者）を反映したエクスポート
+- 年度別の実績レポート出力
+
+**実装上のポイント**:
+- GAS側: `exportCases(filters)` 関数を新設、CSV文字列を返却
+- フロントエンド側: Blob + ダウンロードリンクで実装（GAS環境では `google.script.run` 経由）
+- ローカルモック: モックデータをCSV化して返す
+
+### 7-3. 案件中止フラグ（キャンセル処理）
+
+**目的**: 依頼者都合やその他の理由で中止になった案件を、「対応不可（rejected）」とは区別して管理する。
+
+**想定スコープ**:
+- 新ステータス `cancelled` の追加（または既存ステータスにフラグ追加）
+- 中止理由の記録フィールド
+- UIに「中止」タブまたは「対応不可」タブ内でのサブ分類
+- 中止案件は年間利用回数にカウントしない
+
+**実装上のポイント**:
+- `S-02` の STATUS 値域に `cancelled` を追加するか、REMARKS列に中止理由を記録するか設計判断が必要
+- `cancelled` を追加する場合: `getAllCasesJoined()` のステータスマッピング、フロントのタブフィルタ、年間回数計算ロジック（`getFiscalYear` 周辺）の全てに影響
+- 年間回数計算から除外する場合: `getInitialData()` 内の `currentFiscalYearCount` 計算ロジックを修正
+
+### 7-4. 検索機能のスマート化
+
+**目的**: 現在のキーワード＋期間検索をより実用的にする。
+
+**想定スコープ**:
+- 担当者フィルタ（ドロップダウン選択）
+- ステータス横断検索（現在はタブ内のみ）
+- 期間プリセット（今月/先月/今年度/前年度）
+- 検索条件の保存・呼び出し
+- 検索結果件数の表示
+
+**実装上のポイント**:
+- 現在の検索はフロントエンドのみで完結（`searchWord`, `searchDateFrom`, `searchDateTo` state変数）
+- タブを横断する検索は `activeTab` フィルタの前に検索フィルタを適用する設計変更が必要
+- 期間プリセットはフロントエンドのみで実装可能（`searchDateFrom/To` にプリセット値をセット）
 
 ---
 
-## 11. デプロイ手順
+## 8. 開発の進め方
 
+### ローカル開発
 ```bash
-# 1. clasp でプッシュ
-clasp push
+npx serve -s . -l 3000
+```
+モックデータ（14件）で全機能のUIを確認できる。新ステータスやフィールドを追加する場合はモックデータも更新すること。
 
-# 2. GASエディタで確認
-#    - 「サービス」に Gmail API v1 と Calendar API が追加されていること
-#    - Gmail Advanced Service を有効化すること（エディタ左メニュー → サービス → Gmail API）
+### デプロイ手順
+```bash
+# 1. 変更をコミット（clasp pull 対策）
+git add <files> && git commit -m "description"
 
-# 3. デプロイ
-clasp deploy --description "v1.8.0"
+# 2. GASにプッシュ
+clasp push --force
+
+# 3. デプロイ更新
+clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ -d "vX.X.X"
 ```
 
-### 初回セットアップ
-1. GASエディタで `setupSettingsSheet` を実行 → 設定シート作成
-2. 設定シートに `ADMIN_EMAILS` 等を記入
-3. ウェブアプリとしてデプロイ
+### 設計変更時の更新対象
+1. `コード.js` — バックエンドロジック
+2. `index.html` — フロントエンドUI + モックデータ
+3. `docs/SDD.md` — 設計書（データモデル・関数仕様・UI仕様）
+4. `docs/HANDOVER.md` — 本ドキュメント（機能一覧・ロードマップ）
 
----
-
-## 12. SDDとの差分（要更新箇所）
-
-以下の項目は実装済みだがSDDに未反映:
-
-| 項目 | 実装内容 | SDD反映 |
-|------|----------|---------|
-| HISTORY列 (K列, idx 10) | 過去回の記録をJSON保存 | ❌ S-02に追加必要 |
-| `rejected` ステータス | 回数超過時の対応不可 | ❌ S-02のSTATUS値域に追加必要 |
-| `declineCase` 関数 | 回数超過メール＋rejected設定 | ❌ F-05として追加必要 |
-| 設定シート拡張 | `MAIL_DECLINED_*` テンプレート | ❌ S-00に追加必要 |
-| 検索機能 | キーワード＋期間検索 | ❌ UI-03として追加必要 |
-| F-04 再開条件 | `currentFiscalYearCount < 10` も必須 | ❌ 前提条件に追加必要 |
-
----
-
-## 13. 既知の課題・今後の検討事項
-
-- **SDD v1.8 更新**: 上記差分をSDDに反映する
-- **Gmail API有効化**: 本番環境ではGASエディタで手動でGmail Advanced Serviceを有効にする必要がある
-- **clasp push 未実施**: 今セッションのバックエンド変更はまだGASにプッシュされていない
-- **テスト**: 本番環境での動作テストが未実施
+### バージョン管理ルール
+- コード（`コード.js` コメント・`setTitle`）、SDD、HANDOVER のバージョンは常に一致させること
+- 現行: **v1.8.1**（全ファイルで統一済み）

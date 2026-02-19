@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>基本の使い方 — Playwright MCP ガイド v0.0.68</title>
+<style>
+  :root {
+    --teal: #0d9488;
+    --teal-light: #ccfbf1;
+    --teal-dark: #134e4a;
+    --slate-50: #f8fafc;
+    --slate-100: #f1f5f9;
+    --slate-200: #e2e8f0;
+    --slate-300: #cbd5e1;
+    --slate-500: #64748b;
+    --slate-700: #334155;
+    --slate-800: #1e293b;
+    --slate-900: #0f172a;
+    --rose-50: #fff1f2;
+    --rose-100: #ffe4e6;
+    --rose-500: #f43f5e;
+    --rose-700: #be123c;
+    --amber-50: #fffbeb;
+    --amber-100: #fef3c7;
+    --amber-600: #d97706;
+    --amber-700: #b45309;
+    --sky-50: #f0f9ff;
+    --sky-100: #e0f2fe;
+    --sky-500: #0ea5e9;
+    --sky-600: #0284c7;
+    --sky-700: #0369a1;
+    --sky-900: #0c4a6e;
+    --emerald-50: #ecfdf5;
+    --emerald-100: #d1fae5;
+    --emerald-600: #059669;
+    --emerald-700: #047857;
+    --violet-50: #f5f3ff;
+    --violet-100: #ede9fe;
+    --violet-600: #7c3aed;
+    --violet-700: #6d28d9;
+    --indigo-50: #eef2ff;
+    --indigo-100: #e0e7ff;
+    --indigo-600: #4f46e5;
+    --indigo-700: #4338ca;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', 'Noto Sans JP', -apple-system, sans-serif;
+    background: var(--slate-50);
+    color: var(--slate-800);
+    line-height: 1.7;
+  }
+
+  /* Navigation Bar */
+  .site-nav {
+    background: var(--slate-900);
+    padding: 0.75rem 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    border-bottom: 2px solid var(--sky-600);
+  }
+  .nav-brand {
+    color: white;
+    font-weight: 900;
+    font-size: 0.95rem;
+    letter-spacing: -0.01em;
+  }
+  .nav-ver {
+    font-size: 0.65rem;
+    font-weight: 700;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.25);
+    padding: 0.1rem 0.45rem;
+    border-radius: 2rem;
+    margin-left: 0.4rem;
+    vertical-align: middle;
+  }
+  .nav-links {
+    display: flex;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+  }
+  .nav-links a {
+    color: rgba(255,255,255,0.65);
+    text-decoration: none;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.35rem 0.75rem;
+    border-radius: 0.5rem;
+    transition: all 0.15s;
+  }
+  .nav-links a:hover {
+    color: white;
+    background: rgba(255,255,255,0.1);
+  }
+  .nav-links a.active {
+    color: white;
+    background: var(--sky-600);
+  }
+
+  /* Hero — sky accent */
+  .hero {
+    background: linear-gradient(135deg, var(--slate-900) 0%, #0c4a6e 100%);
+    color: white;
+    padding: 3rem 2rem;
+    text-align: center;
+  }
+  .hero h1 {
+    font-size: 2rem;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.5rem;
+  }
+  .hero .badge {
+    display: inline-block;
+    background: var(--sky-600);
+    padding: 0.25rem 1rem;
+    border-radius: 2rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+  }
+  .hero p { font-size: 0.95rem; opacity: 0.8; max-width: 600px; margin: 0 auto; }
+  .hero .reading-time { font-size: 0.75rem; opacity: 0.5; margin-top: 0.75rem; }
+  .container { max-width: 900px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+
+  /* Section */
+  .section {
+    background: white;
+    border: 1px solid var(--slate-200);
+    border-radius: 1.5rem;
+    padding: 2rem;
+    margin-bottom: 1.5rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .section::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 4px; height: 100%;
+  }
+  .section.teal::before { background: var(--teal); }
+  .section.sky::before { background: var(--sky-600); }
+  .section.violet::before { background: var(--violet-600); }
+  .section.amber::before { background: var(--amber-600); }
+  .section.emerald::before { background: var(--emerald-600); }
+  .section.rose::before { background: var(--rose-500); }
+  .section.indigo::before { background: var(--indigo-600); }
+
+  .section h2 {
+    font-size: 1.25rem;
+    font-weight: 900;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .section h2 .num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem; height: 2rem;
+    border-radius: 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 900;
+    color: white;
+    flex-shrink: 0;
+  }
+  .teal .num { background: var(--teal); }
+  .sky .num { background: var(--sky-600); }
+  .violet .num { background: var(--violet-600); }
+  .amber .num { background: var(--amber-600); }
+  .emerald .num { background: var(--emerald-600); }
+  .rose .num { background: var(--rose-500); }
+  .indigo .num { background: var(--indigo-600); }
+
+  .section h3 {
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: var(--slate-700);
+    margin: 1.25rem 0 0.5rem;
+  }
+  .section p, .section li {
+    font-size: 0.9rem;
+    color: var(--slate-700);
+  }
+  .section ul, .section ol {
+    padding-left: 1.25rem;
+    margin-bottom: 0.75rem;
+  }
+  .section li { margin-bottom: 0.35rem; }
+
+  /* Code */
+  code {
+    background: var(--slate-100);
+    padding: 0.15rem 0.4rem;
+    border-radius: 0.3rem;
+    font-size: 0.82rem;
+    font-family: 'Consolas', 'Courier New', monospace;
+    color: var(--teal-dark);
+    font-weight: 600;
+  }
+  pre {
+    background: var(--slate-900);
+    color: #e2e8f0;
+    padding: 1.25rem 1.5rem;
+    border-radius: 0.75rem;
+    overflow-x: auto;
+    margin: 0.75rem 0;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    font-family: 'Consolas', 'Courier New', monospace;
+  }
+  pre code {
+    background: none;
+    padding: 0;
+    color: inherit;
+    font-weight: 400;
+  }
+  .comment { color: #6b7280; }
+  .string { color: #34d399; }
+  .keyword { color: #f472b6; }
+  .cmd { color: #60a5fa; }
+
+  /* Step card */
+  .step {
+    background: var(--slate-50);
+    border: 1px solid var(--slate-200);
+    border-radius: 1rem;
+    padding: 1.25rem 1.5rem;
+    margin: 0.75rem 0;
+    position: relative;
+    padding-left: 3.5rem;
+  }
+  .step .step-num {
+    position: absolute;
+    left: 1.25rem; top: 1.25rem;
+    width: 1.75rem; height: 1.75rem;
+    border-radius: 50%;
+    background: var(--sky-600);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-weight: 900;
+  }
+  .step h4 {
+    font-size: 0.9rem;
+    font-weight: 800;
+    color: var(--slate-800);
+    margin-bottom: 0.35rem;
+  }
+  .step p { font-size: 0.85rem; color: var(--slate-500); }
+
+  /* Alert boxes */
+  .alert {
+    padding: 1rem 1.25rem;
+    border-radius: 0.75rem;
+    margin: 0.75rem 0;
+    font-size: 0.85rem;
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+  }
+  .alert .icon { font-size: 1.25rem; flex-shrink: 0; line-height: 1; }
+  .alert-warn { background: var(--amber-50); border: 1px solid var(--amber-100); color: var(--amber-700); }
+  .alert-danger { background: var(--rose-50); border: 1px solid var(--rose-100); color: var(--rose-700); }
+  .alert-info { background: var(--sky-50); border: 1px solid var(--sky-100); color: var(--sky-700); }
+  .alert-success { background: var(--emerald-50); border: 1px solid var(--emerald-100); color: var(--emerald-700); }
+  .alert strong { font-weight: 800; }
+
+  /* Table */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.75rem 0;
+    font-size: 0.85rem;
+  }
+  th {
+    text-align: left;
+    background: var(--slate-100);
+    padding: 0.6rem 0.75rem;
+    font-weight: 800;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--slate-500);
+    border-bottom: 2px solid var(--slate-200);
+  }
+  td {
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--slate-100);
+    color: var(--slate-700);
+  }
+  tr:hover td { background: var(--slate-50); }
+
+  /* Flow diagram */
+  .flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin: 1rem 0;
+  }
+  .flow-item {
+    background: white;
+    border: 2px solid var(--slate-200);
+    border-radius: 0.75rem;
+    padding: 0.6rem 1rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-align: center;
+    min-width: 120px;
+  }
+  .flow-item.active { border-color: var(--sky-600); background: var(--sky-50); color: var(--sky-700); }
+  .flow-arrow { color: var(--slate-300); font-size: 1.25rem; font-weight: 900; }
+
+  /* Comparison card */
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin: 1rem 0;
+  }
+  .compare-card {
+    border-radius: 0.75rem;
+    padding: 1rem 1.25rem;
+    font-size: 0.85rem;
+  }
+  .compare-card.good {
+    background: var(--emerald-50);
+    border: 1px solid var(--emerald-100);
+    color: var(--emerald-700);
+  }
+  .compare-card.bad {
+    background: var(--rose-50);
+    border: 1px solid var(--rose-100);
+    color: var(--rose-700);
+  }
+  .compare-card h4 {
+    font-weight: 800;
+    font-size: 0.8rem;
+    margin-bottom: 0.5rem;
+  }
+  .compare-card ul {
+    padding-left: 1.1rem;
+    margin-bottom: 0;
+  }
+  .compare-card li {
+    margin-bottom: 0.25rem;
+    font-size: 0.82rem;
+  }
+  .compare-card code {
+    font-size: 0.75rem;
+  }
+
+  /* Tag labels */
+  .tag {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.65rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    vertical-align: middle;
+    margin-left: 0.5rem;
+  }
+  .tag-new { background: var(--emerald-100); color: var(--emerald-700); }
+  .tag-best { background: var(--amber-100); color: var(--amber-700); }
+  .tag-important { background: var(--rose-100); color: var(--rose-700); }
+
+  /* Accessibility tree example */
+  .tree-example {
+    background: var(--slate-900);
+    color: #e2e8f0;
+    padding: 1.25rem 1.5rem;
+    border-radius: 0.75rem;
+    margin: 0.75rem 0;
+    font-size: 0.85rem;
+    line-height: 1.8;
+    font-family: 'Consolas', 'Courier New', monospace;
+    border-left: 4px solid var(--sky-600);
+  }
+  .tree-example .tree-role { color: #f472b6; font-weight: 700; }
+  .tree-example .tree-name { color: #34d399; }
+  .tree-example .tree-ref { color: #60a5fa; }
+  .tree-example .tree-value { color: #fbbf24; }
+
+  /* Lookup grid — 2-column card grid for the lookup table */
+  .lookup-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    margin: 1rem 0;
+  }
+
+  /* Lookup card — individual card with goal + prompt */
+  .lookup-card {
+    background: var(--slate-50);
+    border: 1px solid var(--slate-200);
+    border-radius: 0.75rem;
+    padding: 1rem 1.25rem;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .lookup-card:hover {
+    border-color: var(--sky-500);
+    box-shadow: 0 2px 8px rgba(14, 165, 233, 0.1);
+  }
+  .lookup-card .lookup-goal {
+    font-size: 0.8rem;
+    font-weight: 800;
+    color: var(--slate-800);
+    margin-bottom: 0.4rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .lookup-card .lookup-goal .lookup-icon {
+    font-size: 1rem;
+    line-height: 1;
+  }
+  .lookup-card .lookup-prompt {
+    font-size: 0.82rem;
+    color: var(--sky-700);
+    background: var(--sky-50);
+    border: 1px solid var(--sky-100);
+    border-radius: 0.4rem;
+    padding: 0.35rem 0.6rem;
+    font-weight: 600;
+  }
+
+  /* Bottom navigation */
+  .bottom-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 2rem;
+    gap: 1rem;
+  }
+  .bottom-nav a {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    text-decoration: none;
+    background: white;
+    border: 1px solid var(--slate-200);
+    border-radius: 1rem;
+    padding: 1rem 1.5rem;
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--slate-700);
+    transition: border-color 0.15s, box-shadow 0.15s;
+    min-width: 0;
+  }
+  .bottom-nav a:hover {
+    border-color: var(--sky-600);
+    box-shadow: 0 2px 8px rgba(14, 165, 233, 0.12);
+    color: var(--sky-700);
+  }
+  .bottom-nav .nav-prev { margin-right: auto; }
+  .bottom-nav .nav-next { margin-left: auto; }
+  .bottom-nav .nav-label {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--slate-500);
+    font-weight: 800;
+  }
+  .bottom-nav .nav-title {
+    font-size: 0.9rem;
+  }
+
+  .footer {
+    text-align: center;
+    padding: 2rem;
+    color: var(--slate-500);
+    font-size: 0.75rem;
+  }
+
+  @media (max-width: 640px) {
+    .hero h1 { font-size: 1.5rem; }
+    .container { padding: 1rem 1rem 3rem; }
+    .section { padding: 1.5rem; }
+    .compare { grid-template-columns: 1fr; }
+    .lookup-grid { grid-template-columns: 1fr; }
+    .site-nav { padding: 0.5rem 1rem; }
+    .nav-links a { font-size: 0.7rem; padding: 0.25rem 0.5rem; }
+    .bottom-nav { flex-direction: column; }
+    .bottom-nav a { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Navigation Bar -->
+<nav class="site-nav">
+  <div class="nav-brand">Playwright MCP ガイド <span class="nav-ver">v0.0.68</span></div>
+  <div class="nav-links">
+    <a href="PlaywrightMCP_QuickStart.html">1. スタート</a>
+    <a href="PlaywrightMCP_Basics.html" class="active">2. 基本</a>
+    <a href="PlaywrightMCP_Tools.html">3. ツール</a>
+    <a href="PlaywrightMCP_Advanced.html">4. 応用</a>
+    <a href="PlaywrightMCP_Examples.html">5. 実践</a>
+  </div>
+</nav>
+
+<!-- Hero -->
+<div class="hero">
+  <div class="badge">基本をマスター</div>
+  <h1>基本の使い方</h1>
+  <p>効率的にブラウザ操作するためのコツとパターン</p>
+  <div class="reading-time">読了目安: 約10分</div>
+</div>
+
+<div class="container">
+
+  <!-- Section 1: アクセシビリティツリーを理解しよう -->
+  <div class="section sky">
+    <h2><span class="num">1</span> アクセシビリティツリーを理解しよう</h2>
+
+    <p>Playwright MCP は<strong>スクリーンショット（画像）ではなく、アクセシビリティツリー（構造化テキスト）</strong>でページを理解します。これが最も重要な概念です。</p>
+
+    <p>ブラウザが描画する画面には、視覚的な見た目とは別に「アクセシビリティツリー」という構造化データが存在します。スクリーンリーダーなどの支援技術が利用するもので、Playwright MCP はこれを活用して高速かつ正確にページ状態を把握します。</p>
+
+    <h3>スナップショット vs スクリーンショット</h3>
+    <div class="compare">
+      <div class="compare-card good">
+        <h4>&#10004; スナップショット（推奨）</h4>
+        <ul>
+          <li>構造化テキスト <strong>2-5KB</strong></li>
+          <li>ref番号で要素を正確に操作</li>
+          <li>コンテキスト消費が最小限</li>
+          <li>要素の役割・名前・状態を取得</li>
+        </ul>
+      </div>
+      <div class="compare-card bad">
+        <h4>&#10008; スクリーンショット</h4>
+        <ul>
+          <li>画像データ <strong>500KB-2MB</strong></li>
+          <li>座標計算が必要で不正確</li>
+          <li>大量のトークンを消費</li>
+          <li>視覚確認にしか使えない</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>アクセシビリティツリーの実例</h3>
+    <p>以下は、<code>browser_snapshot</code> が返すデータの一例です。</p>
+
+    <div class="tree-example">
+      <div>- <span class="tree-role">heading</span> <span class="tree-name">"お問い合わせ"</span> <span class="tree-ref">[ref=e35]</span></div>
+      <div>- <span class="tree-role">textbox</span> <span class="tree-name">"メール"</span> <span class="tree-ref">[ref=e38]</span>: <span class="tree-value">user@example.com</span></div>
+      <div>- <span class="tree-role">button</span> <span class="tree-name">"送信"</span> <span class="tree-ref">[ref=e42]</span></div>
+    </div>
+
+    <div class="alert alert-info">
+      <div class="icon">&#128273;</div>
+      <div><strong>ref番号とは：</strong> アクセシビリティツリーの各要素には <code>[ref=e42]</code> のような固有番号が付与されます。Claude はこの番号を使って要素を正確に操作します。ユーザーがref番号を覚える必要はありません。Claude が自動的に判断して使用します。</div>
+    </div>
+  </div>
+
+  <!-- Section 2: 3つのベストプラクティス -->
+  <div class="section amber">
+    <h2><span class="num">2</span> 3つのベストプラクティス <span class="tag tag-best">Best Practice</span></h2>
+
+    <h3>BP1: 初回は明示的に伝える</h3>
+    <p>セッション最初は「<strong>Playwright MCP で</strong>」と明示的に指示してください。2回目以降は自然な日本語でOKです。</p>
+
+    <div class="compare">
+      <div class="compare-card good">
+        <h4>&#10004; 初回の指示</h4>
+        <p>「<strong>Playwright MCP で</strong> http://localhost:3000 を開いて」</p>
+        <p style="font-size: 0.78rem; margin-top: 0.5rem; opacity: 0.8;">Claude が確実にMCPツールを認識して使用します。</p>
+      </div>
+      <div class="compare-card good">
+        <h4>&#10004; 2回目以降</h4>
+        <p>「検索欄に『訪問』と入力して」</p>
+        <p style="font-size: 0.78rem; margin-top: 0.5rem; opacity: 0.8;">すでにMCPを認識しているので自然言語だけでOKです。</p>
+      </div>
+    </div>
+
+    <h3>BP2: スナップショット優先</h3>
+    <p>スクリーンショットではなくスナップショット（アクセシビリティツリー）を優先しましょう。</p>
+
+    <div class="compare">
+      <div class="compare-card good">
+        <h4>&#10004; こうする</h4>
+        <p>「画面の<strong>状態を確認</strong>して」</p>
+        <p style="font-size: 0.78rem; margin-top: 0.4rem; opacity: 0.8;">&#10132; <code>browser_snapshot</code> が使われる</p>
+      </div>
+      <div class="compare-card bad">
+        <h4>&#10008; こうしない</h4>
+        <p>「<strong>スクリーンショット</strong>を撮って」</p>
+        <p style="font-size: 0.78rem; margin-top: 0.4rem; opacity: 0.8;">&#10132; 大量トークン消費</p>
+      </div>
+    </div>
+
+    <h3>BP3: 段階的に操作する</h3>
+    <p>複雑な操作は一度に全てを指示せず、段階的に進めると安定します。</p>
+
+    <div class="step">
+      <div class="step-num">1</div>
+      <h4>ページを開いて状態確認</h4>
+      <p>まずページを開き、スナップショットで現在の状態を把握します。</p>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <h4>操作を指示（クリック、入力など）</h4>
+      <p>確認した状態をもとに、具体的な操作を指示します。</p>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <h4>操作後にスナップショットで結果確認</h4>
+      <p>操作が意図通りに完了したかスナップショットで確認します。</p>
+    </div>
+
+    <h3>動作の流れ</h3>
+    <div class="flow">
+      <div class="flow-item">あなたが<br>日本語で指示</div>
+      <div class="flow-arrow">&#10132;</div>
+      <div class="flow-item active">Claude が<br>MCPツール実行</div>
+      <div class="flow-arrow">&#10132;</div>
+      <div class="flow-item">ブラウザが<br>自動で操作</div>
+      <div class="flow-arrow">&#10132;</div>
+      <div class="flow-item">アクセシビリティ<br>ツリーで報告</div>
+    </div>
+  </div>
+
+  <!-- Section 3: やりたいこと逆引き表 -->
+  <div class="section emerald">
+    <h2><span class="num">3</span> やりたいこと逆引き表 <span class="tag tag-new">New</span></h2>
+
+    <p>「何をしたいか」から「どう指示すればいいか」を逆引きできる表です。コピーしてそのまま使えます。</p>
+
+    <div class="lookup-grid">
+
+      <div class="lookup-card">
+        <div class="lookup-goal"><span class="lookup-icon">&#127760;</span> ページを開きたい</div>
+        <div class="lookup-prompt">「http://localhost:3000 を開いて」</div>
+      </div>
+
+      <div class="lookup-card">
+        <div class="lookup-goal"><span class="lookup-icon">&#128433;</span> ボタンを押したい</div>
+        <div class="lookup-prompt">「〇〇ボタンをクリックして」</div>
+      </div>
+
+      <div class="lookup-card">
+        <div class="lookup-goal"><span class="lookup-icon">&#9999;</span> テキストを入力したい</div>
+        <div class="lookup-prompt">「検索欄に『訪問』と入力して」</div>
+      </div>
+
+      <div class="lookup-card">
+        <div class="lookup-goal"><span class="lookup-icon">&#128259;</span> ドロップダウンを変更</div>
+        <div class="lookup-prompt">「方法をGoogleMeetに変えて」</div>
+      </div>
+
+      <div class="lookup-card">
+        <div class="lookup-goal"><span class="lookup-icon">&#128241;</span> 画面サイズを変更</div>
+        <div class="lookup-prompt">「画面を375x812にして」</div>
+      </div>
+
+      <div class="lookup-card">
+        <div class="lookup-goal"><span class="lookup-icon">&#9888;</span> エラーを確認</div>
+        <div class="lookup-prompt">「コンソールエラーを確認して」</div>
+      </div>
+
+      <div class="lookup-card">
+        <div class="lookup-goal"><span class="lookup-icon">&#9194;</span> 前のページに戻る</div>
+        <div class="lookup-prompt">「前のページに戻って」</div>
+      </div>
+
+      <div class="lookup-card">
+        <div class="lookup-goal"><span class="lookup-icon">&#9203;</span> 待機する</div>
+        <div class="lookup-prompt">「ローディングが消えるまで待って」</div>
+      </div>
+
+      <div class="lookup-card">
+        <div class="lookup-goal"><span class="lookup-icon">&#128488;</span> ダイアログに応答</div>
+        <div class="lookup-prompt">「確認ダイアログでOKを押して」</div>
+      </div>
+
+      <div class="lookup-card">
+        <div class="lookup-goal"><span class="lookup-icon">&#10006;</span> ブラウザを閉じる</div>
+        <div class="lookup-prompt">「ブラウザを閉じて」</div>
+      </div>
+
+    </div>
+
+    <div class="alert alert-success">
+      <div class="icon">&#128161;</div>
+      <div><strong>ポイント：</strong> 特別なコマンドや構文を覚える必要はありません。日常の日本語で指示するだけで、Claude が適切なMCPツールを選択して実行します。</div>
+    </div>
+  </div>
+
+  <!-- Section 4: よくある間違い -->
+  <div class="section rose">
+    <h2><span class="num">4</span> よくある間違い（Do / Don't） <span class="tag tag-important">重要</span></h2>
+
+    <p>初めて使うときに陥りがちな間違いと正しいやり方をまとめました。</p>
+
+    <h3>間違い 1：一度に大量の指示を出す</h3>
+    <div class="compare">
+      <div class="compare-card good">
+        <h4>&#10004; こうする</h4>
+        <p><strong>1つずつ段階的に指示する</strong></p>
+        <p style="font-size: 0.78rem; margin-top: 0.4rem;">「まずページを開いて」&#10132;「状態を確認して」&#10132;「ボタンを押して」</p>
+      </div>
+      <div class="compare-card bad">
+        <h4>&#10008; こうしない</h4>
+        <p><strong>「5つのテストを全部一気にやって」</strong></p>
+        <p style="font-size: 0.78rem; margin-top: 0.4rem;">途中でエラーが起きても原因の特定が困難になります。</p>
+      </div>
+    </div>
+
+    <h3>間違い 2：状態を確認せずに操作する</h3>
+    <div class="compare">
+      <div class="compare-card good">
+        <h4>&#10004; こうする</h4>
+        <p><strong>操作前にスナップショットで状態確認</strong></p>
+        <p style="font-size: 0.78rem; margin-top: 0.4rem;">「画面の状態を確認して」&#10132; 状態把握 &#10132;「〇〇をクリック」</p>
+      </div>
+      <div class="compare-card bad">
+        <h4>&#10008; こうしない</h4>
+        <p><strong>状態を確認せずにいきなり操作</strong></p>
+        <p style="font-size: 0.78rem; margin-top: 0.4rem;">ページの読み込みが終わっていない等で操作が失敗することがあります。</p>
+      </div>
+    </div>
+
+    <h3>間違い 3：毎回スクリーンショットを要求する</h3>
+    <div class="compare">
+      <div class="compare-card good">
+        <h4>&#10004; こうする</h4>
+        <p><strong>「画面の状態を確認して」</strong></p>
+        <p style="font-size: 0.78rem; margin-top: 0.4rem;">&#10132; <code>browser_snapshot</code>（軽量・高速・正確）</p>
+      </div>
+      <div class="compare-card bad">
+        <h4>&#10008; こうしない</h4>
+        <p><strong>「スクリーンショットを撮って」（毎回）</strong></p>
+        <p style="font-size: 0.78rem; margin-top: 0.4rem;">&#10132; 画像は最終確認やレイアウト確認時だけに限定しましょう。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Navigation -->
+  <div class="bottom-nav">
+    <a href="PlaywrightMCP_QuickStart.html" class="nav-prev">
+      <span>&#8592;</span>
+      <span>
+        <span class="nav-label">前のページ</span><br>
+        <span class="nav-title">クイックスタート</span>
+      </span>
+    </a>
+    <a href="PlaywrightMCP_Tools.html" class="nav-next">
+      <span>
+        <span class="nav-label">次のページ</span><br>
+        <span class="nav-title">ツールリファレンス</span>
+      </span>
+      <span>&#8594;</span>
+    </a>
+  </div>
+
+</div>
+
+<div class="footer">
+  タダサポ管理システム 開発ドキュメント &mdash; Playwright MCP ガイド v0.0.68 &mdash; 2026/02
+</div>
+
+</body>
+</html>

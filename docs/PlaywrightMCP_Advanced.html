@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>応用 & CLIオプション — Playwright MCP ガイド</title>
+<style>
+/* ============================================================
+   Playwright MCP ガイド — 共通CSS v0.0.68
+   全5ページで共有するデザイントークンとコンポーネント
+   ============================================================ */
+
+/* --- カスタムプロパティ --- */
+:root {
+  /* Teal */
+  --teal-50: #f0fdfa; --teal-100: #ccfbf1; --teal-200: #99f6e4;
+  --teal-400: #2dd4bf; --teal-500: #14b8a6; --teal-600: #0d9488;
+  --teal-700: #0f766e; --teal-800: #115e59; --teal-900: #134e4a;
+  /* Sky */
+  --sky-50: #f0f9ff; --sky-100: #e0f2fe; --sky-200: #bae6fd;
+  --sky-500: #0ea5e9; --sky-600: #0284c7; --sky-700: #0369a1;
+  /* Slate */
+  --slate-50: #f8fafc; --slate-100: #f1f5f9; --slate-200: #e2e8f0;
+  --slate-300: #cbd5e1; --slate-400: #94a3b8; --slate-500: #64748b;
+  --slate-600: #475569; --slate-700: #334155; --slate-800: #1e293b;
+  --slate-900: #0f172a; --slate-950: #020617;
+  /* Rose */
+  --rose-50: #fff1f2; --rose-100: #ffe4e6; --rose-200: #fecdd3;
+  --rose-500: #f43f5e; --rose-600: #e11d48; --rose-700: #be123c;
+  /* Amber */
+  --amber-50: #fffbeb; --amber-100: #fef3c7; --amber-200: #fde68a;
+  --amber-500: #f59e0b; --amber-600: #d97706; --amber-700: #b45309;
+  /* Emerald */
+  --emerald-50: #ecfdf5; --emerald-100: #d1fae5; --emerald-200: #a7f3d0;
+  --emerald-500: #10b981; --emerald-600: #059669; --emerald-700: #047857;
+  /* Violet */
+  --violet-50: #f5f3ff; --violet-100: #ede9fe; --violet-500: #8b5cf6;
+  --violet-600: #7c3aed; --violet-700: #6d28d9;
+  /* Indigo */
+  --indigo-50: #eef2ff; --indigo-100: #e0e7ff; --indigo-200: #c7d2fe;
+  --indigo-500: #6366f1; --indigo-600: #4f46e5; --indigo-700: #4338ca;
+  --indigo-800: #3730a3; --indigo-900: #312e81;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP", sans-serif;
+  --font-mono: "Fira Code", "Source Code Pro", Consolas, monospace;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.05);
+  --shadow: 0 1px 3px rgba(0,0,0,.1), 0 1px 2px rgba(0,0,0,.06);
+  --shadow-md: 0 4px 6px rgba(0,0,0,.1), 0 2px 4px rgba(0,0,0,.06);
+  --shadow-lg: 0 10px 15px rgba(0,0,0,.1), 0 4px 6px rgba(0,0,0,.05);
+  --radius: 8px;
+  --radius-lg: 12px;
+}
+
+/* --- リセット & ベース --- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; scroll-padding-top: 70px; }
+body {
+  font-family: var(--font-sans);
+  color: var(--slate-800);
+  background: var(--slate-50);
+  line-height: 1.7;
+  font-size: 16px;
+}
+
+/* --- サイトナビゲーション（sticky） --- */
+.site-nav {
+  position: sticky; top: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--slate-900); color: #fff;
+  padding: .65rem 1.5rem;
+  box-shadow: var(--shadow-md);
+}
+.nav-brand {
+  font-weight: 700; font-size: 1rem; white-space: nowrap;
+}
+.nav-ver {
+  font-size: .7rem; background: var(--teal-700); color: var(--teal-100);
+  padding: .1em .45em; border-radius: 4px; margin-left: .4rem;
+  vertical-align: middle;
+}
+.nav-links { display: flex; gap: .25rem; flex-wrap: wrap; }
+.nav-links a {
+  color: var(--slate-300); text-decoration: none;
+  padding: .3rem .7rem; border-radius: 6px;
+  font-size: .85rem; transition: background .2s, color .2s;
+  white-space: nowrap;
+}
+.nav-links a:hover { background: var(--slate-700); color: #fff; }
+.nav-links a.active {
+  background: var(--teal-600); color: #fff; font-weight: 600;
+}
+
+/* --- ヒーローセクション --- */
+.hero {
+  background: linear-gradient(135deg, var(--slate-900) 0%, #312e81 100%);
+  color: #fff; padding: 3rem 1.5rem 2.5rem; text-align: center;
+}
+.hero-badge {
+  display: inline-block; background: var(--indigo-500); color: #fff;
+  font-size: .8rem; font-weight: 700; padding: .25em .8em;
+  border-radius: 20px; margin-bottom: 1rem; letter-spacing: .03em;
+}
+.hero h1 { font-size: 2.2rem; font-weight: 800; margin-bottom: .5rem; }
+.hero .subtitle {
+  font-size: 1.1rem; color: var(--indigo-200); margin-bottom: .75rem;
+}
+.hero .reading-time {
+  font-size: .85rem; color: var(--slate-400);
+}
+
+/* --- コンテナ --- */
+.container {
+  max-width: 900px; margin: 0 auto;
+  padding: 2rem 1.5rem 3rem;
+}
+
+/* --- セクションカード --- */
+.section-card {
+  background: #fff; border-radius: var(--radius-lg);
+  box-shadow: var(--shadow); margin-bottom: 2rem;
+  border-left: 4px solid var(--teal-500);
+  overflow: hidden;
+}
+.section-card.accent-sky    { border-left-color: var(--sky-500); }
+.section-card.accent-amber  { border-left-color: var(--amber-500); }
+.section-card.accent-emerald{ border-left-color: var(--emerald-500); }
+.section-card.accent-violet { border-left-color: var(--violet-500); }
+.section-card.accent-indigo { border-left-color: var(--indigo-500); }
+.section-card.accent-rose   { border-left-color: var(--rose-500); }
+.section-header {
+  padding: 1.25rem 1.5rem .75rem;
+}
+.section-header h2 {
+  font-size: 1.35rem; font-weight: 700; color: var(--slate-900);
+}
+.section-body { padding: 0 1.5rem 1.5rem; }
+.section-body p { margin-bottom: .75rem; }
+
+/* --- ステップカード --- */
+.step { display: flex; gap: 1rem; margin-bottom: 1.75rem; }
+.step-num {
+  flex-shrink: 0; width: 2.4rem; height: 2.4rem;
+  background: var(--teal-600); color: #fff;
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 1.1rem; margin-top: .1rem;
+}
+.step-content { flex: 1; min-width: 0; }
+.step-content h3 {
+  font-size: 1.05rem; font-weight: 700; margin-bottom: .4rem;
+  color: var(--slate-800);
+}
+
+/* --- アラートボックス --- */
+.alert {
+  padding: .85rem 1rem; border-radius: var(--radius);
+  margin: .75rem 0; font-size: .9rem; line-height: 1.6;
+}
+.alert-info    { background: var(--sky-50); border: 1px solid var(--sky-200); color: var(--sky-700); }
+.alert-warn    { background: var(--amber-50); border: 1px solid var(--amber-200); color: var(--amber-700); }
+.alert-danger  { background: var(--rose-50); border: 1px solid var(--rose-200); color: var(--rose-700); }
+.alert-success { background: var(--emerald-50); border: 1px solid var(--emerald-200); color: var(--emerald-700); }
+.alert strong { font-weight: 700; }
+
+/* --- コードブロック --- */
+pre {
+  background: var(--slate-900); color: var(--slate-100);
+  padding: 1rem 1.25rem; border-radius: var(--radius);
+  overflow-x: auto; font-family: var(--font-mono);
+  font-size: .88rem; line-height: 1.6; margin: .75rem 0;
+  box-shadow: var(--shadow-sm);
+}
+code {
+  font-family: var(--font-mono); font-size: .88em;
+}
+p code, li code, td code, summary code {
+  background: var(--slate-100); color: var(--teal-700);
+  padding: .15em .4em; border-radius: 4px;
+  font-size: .85em;
+}
+pre .comment { color: var(--slate-500); }
+pre .string  { color: var(--teal-400); }
+pre .key     { color: var(--sky-400); }
+pre .cmd     { color: var(--amber-200); }
+pre .flag    { color: var(--violet-400); }
+
+/* --- チェックリスト --- */
+.checklist { list-style: none; padding: 0; }
+.checklist li {
+  padding: .5rem .75rem; margin-bottom: .4rem;
+  background: var(--slate-50); border-radius: var(--radius);
+  display: flex; align-items: baseline; gap: .6rem;
+  font-size: .95rem;
+}
+.checklist li .check-box {
+  flex-shrink: 0; width: 1.2rem; height: 1.2rem;
+  border: 2px solid var(--slate-400); border-radius: 3px;
+  display: inline-block; position: relative; top: .15rem;
+}
+
+/* --- フロー図 --- */
+.flow-diagram {
+  display: flex; align-items: center; justify-content: center;
+  gap: .5rem; flex-wrap: wrap;
+  padding: 1.25rem; margin: 1rem 0;
+  background: var(--slate-800); border-radius: var(--radius);
+  color: #fff; font-size: .9rem;
+}
+.flow-box {
+  background: var(--teal-700); padding: .45rem .9rem;
+  border-radius: 6px; font-weight: 600; white-space: nowrap;
+}
+.flow-arrow { color: var(--teal-400); font-size: 1.2rem; font-weight: 700; }
+
+/* --- 試してみようプロンプト --- */
+.prompt-example {
+  background: var(--indigo-50); border: 1px solid var(--indigo-100);
+  border-radius: var(--radius); padding: .75rem 1rem;
+  margin: .5rem 0; font-size: .92rem; color: var(--indigo-700);
+}
+.prompt-example::before {
+  content: "\01F4AC"; margin-right: .5rem;
+}
+
+/* --- details / summary（折りたたみ） --- */
+details {
+  border: 1px solid var(--slate-200);
+  border-radius: 0.75rem;
+  margin: 0.75rem 0;
+  overflow: hidden;
+}
+summary {
+  padding: 0.75rem 1rem;
+  font-weight: 800;
+  font-size: 0.9rem;
+  cursor: pointer;
+  background: var(--slate-50);
+  border-bottom: 1px solid transparent;
+  list-style: none;
+}
+summary::-webkit-details-marker { display: none; }
+summary::before {
+  content: "\25B6"; display: inline-block; margin-right: .5rem;
+  font-size: .75rem; transition: transform .2s;
+}
+details[open] summary::before { transform: rotate(90deg); }
+details[open] summary { border-bottom: 1px solid var(--slate-200); }
+details > :not(summary) { padding: 0 1rem; }
+details table { margin: 0.5rem 0 1rem; }
+
+/* --- テーブル --- */
+table {
+  width: 100%; border-collapse: collapse;
+  font-size: .88rem; line-height: 1.5;
+}
+th, td {
+  padding: .55rem .75rem; text-align: left;
+  border-bottom: 1px solid var(--slate-200);
+}
+th {
+  background: var(--slate-50); font-weight: 700;
+  color: var(--slate-700); font-size: .82rem;
+  text-transform: none;
+}
+tr:last-child td { border-bottom: none; }
+td code {
+  background: var(--slate-100); color: var(--indigo-700);
+  padding: .1em .35em; border-radius: 3px; font-size: .85em;
+  white-space: nowrap;
+}
+
+/* --- ページ下部ナビゲーション --- */
+.page-nav {
+  display: flex; justify-content: space-between; gap: 1rem;
+  margin-top: 2.5rem;
+}
+.page-nav a {
+  flex: 1; display: block; text-decoration: none;
+  background: #fff; border-radius: var(--radius-lg);
+  padding: 1.25rem 1.5rem; box-shadow: var(--shadow);
+  transition: box-shadow .2s, transform .2s;
+  border: 1px solid var(--slate-200);
+}
+.page-nav a:hover {
+  box-shadow: var(--shadow-lg); transform: translateY(-2px);
+}
+.page-nav .nav-label {
+  font-size: .75rem; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--slate-400); margin-bottom: .25rem;
+}
+.page-nav .nav-title {
+  font-size: 1.05rem; font-weight: 700; color: var(--teal-700);
+}
+.page-nav .prev { text-align: left; }
+.page-nav .next { text-align: right; margin-left: auto; }
+
+/* --- フッター --- */
+.site-footer {
+  text-align: center; padding: 2rem 1rem;
+  font-size: .8rem; color: var(--slate-400);
+  border-top: 1px solid var(--slate-200);
+  margin-top: 1rem;
+}
+
+/* --- レスポンシブ（640px） --- */
+@media (max-width: 640px) {
+  .site-nav {
+    flex-direction: column; gap: .5rem; padding: .5rem 1rem;
+  }
+  .nav-links { justify-content: center; }
+  .nav-links a { font-size: .75rem; padding: .25rem .5rem; }
+  .hero { padding: 2rem 1rem 1.75rem; }
+  .hero h1 { font-size: 1.6rem; }
+  .container { padding: 1.25rem 1rem 2rem; }
+  .section-header { padding: 1rem 1.15rem .5rem; }
+  .section-body { padding: 0 1.15rem 1.15rem; }
+  .step { flex-direction: column; gap: .5rem; }
+  .flow-diagram { font-size: .8rem; gap: .35rem; }
+  .flow-box { padding: .35rem .65rem; }
+  .page-nav { flex-direction: column; }
+  table { font-size: .8rem; }
+  th, td { padding: .4rem .5rem; }
+}
+</style>
+</head>
+<body>
+
+<!-- ========== ナビゲーション ========== -->
+<nav class="site-nav">
+  <div class="nav-brand">Playwright MCP ガイド <span class="nav-ver">v0.0.68</span></div>
+  <div class="nav-links">
+    <a href="PlaywrightMCP_QuickStart.html">1. スタート</a>
+    <a href="PlaywrightMCP_Basics.html">2. 基本</a>
+    <a href="PlaywrightMCP_Tools.html">3. ツール</a>
+    <a href="PlaywrightMCP_Advanced.html" class="active">4. 応用</a>
+    <a href="PlaywrightMCP_Examples.html">5. 実践</a>
+  </div>
+</nav>
+
+<!-- ========== ヒーロー ========== -->
+<section class="hero">
+  <div class="hero-badge">上級者向け</div>
+  <h1>応用 &amp; CLIオプション</h1>
+  <p class="subtitle">セッション管理、永続プロファイル、詳細設定</p>
+  <p class="reading-time">リファレンス</p>
+</section>
+
+<!-- ========== メインコンテンツ ========== -->
+<div class="container">
+
+  <!-- セクション1: セットアップの応用 -->
+  <article class="section-card accent-indigo">
+    <div class="section-header">
+      <h2>1. セットアップの応用</h2>
+    </div>
+    <div class="section-body">
+      <p>クイックスタートでは <code>.mcp.json</code> による設定方法を紹介しましたが、他にもいくつかの方法があります。</p>
+
+      <h3 style="margin-top: 1rem; margin-bottom: .5rem; font-size: 1rem; color: var(--slate-700);">方法A: CLIコマンドで追加</h3>
+<pre><span class="comment"># プロジェクト固有の設定として追加</span>
+<span class="cmd">claude mcp add</span> <span class="flag">playwright</span> -- npx -y @playwright/mcp@0.0.68
+
+<span class="comment"># グローバル設定として追加（全プロジェクト共通）</span>
+<span class="cmd">claude mcp add</span> <span class="flag">--scope user</span> playwright -- npx -y @playwright/mcp@0.0.68</pre>
+
+      <h3 style="margin-top: 1.25rem; margin-bottom: .5rem; font-size: 1rem; color: var(--slate-700);">方法B: Configファイルで管理</h3>
+      <p>設定を外部JSONファイルにまとめることもできます。</p>
+<pre><span class="comment">// playwright.config.json</span>
+{
+  <span class="key">"browser"</span>: {
+    <span class="key">"browserName"</span>: <span class="string">"chromium"</span>,
+    <span class="key">"launchOptions"</span>: {
+      <span class="key">"headless"</span>: false
+    }
+  },
+  <span class="key">"server"</span>: {
+    <span class="key">"port"</span>: 3100
+  }
+}</pre>
+
+      <p><code>.mcp.json</code> での指定:</p>
+<pre>{
+  <span class="key">"mcpServers"</span>: {
+    <span class="key">"playwright"</span>: {
+      <span class="key">"type"</span>: <span class="string">"stdio"</span>,
+      <span class="key">"command"</span>: <span class="string">"npx"</span>,
+      <span class="key">"args"</span>: [<span class="string">"-y"</span>, <span class="string">"@playwright/mcp@0.0.68"</span>, <span class="string">"--config"</span>, <span class="string">"playwright.config.json"</span>]
+    }
+  }
+}</pre>
+
+      <div class="alert alert-warn">
+        <strong>バージョン固定を推奨:</strong> <code>@latest</code> ではなく <code>@0.0.68</code> のように特定バージョンを指定することで、予期しない破壊的変更を防げます。
+      </div>
+    </div>
+  </article>
+
+  <!-- セクション2: セッション管理 -->
+  <article class="section-card accent-sky">
+    <div class="section-header">
+      <h2>2. セッション管理</h2>
+    </div>
+    <div class="section-body">
+      <p>名前付きセッションを使うと、複数のブラウザセッションを並行して管理できます。テストの並列実行や、異なるユーザーでの同時テストに便利です。</p>
+<pre><span class="comment"># 名前付きセッションで起動</span>
+<span class="string">"args"</span>: [<span class="string">"-y"</span>, <span class="string">"@playwright/mcp@0.0.68"</span>, <span class="string">"-s=my-test-session"</span>]
+
+<span class="comment"># セッション一覧の確認</span>
+<span class="cmd">npx</span> @playwright/mcp@0.0.68 <span class="flag">list</span>
+
+<span class="comment"># 全セッションの終了</span>
+<span class="cmd">npx</span> @playwright/mcp@0.0.68 <span class="flag">close-all</span></pre>
+    </div>
+  </article>
+
+  <!-- セクション3: 永続プロファイル -->
+  <article class="section-card accent-emerald">
+    <div class="section-header">
+      <h2>3. 永続プロファイル</h2>
+    </div>
+    <div class="section-body">
+      <p><code>--user-data-dir</code> を指定すると、ログイン状態やCookieをセッション間で保持できます。</p>
+<pre>{
+  <span class="key">"mcpServers"</span>: {
+    <span class="key">"playwright"</span>: {
+      <span class="key">"type"</span>: <span class="string">"stdio"</span>,
+      <span class="key">"command"</span>: <span class="string">"npx"</span>,
+      <span class="key">"args"</span>: [<span class="string">"-y"</span>, <span class="string">"@playwright/mcp@0.0.68"</span>, <span class="string">"--user-data-dir"</span>, <span class="string">"./browser-profile"</span>]
+    }
+  }
+}</pre>
+
+      <div class="alert alert-info">
+        <strong>用途:</strong> OAuth認証が必要なGASアプリのテストなど、ログイン済み状態を維持したいケースで活用できます。
+      </div>
+    </div>
+  </article>
+
+  <!-- セクション4: JavaScript実行による高度な操作 -->
+  <article class="section-card accent-violet">
+    <div class="section-header">
+      <h2>4. JavaScript実行による高度な操作</h2>
+    </div>
+    <div class="section-body">
+      <p><code>browser_evaluate</code> と <code>browser_run_code</code> を使うと、ページ上でJavaScriptを直接実行できます。DOM操作や複雑なデータ取得に活用できます。</p>
+
+      <h3 style="margin-top: 1rem; margin-bottom: .5rem; font-size: 1rem; color: var(--slate-700);">browser_evaluate（ページ上でJS実行）</h3>
+      <div class="prompt-example">
+        browser_evaluate で以下を実行して：<br>
+        document.querySelectorAll('.case-card').length を返して
+      </div>
+
+      <h3 style="margin-top: 1.25rem; margin-bottom: .5rem; font-size: 1rem; color: var(--slate-700);">browser_run_code（Playwrightコード直接実行）</h3>
+      <div class="prompt-example">
+        browser_run_code で以下を実行して：<br>
+        await page.getByRole('button', { name: '担当する' }).click();<br>
+        return await page.title();
+      </div>
+    </div>
+  </article>
+
+  <!-- セクション5: 初期化スクリプト -->
+  <article class="section-card accent-amber">
+    <div class="section-header">
+      <h2>5. 初期化スクリプト</h2>
+    </div>
+    <div class="section-body">
+      <p><code>--init-script</code> を使うと、ページが読み込まれる前にJavaScriptを実行できます。テスト用のフラグ設定やモックユーザーの注入に便利です。</p>
+<pre><span class="comment">// init.js - ページロード前に実行される</span>
+window.__TEST_MODE__ = <span class="string">true</span>;
+window.__MOCK_USER__ = { name: <span class="string">'テスト太郎'</span>, email: <span class="string">'test@tadakayo.jp'</span> };</pre>
+
+      <p><code>.mcp.json</code> の args に追加:</p>
+<pre><span class="string">"--init-script"</span>, <span class="string">"init.js"</span></pre>
+    </div>
+  </article>
+
+  <!-- セクション6: Chrome拡張機能の読み込み -->
+  <article class="section-card accent-rose">
+    <div class="section-header">
+      <h2>6. Chrome拡張機能の読み込み</h2>
+    </div>
+    <div class="section-body">
+      <p><code>--extension</code> オプションで、Chrome拡張機能を読み込んだ状態でブラウザを起動できます。</p>
+<pre><span class="string">"--extension"</span>, <span class="string">"path/to/extension"</span></pre>
+
+      <div class="alert alert-warn">
+        <strong>注意:</strong> Chrome拡張機能はChromiumブラウザでのみ動作します。
+      </div>
+    </div>
+  </article>
+
+  <!-- セクション7: CLIオプション完全リファレンス -->
+  <article class="section-card">
+    <div class="section-header">
+      <h2>7. CLIオプション完全リファレンス</h2>
+    </div>
+    <div class="section-body">
+      <p>Playwright MCP で使用可能なすべてのCLIオプションを分類ごとにまとめました。</p>
+
+      <!-- ブラウザ設定 -->
+      <details open>
+        <summary>ブラウザ設定</summary>
+        <table>
+          <thead>
+            <tr><th>オプション</th><th>説明</th><th>デフォルト</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>--browser &lt;name&gt;</code></td><td>使用ブラウザ（chrome/firefox/webkit/msedge）</td><td>chrome</td></tr>
+            <tr><td><code>--headless</code></td><td>ヘッドレスモード</td><td>表示あり</td></tr>
+            <tr><td><code>--executable-path &lt;path&gt;</code></td><td>ブラウザ実行ファイルのパス直接指定</td><td>自動検出</td></tr>
+            <tr><td><code>--viewport-size &lt;w,h&gt;</code></td><td>初期ビューポートサイズ</td><td>1280,720</td></tr>
+            <tr><td><code>--device &lt;name&gt;</code></td><td>デバイスエミュレーション</td><td>なし</td></tr>
+            <tr><td><code>--user-agent &lt;ua&gt;</code></td><td>カスタムUser-Agent</td><td>ブラウザデフォルト</td></tr>
+          </tbody>
+        </table>
+      </details>
+
+      <!-- プロファイル & セッション -->
+      <details>
+        <summary>プロファイル &amp; セッション</summary>
+        <table>
+          <thead>
+            <tr><th>オプション</th><th>説明</th><th>デフォルト</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>--user-data-dir &lt;path&gt;</code></td><td>永続プロファイル</td><td>一時ディレクトリ</td></tr>
+            <tr><td><code>--isolated</code></td><td>毎回クリーンなプロファイル</td><td>有効</td></tr>
+            <tr><td><code>--storage-state &lt;path&gt;</code></td><td>Cookie/ストレージの保存・復元</td><td>なし</td></tr>
+            <tr><td><code>--save-session &lt;path&gt;</code></td><td>セッション状態をファイルに保存</td><td>なし</td></tr>
+          </tbody>
+        </table>
+      </details>
+
+      <!-- ネットワーク & セキュリティ -->
+      <details>
+        <summary>ネットワーク &amp; セキュリティ</summary>
+        <table>
+          <thead>
+            <tr><th>オプション</th><th>説明</th><th>デフォルト</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>--proxy-server &lt;url&gt;</code></td><td>プロキシサーバー設定</td><td>なし</td></tr>
+            <tr><td><code>--proxy-bypass &lt;list&gt;</code></td><td>プロキシをバイパスするホスト</td><td>なし</td></tr>
+            <tr><td><code>--allowed-origins &lt;origins&gt;</code></td><td>接続を許可するオリジン</td><td>全て許可</td></tr>
+            <tr><td><code>--blocked-origins &lt;origins&gt;</code></td><td>接続をブロックするオリジン</td><td>なし</td></tr>
+            <tr><td><code>--allowed-hosts &lt;hosts&gt;</code></td><td>接続を許可するホスト</td><td>全て許可</td></tr>
+            <tr><td><code>--ignore-https-errors</code></td><td>SSL証明書エラーを無視</td><td>無効</td></tr>
+            <tr><td><code>--grant-permissions &lt;perms&gt;</code></td><td>ブラウザ権限を付与</td><td>なし</td></tr>
+          </tbody>
+        </table>
+      </details>
+
+      <!-- 出力 & デバッグ -->
+      <details>
+        <summary>出力 &amp; デバッグ</summary>
+        <table>
+          <thead>
+            <tr><th>オプション</th><th>説明</th><th>デフォルト</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>--output-dir &lt;path&gt;</code></td><td>スクリーンショット等の出力先</td><td>カレントディレクトリ</td></tr>
+            <tr><td><code>--save-trace &lt;path&gt;</code></td><td>Playwrightトレースを保存</td><td>なし</td></tr>
+            <tr><td><code>--save-video &lt;size&gt;</code></td><td>セッションを動画で記録</td><td>なし</td></tr>
+            <tr><td><code>--snapshot-mode &lt;mode&gt;</code></td><td>スナップショット方式（incremental/full/none）</td><td>incremental</td></tr>
+            <tr><td><code>--console-level &lt;level&gt;</code></td><td>コンソールメッセージの記録レベル</td><td>なし</td></tr>
+          </tbody>
+        </table>
+      </details>
+
+      <!-- Capability制御 -->
+      <details>
+        <summary>Capability制御</summary>
+        <table>
+          <thead>
+            <tr><th>オプション</th><th>説明</th><th>デフォルト</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>--caps &lt;caps&gt;</code></td><td>有効にする機能をカンマ区切りで指定</td><td>core</td></tr>
+          </tbody>
+        </table>
+        <p style="margin: .5rem 0 .25rem; font-weight: 600; font-size: .9rem;">利用可能な機能:</p>
+        <ul style="margin: 0 0 1rem 1.25rem; font-size: .88rem; line-height: 1.8;">
+          <li><code>core</code> &mdash; 基本操作 22ツール</li>
+          <li><code>vision</code> &mdash; 座標ベースのマウス操作</li>
+          <li><code>pdf</code> &mdash; PDF生成・保存</li>
+          <li><code>devtools</code> &mdash; テストアサーション・ロケーター生成</li>
+        </ul>
+        <p style="font-size: .88rem;">使用例:</p>
+<pre><span class="string">"--caps"</span>, <span class="string">"core,vision,pdf,devtools"</span></pre>
+      </details>
+
+      <!-- その他 -->
+      <details>
+        <summary>その他</summary>
+        <table>
+          <thead>
+            <tr><th>オプション</th><th>説明</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>--config &lt;path&gt;</code></td><td>JSON設定ファイルのパス</td></tr>
+            <tr><td><code>--init-script &lt;path&gt;</code></td><td>ページ読み込み前に実行するJS</td></tr>
+            <tr><td><code>--init-page &lt;path&gt;</code></td><td>Playwright pageオブジェクトで実行するTS</td></tr>
+            <tr><td><code>--extension &lt;path&gt;</code></td><td>Chrome拡張機能（Chromiumのみ）</td></tr>
+            <tr><td><code>--cdp-endpoint &lt;url&gt;</code></td><td>既存のCDP接続先</td></tr>
+            <tr><td><code>--test-id-attribute &lt;attr&gt;</code></td><td>テストID属性名（デフォルト: data-testid）</td></tr>
+            <tr><td><code>--no-sandbox</code></td><td>サンドボックス無効化</td></tr>
+            <tr><td><code>--block-service-workers</code></td><td>Service Workerブロック</td></tr>
+            <tr><td><code>--port &lt;number&gt;</code></td><td>SSEモードのポート番号</td></tr>
+            <tr><td><code>--host &lt;host&gt;</code></td><td>SSEモードのバインドアドレス</td></tr>
+          </tbody>
+        </table>
+      </details>
+
+    </div>
+  </article>
+
+  <!-- ========== ページ下部ナビゲーション ========== -->
+  <div class="page-nav">
+    <a href="PlaywrightMCP_Tools.html" class="prev">
+      <div class="nav-label">&larr; 前のページ</div>
+      <div class="nav-title">ツールリファレンス</div>
+    </a>
+    <a href="PlaywrightMCP_Examples.html" class="next">
+      <div class="nav-label">次のページ &rarr;</div>
+      <div class="nav-title">実践例</div>
+    </a>
+  </div>
+
+</div>
+
+<!-- ========== フッター ========== -->
+<footer class="site-footer">
+  タダサポ管理システム 開発ドキュメント &mdash; Playwright MCP ガイド v0.0.68 &mdash; 2026/02
+</footer>
+
+</body>
+</html>

@@ -13,8 +13,9 @@ Thumbs.db
 *.swp
 *.swo
 
-# Generated HTML docs
-docs/*.html
-
 # Claude Code internal
 .claude/
+
+# Playwright MCP (local dev tool logs)
+.playwright-mcp/
+.mcp.json

@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>クイックスタート — Playwright MCP ガイド</title>
+<style>
+/* ============================================================
+   Playwright MCP ガイド — 共通CSS v0.0.68
+   全5ページで共有するデザイントークンとコンポーネント
+   ============================================================ */
+
+/* --- カスタムプロパティ --- */
+:root {
+  /* Teal */
+  --teal-50: #f0fdfa; --teal-100: #ccfbf1; --teal-200: #99f6e4;
+  --teal-400: #2dd4bf; --teal-500: #14b8a6; --teal-600: #0d9488;
+  --teal-700: #0f766e; --teal-800: #115e59; --teal-900: #134e4a;
+  /* Sky */
+  --sky-50: #f0f9ff; --sky-100: #e0f2fe; --sky-200: #bae6fd;
+  --sky-500: #0ea5e9; --sky-600: #0284c7; --sky-700: #0369a1;
+  /* Slate */
+  --slate-50: #f8fafc; --slate-100: #f1f5f9; --slate-200: #e2e8f0;
+  --slate-300: #cbd5e1; --slate-400: #94a3b8; --slate-500: #64748b;
+  --slate-600: #475569; --slate-700: #334155; --slate-800: #1e293b;
+  --slate-900: #0f172a; --slate-950: #020617;
+  /* Rose */
+  --rose-50: #fff1f2; --rose-100: #ffe4e6; --rose-200: #fecdd3;
+  --rose-500: #f43f5e; --rose-600: #e11d48; --rose-700: #be123c;
+  /* Amber */
+  --amber-50: #fffbeb; --amber-100: #fef3c7; --amber-200: #fde68a;
+  --amber-500: #f59e0b; --amber-600: #d97706; --amber-700: #b45309;
+  /* Emerald */
+  --emerald-50: #ecfdf5; --emerald-100: #d1fae5; --emerald-200: #a7f3d0;
+  --emerald-500: #10b981; --emerald-600: #059669; --emerald-700: #047857;
+  /* Violet */
+  --violet-50: #f5f3ff; --violet-100: #ede9fe; --violet-500: #8b5cf6;
+  --violet-600: #7c3aed; --violet-700: #6d28d9;
+  /* Indigo */
+  --indigo-50: #eef2ff; --indigo-100: #e0e7ff; --indigo-500: #6366f1;
+  --indigo-600: #4f46e5; --indigo-700: #4338ca;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP", sans-serif;
+  --font-mono: "Fira Code", "Source Code Pro", Consolas, monospace;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.05);
+  --shadow: 0 1px 3px rgba(0,0,0,.1), 0 1px 2px rgba(0,0,0,.06);
+  --shadow-md: 0 4px 6px rgba(0,0,0,.1), 0 2px 4px rgba(0,0,0,.06);
+  --shadow-lg: 0 10px 15px rgba(0,0,0,.1), 0 4px 6px rgba(0,0,0,.05);
+  --radius: 8px;
+  --radius-lg: 12px;
+}
+
+/* --- リセット & ベース --- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; scroll-padding-top: 70px; }
+body {
+  font-family: var(--font-sans);
+  color: var(--slate-800);
+  background: var(--slate-50);
+  line-height: 1.7;
+  font-size: 16px;
+}
+
+/* --- サイトナビゲーション（sticky） --- */
+.site-nav {
+  position: sticky; top: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--slate-900); color: #fff;
+  padding: .65rem 1.5rem;
+  box-shadow: var(--shadow-md);
+}
+.nav-brand {
+  font-weight: 700; font-size: 1rem; white-space: nowrap;
+}
+.nav-ver {
+  font-size: .7rem; background: var(--teal-700); color: var(--teal-100);
+  padding: .1em .45em; border-radius: 4px; margin-left: .4rem;
+  vertical-align: middle;
+}
+.nav-links { display: flex; gap: .25rem; flex-wrap: wrap; }
+.nav-links a {
+  color: var(--slate-300); text-decoration: none;
+  padding: .3rem .7rem; border-radius: 6px;
+  font-size: .85rem; transition: background .2s, color .2s;
+  white-space: nowrap;
+}
+.nav-links a:hover { background: var(--slate-700); color: #fff; }
+.nav-links a.active {
+  background: var(--teal-600); color: #fff; font-weight: 600;
+}
+
+/* --- ヒーローセクション --- */
+.hero {
+  background: linear-gradient(135deg, var(--teal-800), var(--slate-900));
+  color: #fff; padding: 3rem 1.5rem 2.5rem; text-align: center;
+}
+.hero-badge {
+  display: inline-block; background: var(--teal-500); color: #fff;
+  font-size: .8rem; font-weight: 700; padding: .25em .8em;
+  border-radius: 20px; margin-bottom: 1rem; letter-spacing: .03em;
+}
+.hero h1 { font-size: 2.2rem; font-weight: 800; margin-bottom: .5rem; }
+.hero .subtitle {
+  font-size: 1.1rem; color: var(--teal-200); margin-bottom: .75rem;
+}
+.hero .reading-time {
+  font-size: .85rem; color: var(--slate-400);
+}
+
+/* --- コンテナ --- */
+.container {
+  max-width: 900px; margin: 0 auto;
+  padding: 2rem 1.5rem 3rem;
+}
+
+/* --- セクションカード --- */
+.section-card {
+  background: #fff; border-radius: var(--radius-lg);
+  box-shadow: var(--shadow); margin-bottom: 2rem;
+  border-left: 4px solid var(--teal-500);
+  overflow: hidden;
+}
+.section-card.accent-sky    { border-left-color: var(--sky-500); }
+.section-card.accent-amber  { border-left-color: var(--amber-500); }
+.section-card.accent-emerald{ border-left-color: var(--emerald-500); }
+.section-card.accent-violet { border-left-color: var(--violet-500); }
+.section-card.accent-indigo { border-left-color: var(--indigo-500); }
+.section-card.accent-rose   { border-left-color: var(--rose-500); }
+.section-header {
+  padding: 1.25rem 1.5rem .75rem;
+}
+.section-header h2 {
+  font-size: 1.35rem; font-weight: 700; color: var(--slate-900);
+}
+.section-body { padding: 0 1.5rem 1.5rem; }
+.section-body p { margin-bottom: .75rem; }
+
+/* --- ステップカード --- */
+.step { display: flex; gap: 1rem; margin-bottom: 1.75rem; }
+.step-num {
+  flex-shrink: 0; width: 2.4rem; height: 2.4rem;
+  background: var(--teal-600); color: #fff;
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 1.1rem; margin-top: .1rem;
+}
+.step-content { flex: 1; min-width: 0; }
+.step-content h3 {
+  font-size: 1.05rem; font-weight: 700; margin-bottom: .4rem;
+  color: var(--slate-800);
+}
+
+/* --- アラートボックス --- */
+.alert {
+  padding: .85rem 1rem; border-radius: var(--radius);
+  margin: .75rem 0; font-size: .9rem; line-height: 1.6;
+}
+.alert-info    { background: var(--sky-50); border: 1px solid var(--sky-200); color: var(--sky-700); }
+.alert-warn    { background: var(--amber-50); border: 1px solid var(--amber-200); color: var(--amber-700); }
+.alert-danger  { background: var(--rose-50); border: 1px solid var(--rose-200); color: var(--rose-700); }
+.alert-success { background: var(--emerald-50); border: 1px solid var(--emerald-200); color: var(--emerald-700); }
+.alert strong { font-weight: 700; }
+
+/* --- コードブロック --- */
+pre {
+  background: var(--slate-900); color: var(--slate-100);
+  padding: 1rem 1.25rem; border-radius: var(--radius);
+  overflow-x: auto; font-family: var(--font-mono);
+  font-size: .88rem; line-height: 1.6; margin: .75rem 0;
+  box-shadow: var(--shadow-sm);
+}
+code {
+  font-family: var(--font-mono); font-size: .88em;
+}
+p code, li code {
+  background: var(--slate-100); color: var(--teal-700);
+  padding: .15em .4em; border-radius: 4px;
+  font-size: .85em;
+}
+pre .comment { color: var(--slate-500); }
+pre .string  { color: var(--teal-400); }
+pre .key     { color: var(--sky-400); }
+pre .cmd     { color: var(--amber-200); }
+pre .flag    { color: var(--violet-400); }
+
+/* --- チェックリスト --- */
+.checklist { list-style: none; padding: 0; }
+.checklist li {
+  padding: .5rem .75rem; margin-bottom: .4rem;
+  background: var(--slate-50); border-radius: var(--radius);
+  display: flex; align-items: baseline; gap: .6rem;
+  font-size: .95rem;
+}
+.checklist li .check-box {
+  flex-shrink: 0; width: 1.2rem; height: 1.2rem;
+  border: 2px solid var(--slate-400); border-radius: 3px;
+  display: inline-block; position: relative; top: .15rem;
+}
+
+/* --- フロー図 --- */
+.flow-diagram {
+  display: flex; align-items: center; justify-content: center;
+  gap: .5rem; flex-wrap: wrap;
+  padding: 1.25rem; margin: 1rem 0;
+  background: var(--slate-800); border-radius: var(--radius);
+  color: #fff; font-size: .9rem;
+}
+.flow-box {
+  background: var(--teal-700); padding: .45rem .9rem;
+  border-radius: 6px; font-weight: 600; white-space: nowrap;
+}
+.flow-arrow { color: var(--teal-400); font-size: 1.2rem; font-weight: 700; }
+
+/* --- 試してみようプロンプト --- */
+.prompt-example {
+  background: var(--indigo-50); border: 1px solid var(--indigo-100);
+  border-radius: var(--radius); padding: .75rem 1rem;
+  margin: .5rem 0; font-size: .92rem; color: var(--indigo-700);
+}
+.prompt-example::before {
+  content: "💬"; margin-right: .5rem;
+}
+
+/* --- ページ下部ナビゲーション --- */
+.page-nav {
+  display: flex; justify-content: space-between; gap: 1rem;
+  margin-top: 2.5rem;
+}
+.page-nav a {
+  flex: 1; display: block; text-decoration: none;
+  background: #fff; border-radius: var(--radius-lg);
+  padding: 1.25rem 1.5rem; box-shadow: var(--shadow);
+  transition: box-shadow .2s, transform .2s;
+  border: 1px solid var(--slate-200);
+}
+.page-nav a:hover {
+  box-shadow: var(--shadow-lg); transform: translateY(-2px);
+}
+.page-nav .nav-label {
+  font-size: .75rem; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--slate-400); margin-bottom: .25rem;
+}
+.page-nav .nav-title {
+  font-size: 1.05rem; font-weight: 700; color: var(--teal-700);
+}
+.page-nav .prev { text-align: left; }
+.page-nav .next { text-align: right; margin-left: auto; }
+
+/* --- フッター --- */
+.site-footer {
+  text-align: center; padding: 2rem 1rem;
+  font-size: .8rem; color: var(--slate-400);
+  border-top: 1px solid var(--slate-200);
+  margin-top: 1rem;
+}
+
+/* --- レスポンシブ（640px） --- */
+@media (max-width: 640px) {
+  .site-nav {
+    flex-direction: column; gap: .5rem; padding: .5rem 1rem;
+  }
+  .nav-links { justify-content: center; }
+  .nav-links a { font-size: .75rem; padding: .25rem .5rem; }
+  .hero { padding: 2rem 1rem 1.75rem; }
+  .hero h1 { font-size: 1.6rem; }
+  .container { padding: 1.25rem 1rem 2rem; }
+  .section-header { padding: 1rem 1.15rem .5rem; }
+  .section-body { padding: 0 1.15rem 1.15rem; }
+  .step { flex-direction: column; gap: .5rem; }
+  .flow-diagram { font-size: .8rem; gap: .35rem; }
+  .flow-box { padding: .35rem .65rem; }
+  .page-nav { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+
+<!-- ========== ナビゲーション ========== -->
+<nav class="site-nav">
+  <div class="nav-brand">Playwright MCP ガイド <span class="nav-ver">v0.0.68</span></div>
+  <div class="nav-links">
+    <a href="PlaywrightMCP_QuickStart.html" class="active">1. スタート</a>
+    <a href="PlaywrightMCP_Basics.html">2. 基本</a>
+    <a href="PlaywrightMCP_Tools.html">3. ツール</a>
+    <a href="PlaywrightMCP_Advanced.html">4. 応用</a>
+    <a href="PlaywrightMCP_Examples.html">5. 実践</a>
+  </div>
+</nav>
+
+<!-- ========== ヒーロー ========== -->
+<section class="hero">
+  <div class="hero-badge">5分で完了</div>
+  <h1>クイックスタート</h1>
+  <p class="subtitle">Claude Code からブラウザを操作できるようにしよう</p>
+  <p class="reading-time">読了目安: 約5分</p>
+</section>
+
+<!-- ========== メインコンテンツ ========== -->
+<div class="container">
+
+  <!-- セクション1: Playwright MCP とは？ -->
+  <article class="section-card">
+    <div class="section-header">
+      <h2>1. Playwright MCP とは？（30秒で理解）</h2>
+    </div>
+    <div class="section-body">
+      <p>
+        Claude Code にブラウザを操作する能力を追加するツールです。Webページを開いたり、ボタンを押したり、画面の状態を確認したり &mdash; すべて自然な日本語で指示するだけ。
+      </p>
+      <p>
+        プログラミングの知識は不要です。いつも通り Claude Code に話しかけるだけで、裏側で Playwright MCP がブラウザを動かしてくれます。
+      </p>
+
+      <div class="flow-diagram">
+        <span class="flow-box">あなたの指示</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-box">Claude Code</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-box">Playwright MCP</span>
+        <span class="flow-arrow">&rarr;</span>
+        <span class="flow-box">ブラウザ操作</span>
+      </div>
+
+      <div class="alert alert-info">
+        <strong>MCP とは？</strong> Model Context Protocol の略で、Claude Code に外部ツールを接続する仕組みです。Playwright MCP はその一つで、ブラウザ操作に特化しています。
+      </div>
+    </div>
+  </article>
+
+  <!-- セクション2: 必要なもの -->
+  <article class="section-card accent-sky">
+    <div class="section-header">
+      <h2>2. 必要なもの（チェックリスト）</h2>
+    </div>
+    <div class="section-body">
+      <ul class="checklist">
+        <li>
+          <span class="check-box"></span>
+          <span><strong>Node.js v18以上</strong> &mdash; ターミナルで <code>node --version</code> を実行して確認</span>
+        </li>
+        <li>
+          <span class="check-box"></span>
+          <span><strong>Claude Code CLI</strong> &mdash; ターミナルで <code>claude --version</code> を実行して確認</span>
+        </li>
+        <li>
+          <span class="check-box"></span>
+          <span><strong>インターネット接続</strong>（初回のみ &mdash; ブラウザのダウンロードに必要）</span>
+        </li>
+      </ul>
+      <div class="alert alert-info">
+        <strong>ブラウザは自動ダウンロード:</strong> Playwright MCP が初回起動時に Chromium を自動でダウンロードします（約200MB）。手動インストールは不要です。
+      </div>
+    </div>
+  </article>
+
+  <!-- セクション3: セットアップ -->
+  <article class="section-card accent-emerald">
+    <div class="section-header">
+      <h2>3. セットアップ（コピペで完了）</h2>
+    </div>
+    <div class="section-body">
+
+      <!-- Step 1 -->
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <h3>プロジェクトルートに <code>.mcp.json</code> を作成</h3>
+          <p>以下の内容をそのままコピペして、プロジェクトのルートフォルダに <code>.mcp.json</code> というファイル名で保存してください。</p>
+<pre>{
+  <span class="key">"mcpServers"</span>: {
+    <span class="key">"playwright"</span>: {
+      <span class="key">"type"</span>: <span class="string">"stdio"</span>,
+      <span class="key">"command"</span>: <span class="string">"npx"</span>,
+      <span class="key">"args"</span>: [<span class="string">"-y"</span>, <span class="string">"@playwright/mcp@0.0.68"</span>]
+    }
+  }
+}</pre>
+          <div class="alert alert-danger">
+            <strong>うまくいかない場合:</strong> ファイル名が <code>.mcp.json</code>（先頭にドット）になっているか確認してください。Windows のエクスプローラーでは拡張子が隠れている場合があります。ターミナルで <code>ls -la .mcp.json</code> を実行して存在を確認しましょう。
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2 -->
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <h3>Claude Code を再起動</h3>
+          <p>現在開いている Claude Code を一度終了し、同じプロジェクトフォルダで再度起動してください。</p>
+<pre><span class="comment"># Claude Code を終了（Ctrl+C または /exit）</span>
+<span class="comment"># 同じフォルダで再起動</span>
+<span class="cmd">claude</span></pre>
+          <div class="alert alert-danger">
+            <strong>うまくいかない場合:</strong> <code>.mcp.json</code> があるフォルダで Claude Code を起動しているか確認してください。サブフォルダから起動すると設定が読み込まれません。
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3 -->
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <h3><code>/mcp</code> で接続確認</h3>
+          <p>Claude Code 内で <code>/mcp</code> と入力して、Playwright MCP が接続されているか確認します。</p>
+<pre><span class="comment"># Claude Code 内で入力</span>
+<span class="cmd">/mcp</span>
+
+<span class="comment"># 期待される出力:</span>
+<span class="string">playwright</span>  stdio  <span class="string">connected</span>  26 tools</pre>
+          <p>ステータスが <code>connected</code> で、ツール数が表示されていれば成功です。</p>
+          <div class="alert alert-danger">
+            <strong>うまくいかない場合:</strong> <code>disconnected</code> や <code>error</code> と表示される場合は、Node.js のバージョンを確認してください（<code>node --version</code> で v18以上が必要）。また、ネットワーク環境によっては <code>npx</code> がパッケージをダウンロードできないことがあります。プロキシ設定を確認してください。
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </article>
+
+  <!-- セクション4: はじめての操作 -->
+  <article class="section-card accent-violet">
+    <div class="section-header">
+      <h2>4. はじめての操作（体験してみよう）</h2>
+    </div>
+    <div class="section-body">
+      <p>セットアップが完了したら、実際にブラウザを操作してみましょう。</p>
+
+      <div class="alert alert-info">
+        <strong>ローカルサーバーの起動（任意）:</strong> テスト用にローカルサーバーを起動すると便利です。プロジェクトルートで以下を実行してください。
+      </div>
+<pre><span class="cmd">npx</span> <span class="flag">serve -s . -l 3000</span>
+<span class="comment"># → http://localhost:3000 でアクセスできるようになります</span></pre>
+
+      <p>Claude Code に以下のように話しかけてみてください。</p>
+
+      <div class="prompt-example">
+        Playwright MCP で http://localhost:3000 を開いて、画面の状態を確認して
+      </div>
+      <div class="prompt-example">
+        未対応タブの案件を1つ選択して
+      </div>
+      <div class="prompt-example">
+        コンソールエラーがないか確認して
+      </div>
+
+      <div class="alert alert-success">
+        <strong>これらが動けば、セットアップ完了です！</strong> Claude Code が自動でブラウザを開き、操作し、結果を報告してくれるはずです。おめでとうございます &mdash; 次のページで基本の使い方を学びましょう。
+      </div>
+    </div>
+  </article>
+
+  <!-- ========== ページ下部ナビゲーション ========== -->
+  <div class="page-nav">
+    <a href="PlaywrightMCP_Basics.html" class="next">
+      <div class="nav-label">次のページ &rarr;</div>
+      <div class="nav-title">基本の使い方</div>
+    </a>
+  </div>
+
+</div>
+
+<!-- ========== フッター ========== -->
+<footer class="site-footer">
+  タダサポ管理システム 開発ドキュメント &mdash; Playwright MCP ガイド v0.0.68 &mdash; 2026/02
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>実践例 & トラブルシューティング — Playwright MCP ガイド</title>
+<style>
+/* ============================================================
+   Playwright MCP ガイド — 共通CSS v0.0.68
+   全5ページで共有するデザイントークンとコンポーネント
+   ============================================================ */
+
+/* --- カスタムプロパティ --- */
+:root {
+  /* Teal */
+  --teal-50: #f0fdfa; --teal-100: #ccfbf1; --teal-200: #99f6e4;
+  --teal-400: #2dd4bf; --teal-500: #14b8a6; --teal-600: #0d9488;
+  --teal-700: #0f766e; --teal-800: #115e59; --teal-900: #134e4a;
+  /* Sky */
+  --sky-50: #f0f9ff; --sky-100: #e0f2fe; --sky-200: #bae6fd;
+  --sky-500: #0ea5e9; --sky-600: #0284c7; --sky-700: #0369a1;
+  /* Slate */
+  --slate-50: #f8fafc; --slate-100: #f1f5f9; --slate-200: #e2e8f0;
+  --slate-300: #cbd5e1; --slate-400: #94a3b8; --slate-500: #64748b;
+  --slate-600: #475569; --slate-700: #334155; --slate-800: #1e293b;
+  --slate-900: #0f172a; --slate-950: #020617;
+  /* Rose */
+  --rose-50: #fff1f2; --rose-100: #ffe4e6; --rose-200: #fecdd3;
+  --rose-500: #f43f5e; --rose-600: #e11d48; --rose-700: #be123c;
+  /* Amber */
+  --amber-50: #fffbeb; --amber-100: #fef3c7; --amber-200: #fde68a;
+  --amber-500: #f59e0b; --amber-600: #d97706; --amber-700: #b45309;
+  /* Emerald */
+  --emerald-50: #ecfdf5; --emerald-100: #d1fae5; --emerald-200: #a7f3d0;
+  --emerald-500: #10b981; --emerald-600: #059669; --emerald-700: #047857;
+  /* Violet */
+  --violet-50: #f5f3ff; --violet-100: #ede9fe; --violet-500: #8b5cf6;
+  --violet-600: #7c3aed; --violet-700: #6d28d9;
+  /* Indigo */
+  --indigo-50: #eef2ff; --indigo-100: #e0e7ff; --indigo-500: #6366f1;
+  --indigo-600: #4f46e5; --indigo-700: #4338ca;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans JP", sans-serif;
+  --font-mono: "Fira Code", "Source Code Pro", Consolas, monospace;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.05);
+  --shadow: 0 1px 3px rgba(0,0,0,.1), 0 1px 2px rgba(0,0,0,.06);
+  --shadow-md: 0 4px 6px rgba(0,0,0,.1), 0 2px 4px rgba(0,0,0,.06);
+  --shadow-lg: 0 10px 15px rgba(0,0,0,.1), 0 4px 6px rgba(0,0,0,.05);
+  --radius: 8px;
+  --radius-lg: 12px;
+}
+
+/* --- リセット & ベース --- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; scroll-padding-top: 70px; }
+body {
+  font-family: var(--font-sans);
+  color: var(--slate-800);
+  background: var(--slate-50);
+  line-height: 1.7;
+  font-size: 16px;
+}
+
+/* --- サイトナビゲーション（sticky） --- */
+.site-nav {
+  position: sticky; top: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--slate-900); color: #fff;
+  padding: .65rem 1.5rem;
+  box-shadow: var(--shadow-md);
+}
+.nav-brand {
+  font-weight: 700; font-size: 1rem; white-space: nowrap;
+}
+.nav-ver {
+  font-size: .7rem; background: var(--teal-700); color: var(--teal-100);
+  padding: .1em .45em; border-radius: 4px; margin-left: .4rem;
+  vertical-align: middle;
+}
+.nav-links { display: flex; gap: .25rem; flex-wrap: wrap; }
+.nav-links a {
+  color: var(--slate-300); text-decoration: none;
+  padding: .3rem .7rem; border-radius: 6px;
+  font-size: .85rem; transition: background .2s, color .2s;
+  white-space: nowrap;
+}
+.nav-links a:hover { background: var(--slate-700); color: #fff; }
+.nav-links a.active {
+  background: var(--teal-600); color: #fff; font-weight: 600;
+}
+
+/* --- ヒーローセクション --- */
+.hero {
+  background: linear-gradient(135deg, var(--slate-900) 0%, #064e3b 100%);
+  color: #fff; padding: 3rem 1.5rem 2.5rem; text-align: center;
+}
+.hero-badge {
+  display: inline-block; background: var(--emerald-500); color: #fff;
+  font-size: .8rem; font-weight: 700; padding: .25em .8em;
+  border-radius: 20px; margin-bottom: 1rem; letter-spacing: .03em;
+}
+.hero h1 { font-size: 2.2rem; font-weight: 800; margin-bottom: .5rem; }
+.hero .subtitle {
+  font-size: 1.1rem; color: var(--emerald-200); margin-bottom: .75rem;
+}
+.hero .reading-time {
+  font-size: .85rem; color: var(--slate-400);
+}
+
+/* --- コンテナ --- */
+.container {
+  max-width: 900px; margin: 0 auto;
+  padding: 2rem 1.5rem 3rem;
+}
+
+/* --- セクションカード --- */
+.section-card {
+  background: #fff; border-radius: var(--radius-lg);
+  box-shadow: var(--shadow); margin-bottom: 2rem;
+  border-left: 4px solid var(--teal-500);
+  overflow: hidden;
+}
+.section-card.accent-sky    { border-left-color: var(--sky-500); }
+.section-card.accent-amber  { border-left-color: var(--amber-500); }
+.section-card.accent-emerald{ border-left-color: var(--emerald-500); }
+.section-card.accent-violet { border-left-color: var(--violet-500); }
+.section-card.accent-indigo { border-left-color: var(--indigo-500); }
+.section-card.accent-rose   { border-left-color: var(--rose-500); }
+.section-header {
+  padding: 1.25rem 1.5rem .75rem;
+}
+.section-header h2 {
+  font-size: 1.35rem; font-weight: 700; color: var(--slate-900);
+}
+.section-body { padding: 0 1.5rem 1.5rem; }
+.section-body p { margin-bottom: .75rem; }
+
+/* --- ステップカード --- */
+.step { display: flex; gap: 1rem; margin-bottom: 1.75rem; }
+.step-num {
+  flex-shrink: 0; width: 2.4rem; height: 2.4rem;
+  background: var(--teal-600); color: #fff;
+  border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 1.1rem; margin-top: .1rem;
+}
+.step-content { flex: 1; min-width: 0; }
+.step-content h3 {
+  font-size: 1.05rem; font-weight: 700; margin-bottom: .4rem;
+  color: var(--slate-800);
+}
+
+/* --- アラートボックス --- */
+.alert {
+  padding: .85rem 1rem; border-radius: var(--radius);
+  margin: .75rem 0; font-size: .9rem; line-height: 1.6;
+}
+.alert-info    { background: var(--sky-50); border: 1px solid var(--sky-200); color: var(--sky-700); }
+.alert-warn    { background: var(--amber-50); border: 1px solid var(--amber-200); color: var(--amber-700); }
+.alert-danger  { background: var(--rose-50); border: 1px solid var(--rose-200); color: var(--rose-700); }
+.alert-success { background: var(--emerald-50); border: 1px solid var(--emerald-200); color: var(--emerald-700); }
+.alert strong { font-weight: 700; }
+
+/* --- コードブロック --- */
+pre {
+  background: var(--slate-900); color: var(--slate-100);
+  padding: 1rem 1.25rem; border-radius: var(--radius);
+  overflow-x: auto; font-family: var(--font-mono);
+  font-size: .88rem; line-height: 1.6; margin: .75rem 0;
+  box-shadow: var(--shadow-sm);
+}
+code {
+  font-family: var(--font-mono); font-size: .88em;
+}
+p code, li code {
+  background: var(--slate-100); color: var(--teal-700);
+  padding: .15em .4em; border-radius: 4px;
+  font-size: .85em;
+}
+pre .comment { color: var(--slate-500); }
+pre .string  { color: var(--teal-400); }
+pre .key     { color: var(--sky-400); }
+pre .cmd     { color: var(--amber-200); }
+pre .flag    { color: var(--violet-400); }
+
+/* --- チェックリスト --- */
+.checklist { list-style: none; padding: 0; }
+.checklist li {
+  padding: .5rem .75rem; margin-bottom: .4rem;
+  background: var(--slate-50); border-radius: var(--radius);
+  display: flex; align-items: baseline; gap: .6rem;
+  font-size: .95rem;
+}
+.checklist li .check-box {
+  flex-shrink: 0; width: 1.2rem; height: 1.2rem;
+  border: 2px solid var(--slate-400); border-radius: 3px;
+  display: inline-block; position: relative; top: .15rem;
+}
+
+/* --- フロー図 --- */
+.flow-diagram {
+  display: flex; align-items: center; justify-content: center;
+  gap: .5rem; flex-wrap: wrap;
+  padding: 1.25rem; margin: 1rem 0;
+  background: var(--slate-800); border-radius: var(--radius);
+  color: #fff; font-size: .9rem;
+}
+.flow-box {
+  background: var(--teal-700); padding: .45rem .9rem;
+  border-radius: 6px; font-weight: 600; white-space: nowrap;
+}
+.flow-arrow { color: var(--teal-400); font-size: 1.2rem; font-weight: 700; }
+
+/* --- 試してみようプロンプト --- */
+.prompt-example {
+  background: var(--indigo-50); border: 1px solid var(--indigo-100);
+  border-radius: var(--radius); padding: .75rem 1rem;
+  margin: .5rem 0; font-size: .92rem; color: var(--indigo-700);
+}
+.prompt-example::before {
+  content: "\U0001F4AC"; margin-right: .5rem;
+}
+
+/* --- チートシートカード --- */
+.cheatsheet-card {
+  background: var(--emerald-50);
+  border: 2px solid var(--emerald-200);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+.cheatsheet-card h2 {
+  font-size: 1.35rem; font-weight: 700; color: var(--emerald-700);
+  margin-bottom: 1rem;
+}
+
+/* --- テーブル --- */
+.data-table {
+  width: 100%; border-collapse: collapse; font-size: .9rem;
+}
+.data-table th {
+  background: var(--emerald-600); color: #fff;
+  padding: .6rem .75rem; text-align: left; font-weight: 600;
+}
+.data-table th:first-child { border-radius: var(--radius) 0 0 0; }
+.data-table th:last-child  { border-radius: 0 var(--radius) 0 0; }
+.data-table td {
+  padding: .6rem .75rem; border-bottom: 1px solid var(--slate-200);
+}
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tr:nth-child(even) td { background: var(--emerald-50); }
+.data-table td:first-child {
+  text-align: center; font-weight: 700; color: var(--emerald-600);
+  width: 2.5rem;
+}
+
+/* --- シナリオカード --- */
+.scenario-card {
+  background: #fff; border-radius: var(--radius-lg);
+  box-shadow: var(--shadow); margin-bottom: 1.5rem;
+  border-left: 4px solid var(--emerald-500);
+  overflow: hidden;
+}
+.scenario-header {
+  padding: 1.25rem 1.5rem .5rem;
+}
+.scenario-header h3 {
+  font-size: 1.1rem; font-weight: 700; color: var(--slate-900);
+}
+.scenario-body { padding: 0 1.5rem 1.5rem; }
+.scenario-body p { margin-bottom: .75rem; }
+.expect-box {
+  background: var(--emerald-50); border: 1px solid var(--emerald-200);
+  border-radius: var(--radius); padding: .7rem 1rem;
+  margin-bottom: .75rem; font-size: .9rem; color: var(--emerald-700);
+  line-height: 1.6;
+}
+.expect-box::before {
+  content: "期待結果: "; font-weight: 700;
+}
+
+/* --- Q&Aカード --- */
+.qa-card {
+  background: #fff; border-radius: var(--radius-lg);
+  box-shadow: var(--shadow); margin-bottom: 1.25rem;
+  border-left: 4px solid var(--rose-500);
+  overflow: hidden;
+}
+.qa-header {
+  padding: 1rem 1.5rem .5rem;
+}
+.qa-header h3 {
+  font-size: 1rem; font-weight: 700; color: var(--rose-700);
+}
+.qa-body {
+  padding: 0 1.5rem 1.25rem;
+}
+.qa-body ol, .qa-body ul {
+  padding-left: 1.25rem; margin: .5rem 0;
+}
+.qa-body li {
+  margin-bottom: .35rem; font-size: .9rem; line-height: 1.6;
+}
+
+/* --- Do / Don't 比較カード --- */
+.compare-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+.compare-card {
+  border-radius: var(--radius); padding: 1rem 1.15rem;
+  font-size: .9rem; line-height: 1.6;
+}
+.compare-card.do {
+  background: var(--emerald-50); border: 1px solid var(--emerald-200);
+}
+.compare-card.dont {
+  background: var(--rose-50); border: 1px solid var(--rose-200);
+}
+.compare-label {
+  font-weight: 700; font-size: .8rem; text-transform: uppercase;
+  letter-spacing: .05em; margin-bottom: .35rem;
+}
+.compare-card.do .compare-label { color: var(--emerald-600); }
+.compare-card.dont .compare-label { color: var(--rose-600); }
+
+/* --- ページ下部ナビゲーション --- */
+.page-nav {
+  display: flex; justify-content: space-between; gap: 1rem;
+  margin-top: 2.5rem;
+}
+.page-nav a {
+  flex: 1; display: block; text-decoration: none;
+  background: #fff; border-radius: var(--radius-lg);
+  padding: 1.25rem 1.5rem; box-shadow: var(--shadow);
+  transition: box-shadow .2s, transform .2s;
+  border: 1px solid var(--slate-200);
+}
+.page-nav a:hover {
+  box-shadow: var(--shadow-lg); transform: translateY(-2px);
+}
+.page-nav .nav-label {
+  font-size: .75rem; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--slate-400); margin-bottom: .25rem;
+}
+.page-nav .nav-title {
+  font-size: 1.05rem; font-weight: 700; color: var(--teal-700);
+}
+.page-nav .prev { text-align: left; }
+.page-nav .next { text-align: right; margin-left: auto; }
+
+/* --- フッター --- */
+.site-footer {
+  text-align: center; padding: 2rem 1rem;
+  font-size: .8rem; color: var(--slate-400);
+  border-top: 1px solid var(--slate-200);
+  margin-top: 1rem;
+}
+
+/* --- レスポンシブ（640px） --- */
+@media (max-width: 640px) {
+  .site-nav {
+    flex-direction: column; gap: .5rem; padding: .5rem 1rem;
+  }
+  .nav-links { justify-content: center; }
+  .nav-links a { font-size: .75rem; padding: .25rem .5rem; }
+  .hero { padding: 2rem 1rem 1.75rem; }
+  .hero h1 { font-size: 1.6rem; }
+  .container { padding: 1.25rem 1rem 2rem; }
+  .section-header { padding: 1rem 1.15rem .5rem; }
+  .section-body { padding: 0 1.15rem 1.15rem; }
+  .step { flex-direction: column; gap: .5rem; }
+  .flow-diagram { font-size: .8rem; gap: .35rem; }
+  .flow-box { padding: .35rem .65rem; }
+  .page-nav { flex-direction: column; }
+  .compare-grid { grid-template-columns: 1fr; }
+  .data-table { font-size: .8rem; }
+  .data-table th, .data-table td { padding: .45rem .5rem; }
+}
+</style>
+</head>
+<body>
+
+<!-- ========== ナビゲーション ========== -->
+<nav class="site-nav">
+  <div class="nav-brand">Playwright MCP ガイド <span class="nav-ver">v0.0.68</span></div>
+  <div class="nav-links">
+    <a href="PlaywrightMCP_QuickStart.html">1. スタート</a>
+    <a href="PlaywrightMCP_Basics.html">2. 基本</a>
+    <a href="PlaywrightMCP_Tools.html">3. ツール</a>
+    <a href="PlaywrightMCP_Advanced.html">4. 応用</a>
+    <a href="PlaywrightMCP_Examples.html" class="active">5. 実践</a>
+  </div>
+</nav>
+
+<!-- ========== ヒーロー ========== -->
+<section class="hero">
+  <div class="hero-badge">コピペで使える</div>
+  <h1>実践例 &amp; トラブルシューティング</h1>
+  <p class="subtitle">タダサポ管理システムでの具体的なテストシナリオ集</p>
+  <p class="reading-time">読了目安: 約10分</p>
+</section>
+
+<!-- ========== メインコンテンツ ========== -->
+<div class="container">
+
+  <!-- ==============================
+       1. チートシート
+       ============================== -->
+  <div class="cheatsheet-card">
+    <h2>1. チートシート（よく使うプロンプト5選）</h2>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>やりたいこと</th>
+          <th>プロンプト</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td>アプリを開いて確認</td>
+          <td>「Playwright MCP で http://localhost:3000 を開いて、画面の状態を確認して」</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>全機能テスト</td>
+          <td>「テスト動作して、エラーが出ないか確認してください」</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>モバイル表示確認</td>
+          <td>「画面を375x812にしてモバイル表示を確認して」</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td>エラーチェック</td>
+          <td>「コンソールエラーがないか確認して」</td>
+        </tr>
+        <tr>
+          <td>5</td>
+          <td>ブラウザ終了</td>
+          <td>「ブラウザを閉じて」</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ==============================
+       2. 事前準備
+       ============================== -->
+  <article class="section-card accent-emerald">
+    <div class="section-header">
+      <h2>2. 事前準備</h2>
+    </div>
+    <div class="section-body">
+      <div class="alert alert-info">
+        <strong>テスト前にローカルサーバーを起動してください</strong>
+      </div>
+<pre><span class="cmd">npx</span> <span class="flag">serve</span> -s . -l 3000</pre>
+      <p>&rarr; <a href="http://localhost:3000" style="color: var(--emerald-600); font-weight: 600;">http://localhost:3000</a> でアプリが表示されます。</p>
+    </div>
+  </article>
+
+  <!-- ==============================
+       3. テストシナリオ
+       ============================== -->
+  <article class="section-card accent-emerald">
+    <div class="section-header">
+      <h2>3. テストシナリオ</h2>
+    </div>
+    <div class="section-body">
+      <p>以下の5つのシナリオをコピペして Claude Code に貼り付けるだけでテストできます。</p>
+    </div>
+  </article>
+
+  <!-- シナリオ A -->
+  <div class="scenario-card">
+    <div class="scenario-header">
+      <h3>シナリオ A: 回数超過の動作確認</h3>
+    </div>
+    <div class="scenario-body">
+      <div class="expect-box">年間利用10回に達した事業所では、担当するボタンが非表示になり、代わりに回数超過ボタンが表示されます</div>
+<pre>以下の手順でテストして：
+
+1. Playwright MCP で http://localhost:3000 を開いて
+2. 未対応タブで「リミット介護サービス」を選択
+3. 今年度利用数が 10/10 で赤く表示されているか確認
+4. 下部に「回数超過」ボタンが表示されているか確認
+5. 「担当する」ボタンが非表示であることを確認</pre>
+    </div>
+  </div>
+
+  <!-- シナリオ B -->
+  <div class="scenario-card">
+    <div class="scenario-header">
+      <h3>シナリオ B: 過去記録の表示確認</h3>
+    </div>
+    <div class="scenario-body">
+      <div class="expect-box">2回目以降の対応中案件では、過去の対応記録セクションが表示されます</div>
+<pre>以下をテストして：
+
+1. 対応中タブで案件を1つ選択
+2. 「過去の対応記録」セクションが存在するか確認
+3. 過去の記録を展開して内容が表示されるか確認</pre>
+    </div>
+  </div>
+
+  <!-- シナリオ C -->
+  <div class="scenario-card">
+    <div class="scenario-header">
+      <h3>シナリオ C: 検索機能の確認</h3>
+    </div>
+    <div class="scenario-body">
+      <div class="expect-box">キーワード検索と期間検索で案件を絞り込めます</div>
+<pre>検索機能をテストして：
+
+1. 検索アイコンをクリックして検索パネルを開く
+2. キーワード欄に「訪問」と入力
+3. フィルタされた結果が正しいか確認
+4. クリアボタンで検索をリセット</pre>
+    </div>
+  </div>
+
+  <!-- シナリオ D -->
+  <div class="scenario-card">
+    <div class="scenario-header">
+      <h3>シナリオ D: レスポンシブ確認</h3>
+    </div>
+    <div class="scenario-body">
+      <div class="expect-box">モバイル幅では案件一覧が全幅表示になり、案件選択で詳細画面に切り替わります</div>
+<pre>モバイル表示を確認して：
+
+1. 画面を 375x812 にリサイズ
+2. 案件一覧が全幅で表示されるか確認
+3. 案件をクリックして詳細画面に遷移するか確認
+4. 「一覧に戻る」ボタンが表示されるか確認</pre>
+    </div>
+  </div>
+
+  <!-- シナリオ E -->
+  <div class="scenario-card">
+    <div class="scenario-header">
+      <h3>シナリオ E: 完了案件の再開制限確認</h3>
+    </div>
+    <div class="scenario-body">
+      <div class="expect-box">3/3回の案件では再開ボタンが非表示。年間10回上限の事業所でも再開不可</div>
+<pre>再開制限をテストして：
+
+1. 完了タブで「いとう在宅ケア」（3/3回）を選択
+2. 再開ボタンが非表示であることを確認
+3. 完了タブで別の案件（1/3回）を選択
+4. 再開ボタンが表示されていることを確認
+5. コンソールエラーがないことも確認して</pre>
+    </div>
+  </div>
+
+  <!-- ==============================
+       4. トラブルシューティング Q&A
+       ============================== -->
+  <article class="section-card accent-rose">
+    <div class="section-header">
+      <h2>4. トラブルシューティング Q&amp;A</h2>
+    </div>
+    <div class="section-body">
+      <p>よくある問題とその解決策をまとめました。</p>
+    </div>
+  </article>
+
+  <!-- Q1 -->
+  <div class="qa-card">
+    <div class="qa-header">
+      <h3>Q: /mcp で playwright が表示されない</h3>
+    </div>
+    <div class="qa-body">
+      <ol>
+        <li>プロジェクトルート直下に <code>.mcp.json</code> が存在するか確認</li>
+        <li><code>.mcp.json</code> が正しいJSON形式か確認（末尾カンマに注意）</li>
+        <li>Claude Code を完全に終了して再起動</li>
+        <li>ターミナルで <code>npx -y @playwright/mcp@0.0.68 --help</code> が動くか確認</li>
+        <li>ファイアウォールやプロキシがnpxをブロックしていないか確認</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- Q2 -->
+  <div class="qa-card">
+    <div class="qa-header">
+      <h3>Q: ブラウザが起動しない</h3>
+    </div>
+    <div class="qa-body">
+      <ol>
+        <li>ファイアウォールが Chromium をブロックしていないか確認</li>
+        <li><code>npx playwright install chromium</code> で手動インストール</li>
+        <li><code>--headless</code> を追加してヘッドレスモードで試す</li>
+        <li><code>--isolated</code> で一時プロファイルで試す</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- Q3 -->
+  <div class="qa-card">
+    <div class="qa-header">
+      <h3>Q: タイムアウトエラーが出る</h3>
+    </div>
+    <div class="qa-body">
+      <ul>
+        <li>ローカルサーバーが起動しているか確認: <code>npx serve -s . -l 3000</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Q4 -->
+  <div class="qa-card">
+    <div class="qa-header">
+      <h3>Q: 操作対象の要素が見つからない</h3>
+    </div>
+    <div class="qa-body">
+      <ul>
+        <li><code>browser_snapshot</code> で現在のアクセシビリティツリーを取得してから操作を指示する。「まず画面の状態を確認して」と伝える</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Q5 -->
+  <div class="qa-card">
+    <div class="qa-header">
+      <h3>Q: コンテキスト（トークン）を消費しすぎる</h3>
+    </div>
+    <div class="qa-body">
+      <ul>
+        <li>スクリーンショットは最終確認時のみに限定</li>
+        <li><code>browser_snapshot</code> を主に使用</li>
+        <li>不要なタブは閉じる</li>
+        <li>テスト終了後は <code>browser_close</code> で閉じる</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Q6 -->
+  <div class="qa-card">
+    <div class="qa-header">
+      <h3>Q: セッションが残ってしまう</h3>
+    </div>
+    <div class="qa-body">
+<pre><span class="cmd">npx</span> <span class="flag">@playwright/mcp@0.0.68</span> close-all</pre>
+    </div>
+  </div>
+
+  <!-- ==============================
+       5. よくあるミス集
+       ============================== -->
+  <article class="section-card accent-amber">
+    <div class="section-header">
+      <h2>5. よくあるミス集</h2>
+    </div>
+    <div class="section-body">
+
+      <!-- ミス 1 -->
+      <div class="compare-grid">
+        <div class="compare-card do">
+          <div class="compare-label">Do</div>
+          ローカルサーバーを起動してからテスト
+        </div>
+        <div class="compare-card dont">
+          <div class="compare-label">Don't</div>
+          サーバー起動を忘れてタイムアウト
+        </div>
+      </div>
+
+      <!-- ミス 2 -->
+      <div class="compare-grid">
+        <div class="compare-card do">
+          <div class="compare-label">Do</div>
+          1つずつ順番にテスト
+        </div>
+        <div class="compare-card dont">
+          <div class="compare-label">Don't</div>
+          全テストを一度に指示して混乱
+        </div>
+      </div>
+
+      <!-- ミス 3 -->
+      <div class="compare-grid">
+        <div class="compare-card do">
+          <div class="compare-label">Do</div>
+          操作前にスナップショットで状態確認
+        </div>
+        <div class="compare-card dont">
+          <div class="compare-label">Don't</div>
+          前回のスナップショットのref番号で操作（ページが変わるとref番号も変わる）
+        </div>
+      </div>
+
+    </div>
+  </article>
+
+  <!-- ==============================
+       ページ下部ナビゲーション
+       ============================== -->
+  <div class="page-nav">
+    <a href="PlaywrightMCP_Advanced.html" class="prev">
+      <div class="nav-label">&larr; 前のページ</div>
+      <div class="nav-title">応用 &amp; CLIオプション</div>
+    </a>
+  </div>
+
+</div><!-- /.container -->
+
+<!-- ========== フッター ========== -->
+<footer class="site-footer">
+  タダサポ管理システム 開発ドキュメント &mdash; Playwright MCP ガイド v0.0.68 &mdash; 2026/02
+</footer>
+
+</body>
+</html>

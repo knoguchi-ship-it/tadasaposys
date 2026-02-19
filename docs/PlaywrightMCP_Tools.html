@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ツールリファレンス — Playwright MCP ガイド</title>
+<style>
+  :root {
+    --teal: #0d9488;
+    --teal-light: #ccfbf1;
+    --teal-dark: #134e4a;
+    --slate-50: #f8fafc;
+    --slate-100: #f1f5f9;
+    --slate-200: #e2e8f0;
+    --slate-300: #cbd5e1;
+    --slate-500: #64748b;
+    --slate-700: #334155;
+    --slate-800: #1e293b;
+    --slate-900: #0f172a;
+    --rose-50: #fff1f2;
+    --rose-100: #ffe4e6;
+    --rose-500: #f43f5e;
+    --rose-700: #be123c;
+    --amber-50: #fffbeb;
+    --amber-100: #fef3c7;
+    --amber-600: #d97706;
+    --amber-700: #b45309;
+    --sky-50: #f0f9ff;
+    --sky-100: #e0f2fe;
+    --sky-600: #0284c7;
+    --sky-700: #0369a1;
+    --emerald-50: #ecfdf5;
+    --emerald-100: #d1fae5;
+    --emerald-600: #059669;
+    --emerald-700: #047857;
+    --violet-50: #f5f3ff;
+    --violet-100: #ede9fe;
+    --violet-600: #7c3aed;
+    --violet-700: #6d28d9;
+    --indigo-50: #eef2ff;
+    --indigo-100: #e0e7ff;
+    --indigo-600: #4f46e5;
+    --indigo-700: #4338ca;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', 'Noto Sans JP', -apple-system, sans-serif;
+    background: var(--slate-50);
+    color: var(--slate-800);
+    line-height: 1.7;
+  }
+
+  /* Navigation */
+  .site-nav {
+    background: var(--slate-900);
+    padding: 0.75rem 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    border-bottom: 2px solid var(--violet-600);
+  }
+  .nav-brand {
+    color: white;
+    font-weight: 900;
+    font-size: 0.95rem;
+    letter-spacing: -0.01em;
+  }
+  .nav-ver {
+    display: inline-block;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.2);
+    padding: 0.1rem 0.5rem;
+    border-radius: 2rem;
+    font-size: 0.65rem;
+    font-weight: 700;
+    margin-left: 0.4rem;
+    vertical-align: middle;
+  }
+  .nav-links {
+    display: flex;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+  }
+  .nav-links a {
+    color: var(--slate-300);
+    text-decoration: none;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.35rem 0.75rem;
+    border-radius: 0.5rem;
+    transition: all 0.2s;
+  }
+  .nav-links a:hover {
+    color: white;
+    background: rgba(255,255,255,0.08);
+  }
+  .nav-links a.active {
+    color: white;
+    background: var(--violet-600);
+  }
+
+  /* Hero */
+  .hero {
+    background: linear-gradient(135deg, var(--slate-900) 0%, #4c1d95 100%);
+    color: white;
+    padding: 3rem 2rem;
+    text-align: center;
+  }
+  .hero h1 {
+    font-size: 2rem;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.5rem;
+  }
+  .hero .badge {
+    display: inline-block;
+    background: var(--violet-600);
+    padding: 0.25rem 1rem;
+    border-radius: 2rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+  }
+  .hero .version-badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.3);
+    padding: 0.2rem 0.75rem;
+    border-radius: 2rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    margin-left: 0.5rem;
+    vertical-align: middle;
+  }
+  .hero p { font-size: 0.95rem; opacity: 0.8; max-width: 600px; margin: 0 auto; }
+  .hero .reading-time {
+    font-size: 0.75rem;
+    opacity: 0.5;
+    margin-top: 0.75rem;
+  }
+  .container { max-width: 900px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+
+  /* Section */
+  .section {
+    background: white;
+    border: 1px solid var(--slate-200);
+    border-radius: 1.5rem;
+    padding: 2rem;
+    margin-bottom: 1.5rem;
+    position: relative;
+    overflow: hidden;
+  }
+  .section::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 4px; height: 100%;
+  }
+  .section.teal::before { background: var(--teal); }
+  .section.sky::before { background: var(--sky-600); }
+  .section.violet::before { background: var(--violet-600); }
+  .section.amber::before { background: var(--amber-600); }
+  .section.emerald::before { background: var(--emerald-600); }
+  .section.rose::before { background: var(--rose-500); }
+  .section.indigo::before { background: var(--indigo-600); }
+
+  .section h2 {
+    font-size: 1.25rem;
+    font-weight: 900;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .section h2 .num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem; height: 2rem;
+    border-radius: 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 900;
+    color: white;
+    flex-shrink: 0;
+  }
+  .teal .num { background: var(--teal); }
+  .sky .num { background: var(--sky-600); }
+  .violet .num { background: var(--violet-600); }
+  .amber .num { background: var(--amber-600); }
+  .emerald .num { background: var(--emerald-600); }
+  .rose .num { background: var(--rose-500); }
+  .indigo .num { background: var(--indigo-600); }
+
+  .section h3 {
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: var(--slate-700);
+    margin: 1.25rem 0 0.5rem;
+  }
+  .section p, .section li {
+    font-size: 0.9rem;
+    color: var(--slate-700);
+  }
+  .section ul, .section ol {
+    padding-left: 1.25rem;
+    margin-bottom: 0.75rem;
+  }
+  .section li { margin-bottom: 0.35rem; }
+  .section > p { margin-bottom: 0.5rem; }
+
+  /* Code */
+  code {
+    background: var(--slate-100);
+    padding: 0.15rem 0.4rem;
+    border-radius: 0.3rem;
+    font-size: 0.82rem;
+    font-family: 'Consolas', 'Courier New', monospace;
+    color: var(--teal-dark);
+    font-weight: 600;
+  }
+  pre {
+    background: var(--slate-900);
+    color: #e2e8f0;
+    padding: 1.25rem 1.5rem;
+    border-radius: 0.75rem;
+    overflow-x: auto;
+    margin: 0.75rem 0;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    font-family: 'Consolas', 'Courier New', monospace;
+  }
+  pre code {
+    background: none;
+    padding: 0;
+    color: inherit;
+    font-weight: 400;
+  }
+  .comment { color: #6b7280; }
+  .string { color: #34d399; }
+  .keyword { color: #f472b6; }
+  .cmd { color: #60a5fa; }
+
+  /* Step card */
+  .step {
+    background: var(--slate-50);
+    border: 1px solid var(--slate-200);
+    border-radius: 1rem;
+    padding: 1.25rem 1.5rem;
+    margin: 0.75rem 0;
+    position: relative;
+    padding-left: 3.5rem;
+  }
+  .step .step-num {
+    position: absolute;
+    left: 1.25rem; top: 1.25rem;
+    width: 1.75rem; height: 1.75rem;
+    border-radius: 50%;
+    background: var(--violet-600);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.8rem;
+    font-weight: 900;
+  }
+  .step h4 {
+    font-size: 0.9rem;
+    font-weight: 800;
+    color: var(--slate-800);
+    margin-bottom: 0.35rem;
+  }
+  .step p { font-size: 0.85rem; color: var(--slate-500); }
+
+  /* Alert boxes */
+  .alert {
+    padding: 1rem 1.25rem;
+    border-radius: 0.75rem;
+    margin: 0.75rem 0;
+    font-size: 0.85rem;
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+  }
+  .alert .icon { font-size: 1.25rem; flex-shrink: 0; line-height: 1; }
+  .alert-warn { background: var(--amber-50); border: 1px solid var(--amber-100); color: var(--amber-700); }
+  .alert-danger { background: var(--rose-50); border: 1px solid var(--rose-100); color: var(--rose-700); }
+  .alert-info { background: var(--sky-50); border: 1px solid var(--sky-100); color: var(--sky-700); }
+  .alert-success { background: var(--emerald-50); border: 1px solid var(--emerald-100); color: var(--emerald-700); }
+  .alert strong { font-weight: 800; }
+
+  /* Table */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.75rem 0;
+    font-size: 0.85rem;
+  }
+  th {
+    text-align: left;
+    background: var(--slate-100);
+    padding: 0.6rem 0.75rem;
+    font-weight: 800;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--slate-500);
+    border-bottom: 2px solid var(--slate-200);
+  }
+  td {
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--slate-100);
+    color: var(--slate-700);
+  }
+  tr:hover td { background: var(--slate-50); }
+
+  /* Flow diagram */
+  .flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin: 1rem 0;
+  }
+  .flow-item {
+    background: white;
+    border: 2px solid var(--slate-200);
+    border-radius: 0.75rem;
+    padding: 0.6rem 1rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-align: center;
+    min-width: 120px;
+  }
+  .flow-item.active { border-color: var(--violet-600); background: var(--violet-50); color: var(--violet-700); }
+  .flow-arrow { color: var(--slate-300); font-size: 1.25rem; font-weight: 900; }
+
+  /* Comparison card */
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin: 1rem 0;
+  }
+  .compare-card {
+    border-radius: 0.75rem;
+    padding: 1rem 1.25rem;
+    font-size: 0.85rem;
+  }
+  .compare-card.good {
+    background: var(--emerald-50);
+    border: 1px solid var(--emerald-100);
+    color: var(--emerald-700);
+  }
+  .compare-card.bad {
+    background: var(--rose-50);
+    border: 1px solid var(--rose-100);
+    color: var(--rose-700);
+  }
+  .compare-card h4 {
+    font-weight: 800;
+    font-size: 0.8rem;
+    margin-bottom: 0.5rem;
+  }
+  .compare-card code {
+    font-size: 0.75rem;
+  }
+
+  /* Tag labels */
+  .tag {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.65rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    vertical-align: middle;
+    margin-left: 0.5rem;
+  }
+  .tag-new { background: var(--emerald-100); color: var(--emerald-700); }
+  .tag-best { background: var(--amber-100); color: var(--amber-700); }
+  .tag-important { background: var(--rose-100); color: var(--rose-700); }
+
+  /* Page navigation */
+  .page-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: stretch;
+    gap: 1rem;
+    margin-top: 2rem;
+  }
+  .page-nav a {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 1.25rem 1.5rem;
+    border-radius: 1rem;
+    text-decoration: none;
+    background: white;
+    border: 1px solid var(--slate-200);
+    transition: all 0.2s;
+    flex: 1;
+  }
+  .page-nav a:hover {
+    border-color: var(--violet-600);
+    box-shadow: 0 4px 12px rgba(124, 58, 237, 0.1);
+  }
+  .page-nav a .label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--slate-500);
+    margin-bottom: 0.25rem;
+  }
+  .page-nav a .title {
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: var(--violet-700);
+  }
+  .page-nav a.prev { text-align: left; }
+  .page-nav a.next { text-align: right; }
+
+  .footer {
+    text-align: center;
+    padding: 2rem;
+    color: var(--slate-500);
+    font-size: 0.75rem;
+  }
+
+  /* Category description */
+  .cat-desc {
+    font-size: 0.85rem;
+    color: var(--slate-500);
+    margin-bottom: 0.5rem;
+    font-style: italic;
+  }
+
+  @media (max-width: 640px) {
+    .hero h1 { font-size: 1.5rem; }
+    .container { padding: 1rem 1rem 3rem; }
+    .section { padding: 1.5rem; }
+    .compare { grid-template-columns: 1fr; }
+    .site-nav { padding: 0.5rem 1rem; }
+    .nav-links a { font-size: 0.7rem; padding: 0.25rem 0.5rem; }
+    .page-nav { flex-direction: column; }
+    table { font-size: 0.78rem; }
+    td, th { padding: 0.4rem 0.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="site-nav">
+  <div class="nav-brand">Playwright MCP ガイド <span class="nav-ver">v0.0.68</span></div>
+  <div class="nav-links">
+    <a href="PlaywrightMCP_QuickStart.html">1. スタート</a>
+    <a href="PlaywrightMCP_Basics.html">2. 基本</a>
+    <a href="PlaywrightMCP_Tools.html" class="active">3. ツール</a>
+    <a href="PlaywrightMCP_Advanced.html">4. 応用</a>
+    <a href="PlaywrightMCP_Examples.html">5. 実践</a>
+  </div>
+</nav>
+
+<div class="hero">
+  <div class="badge">全22ツール</div>
+  <h1>ツールリファレンス</h1>
+  <p>Claude が使用する全ツールの一覧と使い方</p>
+  <div class="reading-time">リファレンス</div>
+</div>
+
+<div class="container">
+
+  <!-- Info alert -->
+  <div class="alert alert-info" style="margin-bottom: 1.5rem;">
+    <div class="icon">&#9432;</div>
+    <div>ユーザーがツール名を覚える必要はありません。自然な日本語で指示すれば、Claude が適切なツールを自動的に選択します。このページは「こういう操作ができる」という参考としてご活用ください。</div>
+  </div>
+
+  <!-- ナビゲーション -->
+  <div class="section violet">
+    <h2><span class="num">1</span> ナビゲーション（3ツール）</h2>
+    <p class="cat-desc">ページを開いたり、移動したり、待機したりする基本操作</p>
+    <table>
+      <tr><th>ツール名</th><th>機能</th><th>指示例</th></tr>
+      <tr><td><code>browser_navigate</code></td><td>URLを開く</td><td>「〇〇を開いて」</td></tr>
+      <tr><td><code>browser_navigate_back</code></td><td>ブラウザの戻る</td><td>「前のページに戻って」</td></tr>
+      <tr><td><code>browser_wait_for</code></td><td>テキスト表示/非表示の待機、指定秒数待機</td><td>「3秒待って」「ローディングが消えるまで待って」</td></tr>
+    </table>
+  </div>
+
+  <!-- 画面取得 -->
+  <div class="section violet">
+    <h2><span class="num">2</span> 画面取得（2ツール） <span class="tag tag-important">核心機能</span></h2>
+    <p class="cat-desc">ページの状態を把握するための最も重要なツール</p>
+    <table>
+      <tr><th>ツール名</th><th>機能</th><th>指示例</th></tr>
+      <tr><td><code>browser_snapshot</code></td><td>アクセシビリティツリー取得（推奨：構造化テキスト。操作にはこちらを使用）</td><td>「画面の状態を確認して」</td></tr>
+      <tr><td><code>browser_take_screenshot</code></td><td>スクリーンショット撮影（PNG/JPEG）（視覚確認時のみ。操作には使えない）</td><td>「スクショを撮って」</td></tr>
+    </table>
+  </div>
+
+  <!-- 操作 -->
+  <div class="section violet">
+    <h2><span class="num">3</span> 操作（8ツール）</h2>
+    <p class="cat-desc">ページ上の要素をクリック、入力、選択する</p>
+    <table>
+      <tr><th>ツール名</th><th>機能</th><th>指示例</th></tr>
+      <tr><td><code>browser_click</code></td><td>要素をクリック（左/右/中ボタン、ダブルクリック対応）</td><td>「〇〇ボタンを押して」</td></tr>
+      <tr><td><code>browser_type</code></td><td>テキスト入力（submitオプションでEnter送信可）</td><td>「検索欄に〇〇と入力して」</td></tr>
+      <tr><td><code>browser_fill_form</code></td><td>複数フォームフィールドを一括入力</td><td>「フォームに名前とメールを入力して」</td></tr>
+      <tr><td><code>browser_select_option</code></td><td>ドロップダウン選択（複数選択対応）</td><td>「方法をGoogleMeetに変えて」</td></tr>
+      <tr><td><code>browser_hover</code></td><td>マウスホバー</td><td>「メールアドレスにカーソルを合わせて」</td></tr>
+      <tr><td><code>browser_drag</code></td><td>ドラッグ&amp;ドロップ</td><td>「要素をドラッグして」</td></tr>
+      <tr><td><code>browser_press_key</code></td><td>キーボード入力（ArrowLeft, Enter, a等）</td><td>「Escキーを押して」</td></tr>
+      <tr><td><code>browser_file_upload</code></td><td>ファイルアップロード（複数ファイル対応）</td><td>「ファイルをアップロードして」</td></tr>
+    </table>
+  </div>
+
+  <!-- タブ管理 -->
+  <div class="section violet">
+    <h2><span class="num">4</span> タブ管理（1ツール）</h2>
+    <p class="cat-desc">ブラウザタブの操作</p>
+    <table>
+      <tr><th>ツール名</th><th>機能</th><th>指示例</th></tr>
+      <tr><td><code>browser_tabs</code></td><td>タブの一覧表示・新規作成・閉じる・切り替え（action: list/new/close/select）</td><td>「開いているタブを見せて」</td></tr>
+    </table>
+  </div>
+
+  <!-- デバッグ＆情報取得 -->
+  <div class="section violet">
+    <h2><span class="num">5</span> デバッグ＆情報取得（3ツール）</h2>
+    <p class="cat-desc">エラー確認やネットワーク監視に使う</p>
+    <table>
+      <tr><th>ツール名</th><th>機能</th><th>指示例</th></tr>
+      <tr><td><code>browser_console_messages</code></td><td>コンソールログ取得（error/warning/info/debugレベル指定可）</td><td>「コンソールエラーを確認して」</td></tr>
+      <tr><td><code>browser_network_requests</code></td><td>ネットワークリクエスト一覧</td><td>「APIリクエストを確認して」</td></tr>
+      <tr><td><code>browser_evaluate</code></td><td>ページ上で任意のJavaScriptを実行</td><td>「DOMの状態をJSで確認して」</td></tr>
+    </table>
+  </div>
+
+  <!-- ユーティリティ -->
+  <div class="section violet">
+    <h2><span class="num">6</span> ユーティリティ（5ツール）</h2>
+    <p class="cat-desc">画面サイズ変更、ダイアログ応答などの補助機能</p>
+    <table>
+      <tr><th>ツール名</th><th>機能</th><th>指示例</th></tr>
+      <tr><td><code>browser_resize</code></td><td>ブラウザウィンドウのサイズ変更</td><td>「画面を375x812にして」</td></tr>
+      <tr><td><code>browser_handle_dialog</code></td><td>alert/confirm/promptダイアログの応答</td><td>「確認ダイアログでOKを押して」</td></tr>
+      <tr><td><code>browser_install</code></td><td>ブラウザの手動インストール</td><td>「ブラウザをインストールして」</td></tr>
+      <tr><td><code>browser_run_code</code></td><td>Playwrightコードスニペットを直接実行</td><td>「Playwrightコードで〇〇して」</td></tr>
+      <tr><td><code>browser_close</code></td><td>ブラウザを閉じる</td><td>「ブラウザを閉じて」</td></tr>
+    </table>
+  </div>
+
+  <!-- 追加 Capability ツール -->
+  <div class="section amber">
+    <h2><span class="num">+</span> 追加 Capability ツール</h2>
+
+    <div class="alert alert-info">
+      <div class="icon">&#9432;</div>
+      <div>以下のツールはデフォルトでは無効です。使用するには <code>.mcp.json</code> の <code>args</code> に <code>--caps</code> オプションを追加してください。</div>
+    </div>
+
+    <h3>Vision（<code>--caps core,vision</code> で有効化）</h3>
+    <p class="cat-desc">座標ベースのマウス操作。スクリーンショット上の位置を指定して操作する場合に使用</p>
+    <table>
+      <tr><th>ツール名</th><th>機能</th></tr>
+      <tr><td><code>browser_mouse_click_xy</code></td><td>指定座標でクリック</td></tr>
+      <tr><td><code>browser_mouse_move_xy</code></td><td>指定座標にマウス移動</td></tr>
+      <tr><td><code>browser_mouse_drag_xy</code></td><td>指定座標へドラッグ</td></tr>
+      <tr><td><code>browser_mouse_down</code></td><td>マウスボタン押下</td></tr>
+      <tr><td><code>browser_mouse_up</code></td><td>マウスボタン解放</td></tr>
+      <tr><td><code>browser_mouse_wheel</code></td><td>マウスホイールスクロール</td></tr>
+    </table>
+
+    <h3>PDF（<code>--caps core,pdf</code> で有効化）</h3>
+    <table>
+      <tr><th>ツール名</th><th>機能</th><th>指示例</th></tr>
+      <tr><td><code>browser_pdf_save</code></td><td>ページをPDFとして保存</td><td>「このページをPDFで保存して」</td></tr>
+    </table>
+
+    <h3>DevTools（<code>--caps core,devtools</code> で有効化）</h3>
+    <p class="cat-desc">テスト用のアサーション・ロケーター生成ツール</p>
+    <table>
+      <tr><th>ツール名</th><th>機能</th></tr>
+      <tr><td><code>browser_generate_locator</code></td><td>テスト用ロケーターの生成</td></tr>
+      <tr><td><code>browser_verify_element_visible</code></td><td>要素の表示を検証</td></tr>
+      <tr><td><code>browser_verify_list_visible</code></td><td>リストの表示を検証</td></tr>
+      <tr><td><code>browser_verify_text_visible</code></td><td>テキストの存在を検証</td></tr>
+      <tr><td><code>browser_verify_value</code></td><td>要素の値を検証</td></tr>
+    </table>
+  </div>
+
+  <!-- Capability有効化の方法 -->
+  <div class="section indigo">
+    <h2><span class="num">&#9881;</span> Capability有効化の方法</h2>
+    <p><code>.mcp.json</code> の <code>args</code> に <code>--caps</code> オプションを追加して、有効にしたい機能をカンマ区切りで指定します。</p>
+<pre><code>{
+  <span class="string">"mcpServers"</span>: {
+    <span class="string">"playwright"</span>: {
+      <span class="string">"type"</span>: <span class="string">"stdio"</span>,
+      <span class="string">"command"</span>: <span class="string">"npx"</span>,
+      <span class="string">"args"</span>: [<span class="string">"-y"</span>, <span class="string">"@playwright/mcp@0.0.68"</span>, <span class="string">"--caps"</span>, <span class="string">"core,vision,pdf,devtools"</span>]
+    }
+  }
+}</code></pre>
+
+    <div class="alert alert-info">
+      <div class="icon">&#9432;</div>
+      <div><strong>本プロジェクトの設定:</strong> 現在の <code>.mcp.json</code> では <code>--caps</code> を指定していないため、デフォルトの <strong>core</strong>（計22ツール）が有効です。</div>
+    </div>
+  </div>
+
+  <!-- Page Navigation -->
+  <div class="page-nav">
+    <a href="PlaywrightMCP_Basics.html" class="prev">
+      <span class="label">&#8592; 前へ</span>
+      <span class="title">基本の使い方</span>
+    </a>
+    <a href="PlaywrightMCP_Advanced.html" class="next">
+      <span class="label">次へ &#8594;</span>
+      <span class="title">応用 &amp; CLIオプション</span>
+    </a>
+  </div>
+
+</div>
+
+<div class="footer">
+  タダサポ管理システム 開発ドキュメント &mdash; Playwright MCP ガイド v0.0.68 &mdash; 2026/02/18
+</div>
+
+</body>
+</html>
