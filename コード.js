@@ -93,6 +93,14 @@ function getAdminEmails_() {
   return raw.split(',').map(function(e) { return e.trim().toLowerCase(); });
 }
 
+/**
+ * MAIL_FORCE_CC の設定値（空欄ならnull）を返す。
+ */
+function getForcedCc_() {
+  var raw = getSetting_('MAIL_FORCE_CC', '').trim();
+  return raw ? raw : null;
+}
+
 // ======================================================================
 // Webアプリ エントリポイント
 // ======================================================================
@@ -329,6 +337,7 @@ function reopenCase(caseId, user) {
 
 function ensureAttachmentSchema_() {
   try {
+    addForcedCcSetting();
     addAttachmentFolderSetting();
     addAttachmentsColumnToRecords();
   } catch (e) {
@@ -461,6 +470,7 @@ function getRecipientEmail_(caseId) {
  */
 function sendInThread_(to, subject, body, threadId, inReplyTo) {
   var encodedSubject = '=?UTF-8?B?' + Utilities.base64Encode(subject, Utilities.Charset.UTF_8) + '?=';
+  var forceCc = getForcedCc_();
 
   var headers = [
     'MIME-Version: 1.0',
@@ -468,6 +478,7 @@ function sendInThread_(to, subject, body, threadId, inReplyTo) {
     'Subject: ' + encodedSubject,
     'Content-Type: text/plain; charset=UTF-8'
   ];
+  if (forceCc) headers.push('Cc: ' + forceCc);
 
   if (inReplyTo) {
     headers.push('In-Reply-To: ' + inReplyTo);
@@ -1029,6 +1040,7 @@ function setupSettingsSheet() {
 
     // カテゴリ: メールテンプレート
     ['#メールテンプレート', 'メールテンプレート設定', '', '', ''],
+    ['MAIL_FORCE_CC',      '強制CCメールアドレス',        '', 'cc@example.com, cc2@example.com', 'ここにメールアドレスを設定すると、全ての送信メールにCCが自動付与されます。\n空欄の場合はCCなしで送信されます。'],
     ['MAIL_INITIAL_SUBJECT', '初回メール件名',       'タダサポ｜ご相談を承りました', 'タダサポ｜{{事業所名}}様のご相談を承りました', '「担当する」ボタン押下時に送信されるメールの件名。\n使用可能タグ: {{事業所名}} {{名前}} {{担当者名}}'],
     ['MAIL_INITIAL_BODY',    '初回メール本文',       '{{名前}} 様\n\nこの度はタダサポへご相談いただきありがとうございます。\n担当させていただきます{{担当者名}}と申します。\n\nご相談内容を確認いたしました。\n追ってサポート日時のご連絡をさせていただきます。\n\n何かご不明な点がございましたら、お気軽にお問い合わせください。\n\n今後ともよろしくお願いいたします。', '（デフォルト文を参照）', '初回メール本文。C列のセル内で改行可能（Ctrl+Enter）。\n使用可能タグ: {{事業所名}} {{名前}} {{担当者名}} {{相談内容}}'],
     ['MAIL_DECLINED_SUBJECT', '回数超過メール件名', 'タダサポ｜ご利用回数上限のお知らせ', 'タダサポ｜{{事業所名}}様 ご利用上限のお知らせ', '年間利用回数超過時に送信されるメールの件名。\n使用可能タグ: {{事業所名}} {{名前}} {{担当者名}}'],
@@ -1173,6 +1185,62 @@ function addEmailTemplates() {
 }
 
 /**
+ * 既存の設定シートに MAIL_FORCE_CC 行を追加するヘルパー。
+ * 既に存在する場合はスキップする。
+ */
+function addForcedCcSetting() {
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
+  if (!sheet) {
+    Logger.log('「設定」シートが見つかりません。先に setupSettingsSheet を実行してください。');
+    return;
+  }
+
+  var data = sheet.getDataRange().getValues();
+  for (var i = 0; i < data.length; i++) {
+    if (String(data[i][0]) === 'MAIL_FORCE_CC') {
+      Logger.log('MAIL_FORCE_CC は既に設定シートに存在します。');
+      return;
+    }
+  }
+
+  var insertAfterRow = -1;
+  for (var j = 0; j < data.length; j++) {
+    if (String(data[j][0]) === '#メールテンプレート') {
+      insertAfterRow = j + 1;
+      break;
+    }
+  }
+
+  var newRow = [
+    'MAIL_FORCE_CC',
+    '強制CCメールアドレス',
+    '',
+    'cc@example.com, cc2@example.com',
+    'ここにメールアドレスを設定すると、全ての送信メールにCCが自動付与されます。\n空欄の場合はCCなしで送信されます。'
+  ];
+
+  if (insertAfterRow > 0) {
+    sheet.insertRowAfter(insertAfterRow);
+    sheet.getRange(insertAfterRow + 1, 1, 1, 5).setValues([newRow]);
+  } else {
+    var last = sheet.getLastRow();
+    sheet.getRange(last + 1, 1, 1, 5).setValues([newRow]);
+    insertAfterRow = last;
+  }
+
+  var rowNum = insertAfterRow + 1;
+  sheet.getRange(rowNum, 3).setBackground('#fffbeb').setBorder(true, true, true, true, null, null, '#f59e0b', SpreadsheetApp.BorderStyle.SOLID).setFontWeight('bold');
+  sheet.getRange(rowNum, 1).setFontColor('#9ca3af').setFontSize(8);
+  sheet.getRange(rowNum, 2).setFontWeight('bold').setFontColor('#1e293b');
+  sheet.getRange(rowNum, 4).setFontColor('#9ca3af').setFontSize(9);
+  sheet.getRange(rowNum, 5).setFontColor('#64748b').setFontSize(9);
+  sheet.setRowHeight(rowNum, 40);
+
+  Logger.log('MAIL_FORCE_CC の設定行を追加しました。');
+}
+
+/**
  * 既存の設定シートに ATTACHMENT_FOLDER_ID 行を追加するヘルパー。
  * 既に存在する場合はスキップする。
  */
@@ -1280,6 +1348,7 @@ function addAttachmentsColumnToRecords() {
  * 2) サポート記録へ ATTACHMENTS 列を追加
  */
 function setupAttachmentFeatureSchema() {
+  addForcedCcSetting();
   addAttachmentFolderSetting();
   addAttachmentsColumnToRecords();
   Logger.log('添付機能向けスキーマ整備が完了しました。');
