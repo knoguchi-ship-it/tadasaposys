@@ -28,6 +28,7 @@
 | メール機能（初回/新規/返信/回数超過 の4モード） | ✅ |
 | ダッシュボード（全件閲覧・操作不可） | ✅ |
 | キーワード検索 + 期間検索 | ✅ |
+| 完了報告/記録修正でのファイル添付（D&D対応、1回最大5件） | ✅ |
 
 ---
 
@@ -80,7 +81,7 @@ var IDX = {
   CASES: { PK: 0, EMAIL: 1, OFFICE: 2, NAME: 3, DETAILS: 4, PREFECTURE: 5, SERVICE: 6 },
   RECORDS: { FK: 0, STATUS: 1, STAFF_EMAIL: 2, STAFF_NAME: 3, DATE: 4, COUNT: 5,
              METHOD: 6, BUSINESS: 7, CONTENT: 8, REMARKS: 9, HISTORY: 10,
-             EVENT_ID: 11, MEET_URL: 12, THREAD_ID: 13 },
+             EVENT_ID: 11, MEET_URL: 12, THREAD_ID: 13, ATTACHMENTS: 14 },
   STAFF: { NAME: 1, EMAIL: 2 },
   EMAIL: { CASE_ID: 0, SEND_DATE: 1, SENDER_EMAIL: 2, SENDER_NAME: 3,
            RECIPIENT_EMAIL: 4, SUBJECT: 5, BODY: 6 }
@@ -103,7 +104,7 @@ unhandled → rejected（回数超過時）
 | `getAllCasesJoined()` | 全案件結合データ取得 |
 | `assignCase(caseId, user)` | 案件アサイン（メール送信なし） |
 | `assignAndSendEmail(caseId, user, subject, body)` | アサイン＋初回メール送信 |
-| `updateSupportRecord(recordData)` | 記録更新＋カレンダー連携 |
+| `updateSupportRecord(recordData)` | 記録更新＋カレンダー連携＋添付更新（最大5件） |
 | `reopenCase(caseId, user)` | 案件再開（履歴保存→フィールドクリア） |
 | `declineCase(caseId, user, subject, body)` | 回数超過メール→rejected |
 | `sendNewCaseEmail(caseId, user, subject, body)` | 新規スレッドメール送信 |
@@ -120,6 +121,7 @@ unhandled → rejected（回数超過時）
 | ADMIN_EMAILS | 未設定 | 管理者権限チェックが無効状態 |
 | Gmail Advanced Service | 手動有効化必要 | GASエディタで設定済み |
 | `Session.getActiveUser()` | ドメイン外で空文字リスク | `executeAs: USER_DEPLOYING` + `access: ANYONE` の制約 |
+| `ATTACHMENT_FOLDER_ID` | 未設定時は添付保存不可 | 設定シートにDriveフォルダIDを設定 |
 | 全機能テスト | 未実施 | 基本起動・認証のみ確認済み |
 
 ---

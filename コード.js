@@ -27,7 +27,7 @@ var SHEET_NAMES = {
 
 var IDX = {
   CASES: { PK: 0, EMAIL: 1, OFFICE: 2, NAME: 3, DETAILS: 4, PREFECTURE: 5, SERVICE: 6 },
-  RECORDS: { FK: 0, STATUS: 1, STAFF_EMAIL: 2, STAFF_NAME: 3, DATE: 4, COUNT: 5, METHOD: 6, BUSINESS: 7, CONTENT: 8, REMARKS: 9, HISTORY: 10, EVENT_ID: 11, MEET_URL: 12, THREAD_ID: 13 },
+  RECORDS: { FK: 0, STATUS: 1, STAFF_EMAIL: 2, STAFF_NAME: 3, DATE: 4, COUNT: 5, METHOD: 6, BUSINESS: 7, CONTENT: 8, REMARKS: 9, HISTORY: 10, EVENT_ID: 11, MEET_URL: 12, THREAD_ID: 13, ATTACHMENTS: 14 },
   STAFF: { NAME: 1, EMAIL: 2 },
   EMAIL: { CASE_ID: 0, SEND_DATE: 1, SENDER_EMAIL: 2, SENDER_NAME: 3, RECIPIENT_EMAIL: 4, SUBJECT: 5, BODY: 6 }
 };
@@ -97,6 +97,8 @@ function getAdminEmails_() {
 // Webアプリ エントリポイント
 // ======================================================================
 function doGet() {
+  ensureAttachmentSchema_();
+
   return HtmlService.createTemplateFromFile('index')
     .evaluate()
     .setTitle('タダサポ管理 v1.8.1')
@@ -108,6 +110,8 @@ function doGet() {
 // 初期データ取得
 // ======================================================================
 function getInitialData() {
+  ensureAttachmentSchema_();
+
   var userEmail = Session.getActiveUser().getEmail();
   var staff = getStaffByEmail(userEmail);
 
@@ -172,6 +176,9 @@ function getAllCasesJoined() {
     var historyStr = r[IDX.RECORDS.HISTORY] ? String(r[IDX.RECORDS.HISTORY]) : '[]';
     var parsedHistory = [];
     try { parsedHistory = JSON.parse(historyStr); } catch(e) { parsedHistory = []; }
+    var attachmentsStr = r[IDX.RECORDS.ATTACHMENTS] ? String(r[IDX.RECORDS.ATTACHMENTS]) : '[]';
+    var parsedAttachments = [];
+    try { parsedAttachments = JSON.parse(attachmentsStr); } catch(e) { parsedAttachments = []; }
     recordMap[String(r[IDX.RECORDS.FK])] = {
       status: r[IDX.RECORDS.STATUS],
       staffEmail: r[IDX.RECORDS.STAFF_EMAIL],
@@ -185,7 +192,8 @@ function getAllCasesJoined() {
       meetUrl: r[IDX.RECORDS.MEET_URL],
       eventId: r[IDX.RECORDS.EVENT_ID],
       threadId: r[IDX.RECORDS.THREAD_ID] || null,
-      supportHistory: parsedHistory
+      supportHistory: parsedHistory,
+      attachments: parsedAttachments
     };
   }
 
@@ -224,6 +232,7 @@ function getAllCasesJoined() {
       meetUrl: record.meetUrl, eventId: record.eventId,
       threadId: record.threadId || null,
       supportHistory: record.supportHistory || [],
+      attachments: record.attachments || [],
       currentFiscalYearCount: count,
       emails: emailMap[ts] || []
     });
@@ -251,7 +260,7 @@ function assignCase(caseId, user) {
   if (rowIndex === -1) {
     sheet.appendRow([
       caseId, 'inProgress', user.email, user.name,
-      null, 1, null, null, null, null, null, null, null, null
+      null, 1, null, null, null, null, null, null, null, null, '[]'
     ]);
   } else {
     sheet.getRange(rowIndex, IDX.RECORDS.STATUS + 1).setValue('inProgress');
@@ -298,6 +307,10 @@ function reopenCase(caseId, user) {
     content: row[IDX.RECORDS.CONTENT] || null,
     remarks: row[IDX.RECORDS.REMARKS] || null,
     meetUrl: row[IDX.RECORDS.MEET_URL] || null,
+    attachments: (function() {
+      var a = row[IDX.RECORDS.ATTACHMENTS] ? String(row[IDX.RECORDS.ATTACHMENTS]) : '[]';
+      try { return JSON.parse(a); } catch(e) { return []; }
+    })(),
     staffName: row[IDX.RECORDS.STAFF_NAME] || null,
     staffEmail: row[IDX.RECORDS.STAFF_EMAIL] || null
   });
@@ -311,6 +324,16 @@ function reopenCase(caseId, user) {
   sheet.getRange(rowIndex, IDX.RECORDS.REMARKS + 1).setValue(null);
   sheet.getRange(rowIndex, IDX.RECORDS.EVENT_ID + 1).setValue(null);
   sheet.getRange(rowIndex, IDX.RECORDS.MEET_URL + 1).setValue(null);
+  sheet.getRange(rowIndex, IDX.RECORDS.ATTACHMENTS + 1).setValue('[]');
+}
+
+function ensureAttachmentSchema_() {
+  try {
+    addAttachmentFolderSetting();
+    addAttachmentsColumnToRecords();
+  } catch (e) {
+    throw new Error('添付機能の初期化に失敗しました。管理者に連絡してください。詳細: ' + e.message);
+  }
 }
 
 // ======================================================================
@@ -341,7 +364,7 @@ function declineCase(caseId, user, subject, body) {
     // レコードが無い場合は新規作成
     sheet.appendRow([
       caseId, 'rejected', user.email, user.name,
-      null, 1, null, null, null, null, null, null, null, null
+      null, 1, null, null, null, null, null, null, null, null, '[]'
     ]);
   } else {
     sheet.getRange(rowIndex, IDX.RECORDS.STATUS + 1).setValue('rejected');
@@ -776,6 +799,76 @@ function createGoogleMeetEvent(title, startTime, description) {
   return { meetUrl: 'https://meet.google.com/lookup/' + Utilities.getUuid().substring(0, 10), eventId: created.getId() };
 }
 
+function parseJsonArray_(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  try {
+    var parsed = JSON.parse(String(value));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function buildKeepAttachmentIdMap_(keepAttachmentIds) {
+  var map = {};
+  (keepAttachmentIds || []).forEach(function(id) {
+    var key = String(id || '').trim();
+    if (key) map[key] = true;
+  });
+  return map;
+}
+
+function getAttachmentFolder_() {
+  var folderId = getSetting_('ATTACHMENT_FOLDER_ID', '');
+  if (!folderId) throw new Error('添付ファイル保存先が未設定です。設定シートの ATTACHMENT_FOLDER_ID を入力してください。');
+  try {
+    return DriveApp.getFolderById(folderId);
+  } catch (e) {
+    throw new Error('ATTACHMENT_FOLDER_ID が無効です。設定シートを確認してください。');
+  }
+}
+
+function saveNewAttachments_(caseId, user, newAttachments) {
+  var files = newAttachments || [];
+  if (!files.length) return [];
+
+  var folder = getAttachmentFolder_();
+  var uploaded = [];
+  for (var i = 0; i < files.length; i++) {
+    var f = files[i] || {};
+    var fileName = String(f.name || ('attachment_' + (i + 1)));
+    var mimeType = String(f.mimeType || 'application/octet-stream');
+    var base64Data = String(f.base64Data || '');
+    if (!base64Data) continue;
+
+    var blob = Utilities.newBlob(Utilities.base64Decode(base64Data), mimeType, fileName);
+    var file = folder.createFile(blob);
+    uploaded.push({
+      fileId: file.getId(),
+      name: file.getName(),
+      url: file.getUrl(),
+      mimeType: mimeType,
+      size: Number(f.size) || file.getSize() || 0,
+      uploadedAt: new Date().toISOString(),
+      uploadedBy: user && user.email ? user.email : ''
+    });
+  }
+  return uploaded;
+}
+
+function trashRemovedAttachments_(existingAttachments, keepIdMap) {
+  (existingAttachments || []).forEach(function(att) {
+    var fileId = String(att && att.fileId ? att.fileId : '');
+    if (!fileId || keepIdMap[fileId]) return;
+    try {
+      DriveApp.getFileById(fileId).setTrashed(true);
+    } catch (e) {
+      // 既に削除済み・権限なしは無視して更新を継続
+    }
+  });
+}
+
 // ======================================================================
 // サポート記録の更新（方法別: Meet / Zoom / その他）
 // ======================================================================
@@ -794,6 +887,7 @@ function updateSupportRecord(recordData) {
   if (rowIndex === -1) throw new Error('レコードが見つかりません ID: ' + recordData.timestamp);
 
   var currentMeetUrl = data[rowIndex - 1][IDX.RECORDS.MEET_URL];
+  var currentAttachments = parseJsonArray_(data[rowIndex - 1][IDX.RECORDS.ATTACHMENTS]);
   var eventTitle = '【タダサポ】' + recordData.officeName + ' 様';
 
   if (recordData.scheduledDateTime && !currentMeetUrl) {
@@ -822,6 +916,26 @@ function updateSupportRecord(recordData) {
   sheet.getRange(rowIndex, IDX.RECORDS.DATE + 1).setValue(recordData.scheduledDateTime ? new Date(recordData.scheduledDateTime) : null);
   sheet.getRange(rowIndex, IDX.RECORDS.METHOD + 1).setValue(recordData.method);
   sheet.getRange(rowIndex, IDX.RECORDS.CONTENT + 1).setValue(recordData.content);
+
+  var hasAttachmentUpdate = recordData.keepAttachmentIds !== undefined || recordData.newAttachments !== undefined;
+  if (hasAttachmentUpdate) {
+    var keepIds = Array.isArray(recordData.keepAttachmentIds)
+      ? recordData.keepAttachmentIds
+      : currentAttachments.map(function(a) { return a.fileId; });
+    var keepIdMap = buildKeepAttachmentIdMap_(keepIds);
+    var keptAttachments = currentAttachments.filter(function(a) {
+      return !!(a && a.fileId && keepIdMap[String(a.fileId)]);
+    });
+    var uploadedAttachments = saveNewAttachments_(recordData.timestamp, recordData.user || null, recordData.newAttachments || []);
+    var mergedAttachments = keptAttachments.concat(uploadedAttachments);
+
+    if (mergedAttachments.length > 5) {
+      throw new Error('添付ファイルは1回の報告につき最大5件です。');
+    }
+
+    trashRemovedAttachments_(currentAttachments, keepIdMap);
+    sheet.getRange(rowIndex, IDX.RECORDS.ATTACHMENTS + 1).setValue(JSON.stringify(mergedAttachments));
+  }
 }
 
 // ======================================================================
@@ -842,6 +956,7 @@ function getStaffByEmail(email) {
 
 function getMasters() {
   var zoomEnabled = !!getSetting_('ZOOM_ACCOUNT_ID');
+  var attachmentFolderConfigured = !!getSetting_('ATTACHMENT_FOLDER_ID');
   var methods = ['GoogleMeet', '電話等', '対面'];
   if (zoomEnabled) methods.splice(1, 0, 'Zoom');
   return {
@@ -849,6 +964,7 @@ function getMasters() {
     businessTypes: ['訪問介護', '通所介護', '居宅介護支援', '福祉用具貸与', '小規模多機能', '有料老人ホーム', 'その他'],
     prefectures: ['東京都', '神奈川県', '大阪府', '愛知県', '福岡県', '北海道', 'その他'],
     allStaff: [],
+    attachmentFolderConfigured: attachmentFolderConfigured,
     emailTemplates: {
       initialSubject: getSetting_('MAIL_INITIAL_SUBJECT', 'タダサポ｜ご相談を承りました'),
       initialBody: getSetting_('MAIL_INITIAL_BODY', '{{名前}} 様\n\nこの度はタダサポへご相談いただきありがとうございます。\n担当させていただきます{{担当者名}}と申します。\n\nご相談内容を確認いたしました。\n追ってサポート日時のご連絡をさせていただきます。\n\n何かご不明な点がございましたら、お気軽にお問い合わせください。\n\n今後ともよろしくお願いいたします。'),
@@ -909,6 +1025,7 @@ function setupSettingsSheet() {
     // カテゴリ: カレンダー連携
     ['#カレンダー', 'カレンダー連携設定', '', '', ''],
     ['SHARED_CALENDAR_ID', '共有カレンダー ID',        '', 'abc123xyz@group.calendar.google.com', 'タダサポ共有カレンダーのID。\nGoogleカレンダー → 設定 → カレンダーID で確認できます。\n空欄の場合は担当者のデフォルトカレンダーに作成します。'],
+    ['ATTACHMENT_FOLDER_ID', '添付ファイル保存先フォルダID', '', '1AbCdEfGhIjKlMnOpQrStUvWxYz', '完了報告/記録修正でアップロードした添付ファイルの保存先Google DriveフォルダID。\nGoogle Drive フォルダURLの /folders/ の後ろの値を入力してください。'],
 
     // カテゴリ: メールテンプレート
     ['#メールテンプレート', 'メールテンプレート設定', '', '', ''],
@@ -1053,4 +1170,117 @@ function addEmailTemplates() {
   sheet.setRowHeight(insertBefore + newRows.length - 1, 120);
 
   Logger.log('メールテンプレートの設定行を追加しました。');
+}
+
+/**
+ * 既存の設定シートに ATTACHMENT_FOLDER_ID 行を追加するヘルパー。
+ * 既に存在する場合はスキップする。
+ */
+function addAttachmentFolderSetting() {
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
+  if (!sheet) {
+    Logger.log('「設定」シートが見つかりません。先に setupSettingsSheet を実行してください。');
+    return;
+  }
+
+  var data = sheet.getDataRange().getValues();
+  for (var i = 0; i < data.length; i++) {
+    if (String(data[i][0]) === 'ATTACHMENT_FOLDER_ID') {
+      Logger.log('ATTACHMENT_FOLDER_ID は既に存在します。');
+      return;
+    }
+  }
+
+  var insertAfterRow = -1;
+  for (var j = 0; j < data.length; j++) {
+    if (String(data[j][0]) === 'SHARED_CALENDAR_ID') {
+      insertAfterRow = j + 1;
+      break;
+    }
+  }
+
+  var newRow = ['ATTACHMENT_FOLDER_ID', '添付ファイル保存先フォルダID', '', '1AbCdEfGhIjKlMnOpQrStUvWxYz', '完了報告/記録修正でアップロードした添付ファイルの保存先Google DriveフォルダID。\nGoogle Drive フォルダURLの /folders/ の後ろの値を入力してください。'];
+
+  if (insertAfterRow > 0) {
+    sheet.insertRowAfter(insertAfterRow);
+    sheet.getRange(insertAfterRow + 1, 1, 1, 5).setValues([newRow]);
+  } else {
+    var last = sheet.getLastRow();
+    sheet.getRange(last + 1, 1, 1, 5).setValues([newRow]);
+    insertAfterRow = last;
+  }
+
+  var rowNum = insertAfterRow + 1;
+  sheet.getRange(rowNum, 3).setBackground('#fffbeb').setBorder(true, true, true, true, null, null, '#f59e0b', SpreadsheetApp.BorderStyle.SOLID).setFontWeight('bold');
+  sheet.getRange(rowNum, 1).setFontColor('#9ca3af').setFontSize(8);
+  sheet.getRange(rowNum, 2).setFontWeight('bold').setFontColor('#1e293b');
+  sheet.getRange(rowNum, 4).setFontColor('#9ca3af').setFontSize(9);
+  sheet.getRange(rowNum, 5).setFontColor('#64748b').setFontSize(9);
+  sheet.setRowHeight(rowNum, 40);
+
+  Logger.log('ATTACHMENT_FOLDER_ID の設定行を追加しました。');
+}
+
+/**
+ * サポート記録シートに ATTACHMENTS 列（O列）を追加する。
+ * 既に存在する場合はスキップ。
+ */
+function addAttachmentsColumnToRecords() {
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  if (!sheet) {
+    throw new Error('「サポート記録」シートが見つかりません。');
+  }
+
+  var headerRow = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
+  var expectedHeader = '添付ファイルJSON';
+
+  // 既にO列（15列目）に存在する場合
+  if (sheet.getLastColumn() >= 15 && String(sheet.getRange(1, 15).getValue()) === expectedHeader) {
+    Logger.log('サポート記録シートの ATTACHMENTS 列は既に存在します。');
+    return;
+  }
+
+  // ヘッダー行から既存位置を探索（別位置に存在する場合はそのまま利用）
+  for (var i = 0; i < headerRow.length; i++) {
+    if (String(headerRow[i]) === expectedHeader) {
+      Logger.log('添付ファイルJSON 列は既に存在します（列: ' + (i + 1) + '）。');
+      return;
+    }
+  }
+
+  // N列の後ろ（15列目）に追加
+  if (sheet.getLastColumn() < 15) {
+    var addCount = 15 - sheet.getLastColumn();
+    sheet.insertColumnsAfter(sheet.getLastColumn(), addCount);
+  } else {
+    sheet.insertColumnAfter(14);
+  }
+
+  sheet.getRange(1, 15).setValue(expectedHeader);
+
+  // 既存データ行を '[]' で初期化（空セルのみ）
+  var lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    var range = sheet.getRange(2, 15, lastRow - 1, 1);
+    var values = range.getValues();
+    for (var r = 0; r < values.length; r++) {
+      if (!values[r][0]) values[r][0] = '[]';
+    }
+    range.setValues(values);
+  }
+
+  Logger.log('サポート記録シートに ATTACHMENTS 列（O列）を追加しました。');
+}
+
+/**
+ * 添付機能向けスキーマ整備を一括実行する。
+ * 1) 設定シートへ ATTACHMENT_FOLDER_ID を追加
+ * 2) サポート記録へ ATTACHMENTS 列を追加
+ */
+function setupAttachmentFeatureSchema() {
+  addAttachmentFolderSetting();
+  addAttachmentsColumnToRecords();
+  Logger.log('添付機能向けスキーマ整備が完了しました。');
 }

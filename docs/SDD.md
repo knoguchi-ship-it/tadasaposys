@@ -24,13 +24,14 @@
 | `ZOOM_CLIENT_ID` | `xxxxxxxx` | NO* | Zoom Client ID |
 | `ZOOM_CLIENT_SECRET` | `xxxxxxxx` | NO* | Zoom Client Secret |
 | `SHARED_CALENDAR_ID` | `xxx@group.calendar.google.com` | NO | 共有カレンダーID（空欄=デフォルトカレンダー） |
+| `ATTACHMENT_FOLDER_ID` | `1AbCdEfGh...` | YES* | 完了報告/記録修正でアップロードした添付ファイルの保存先DriveフォルダID |
 | `MAIL_INITIAL_SUBJECT` | `タダサポ｜ご相談を承りました` | NO | 初回メール件名テンプレート |
 | `MAIL_INITIAL_BODY` | （デフォルト文あり） | NO | 初回メール本文テンプレート |
 | `MAIL_DECLINED_SUBJECT` | `タダサポ｜ご利用回数上限のお知らせ` | NO | 回数超過メール件名テンプレート |
 | `MAIL_DECLINED_BODY` | （デフォルト文あり） | NO | 回数超過メール本文テンプレート |
 | `SPREADSHEET_URL` | `https://docs.google.com/...` | NO | 参考表示用（自動設定） |
 
-\* Zoom連携を利用する場合は必須。
+\* 機能利用時に必須（Zoom連携時は Zoom 設定、添付機能利用時は `ATTACHMENT_FOLDER_ID`）。
 
 **テンプレートタグ**: `{{名前}}`, `{{事業所名}}`, `{{担当者名}}`, `{{相談内容}}`
 
@@ -72,6 +73,7 @@
 | 11 | L列 | EventID | `EVENT_ID` | String | カレンダー連携ID |
 | 12 | M列 | Meet URL | `MEET_URL` | String | 自動発行URL |
 | 13 | N列 | スレッドID | `THREAD_ID` | String | GmailスレッドID（カンマ区切りで複数） |
+| 14 | O列 | 添付ファイルJSON | `ATTACHMENTS` | String | 現在回の添付ファイル情報（最大5件） |
 
 ### S-03: タダメンマスタ (Staff Master)
 *   **用途**: 認証および担当者候補リスト。
@@ -117,7 +119,11 @@
 *   **振る舞い**: `assignCase` を呼び出し後、Gmail APIで送信。スレッドIDを保存。メール履歴に記録。
 
 ### F-04: updateSupportRecord(recordData)
-*   **振る舞い**: 記録更新、カレンダー連携（GoogleMeet/Zoom）、ステータス変更。
+*   **振る舞い**: 記録更新、カレンダー連携（GoogleMeet/Zoom）、ステータス変更、添付ファイル更新。
+*   **添付仕様**:
+    *   1回の報告（現在回）につき最大5件。
+    *   新規添付は `ATTACHMENT_FOLDER_ID` で指定されたDriveフォルダへ保存。
+    *   記録編集時は保持対象と新規添付を組み合わせて入れ替え可能。
 
 ### F-05: reopenCase(caseId, user)
 *   **概要**: 完了済み案件を再開し、次回の対応を開始する。
@@ -199,6 +205,12 @@
 ### UI-04: 未対応案件のアクション
 *   **年間制限内**: 「メール送信して担当」ボタンと「担当する（メールなし）」ボタンの2つを表示。
 *   **年間制限超過**: 「回数超過」ボタンのみ表示。
+
+### UI-05: 添付ファイル操作（完了報告/記録修正）
+*   対象画面: 「実施記録・完了報告」「記録の修正」モーダル。
+*   アップロード方式: ファイル選択 + ドラッグ＆ドロップ。
+*   制限: 1回の報告（現在回）につき最大5件。
+*   記録編集: 既存添付の削除と新規追加により入れ替え可能。
 
 ---
 

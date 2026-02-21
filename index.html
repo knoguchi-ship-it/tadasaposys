@@ -68,7 +68,8 @@
       Video, MapPin, Edit, Loader2, Calendar,
       MessageSquare, ChevronRight, X, Eye, Lock,
       AlertTriangle, FileText, Clock, Info, CheckCircle2,
-      Mail, Send, Reply, RotateCcw, Search, Filter, XCircle
+      Mail, Send, Reply, RotateCcw, Search, Filter, XCircle,
+      Paperclip, UploadCloud, Trash2
     } from 'lucide-react';
 
     // ======================================================================
@@ -81,6 +82,7 @@
       rejected: '対応不可'
     };
     const STATUS_KEYS = ['unhandled', 'inProgress', 'completed', 'rejected'];
+    const MAX_ATTACHMENTS_PER_REPORT = 5;
 
     // ======================================================================
     // 2. Mock Data
@@ -91,6 +93,7 @@
       methods: ['GoogleMeet', '電話等', '対面'],
       businessTypes: ['訪問介護', '通所介護', '居宅介護支援', '福祉用具貸与', '小規模多機能', '有料老人ホーム', 'その他'],
       prefectures: ['東京都', '神奈川県', '大阪府', '愛知県', '福岡県', '北海道', 'その他'],
+      attachmentFolderConfigured: true,
       allStaff: [
         { email: 'test@tadakayo.jp', name: 'テスト太郎' },
         { email: 'tanaka@tadakayo.jp', name: '田中花子' }
@@ -263,12 +266,13 @@
                 content: c.content || null,
                 remarks: c.remarks || null,
                 meetUrl: c.meetUrl || null,
+                attachments: c.attachments || [],
                 staffName: c.staffName || null,
                 staffEmail: c.staffEmail || null
               });
               return { ...c, status: 'inProgress', supportCount: (c.supportCount || 1) + 1,
                 supportHistory: history,
-                scheduledDateTime: null, method: null, content: null, remarks: null, eventId: null, meetUrl: null };
+                scheduledDateTime: null, method: null, content: null, remarks: null, eventId: null, meetUrl: null, attachments: [] };
             });
             resolve();
           }, 300));
@@ -354,7 +358,20 @@
                 if (recordData.method === 'GoogleMeet') newUrl = 'https://meet.google.com/mock-' + rand;
                 else if (recordData.method === 'Zoom') newUrl = 'https://zoom.us/j/' + Math.floor(Math.random() * 9000000000 + 1000000000);
               }
-              return { ...c, ...recordData, meetUrl: newUrl };
+              var keepIds = Array.isArray(recordData.keepAttachmentIds)
+                ? recordData.keepAttachmentIds
+                : (c.attachments || []).map(a => a.fileId);
+              var kept = (c.attachments || []).filter(a => keepIds.includes(a.fileId));
+              var created = (recordData.newAttachments || []).map((f, idx) => ({
+                fileId: 'local-' + Date.now() + '-' + idx,
+                name: f.name,
+                url: '#',
+                mimeType: f.mimeType || 'application/octet-stream',
+                size: f.size || 0,
+                uploadedAt: new Date().toISOString(),
+                uploadedBy: (recordData.user && recordData.user.email) || ''
+              }));
+              return { ...c, ...recordData, meetUrl: newUrl, attachments: [...kept, ...created] };
             });
             resolve();
           }, 300));
@@ -450,6 +467,10 @@
 
       const [modalMode, setModalMode] = useState(null);
       const [editFormData, setEditFormData] = useState({});
+      const [existingAttachments, setExistingAttachments] = useState([]);
+      const [pendingFiles, setPendingFiles] = useState([]);
+      const [dragOverAttachments, setDragOverAttachments] = useState(false);
+      const fileInputRef = useRef(null);
       const [submitting, setSubmitting] = useState(false);
       const [emailModal, setEmailModal] = useState(null);
       const [expandedEmailIdx, setExpandedEmailIdx] = useState(null);
@@ -546,6 +567,52 @@
         Object.keys(tags).forEach(tag => { result = result.split(tag).join(tags[tag]); });
         return result;
       };
+
+      const getAttachmentCount = useCallback(() => {
+        return (existingAttachments?.length || 0) + (pendingFiles?.length || 0);
+      }, [existingAttachments, pendingFiles]);
+
+      const addFilesToPending = useCallback((fileList) => {
+        var files = Array.from(fileList || []);
+        if (!files.length) return;
+        var remaining = MAX_ATTACHMENTS_PER_REPORT - getAttachmentCount();
+        if (remaining <= 0) {
+          showToast('添付ファイルは1回の報告につき最大5件です。', { type: 'warning', title: '上限超過' });
+          return;
+        }
+        if (files.length > remaining) {
+          showToast('最大5件までです。先頭' + remaining + '件のみ追加しました。', { type: 'warning', title: '添付上限' });
+          files = files.slice(0, remaining);
+        }
+        setPendingFiles(prev => [...prev, ...files]);
+      }, [getAttachmentCount, showToast]);
+
+      const removeExistingAttachment = useCallback((fileId) => {
+        setExistingAttachments(prev => prev.filter(a => a.fileId !== fileId));
+      }, []);
+
+      const removePendingFile = useCallback((index) => {
+        setPendingFiles(prev => prev.filter((_, i) => i !== index));
+      }, []);
+
+      const toBase64Payload = useCallback((file) => {
+        return new Promise((resolve, reject) => {
+          var reader = new FileReader();
+          reader.onload = function() {
+            var result = String(reader.result || '');
+            var comma = result.indexOf(',');
+            var base64 = comma >= 0 ? result.substring(comma + 1) : result;
+            resolve({
+              name: file.name,
+              mimeType: file.type || 'application/octet-stream',
+              size: file.size || 0,
+              base64Data: base64
+            });
+          };
+          reader.onerror = function() { reject(new Error('ファイルの読み込みに失敗しました: ' + file.name)); };
+          reader.readAsDataURL(file);
+        });
+      }, []);
 
       const handleDecline = () => {
         if (!selectedCase || !user) return;
@@ -683,10 +750,26 @@
           if (modalMode === 'report') {
             payload.status = 'completed';
           }
+          if (modalMode === 'report' || modalMode === 'edit') {
+            var total = (existingAttachments?.length || 0) + (pendingFiles?.length || 0);
+            if (total > MAX_ATTACHMENTS_PER_REPORT) {
+              throw new Error('添付ファイルは1回の報告につき最大5件です。');
+            }
+            if ((pendingFiles?.length || 0) > 0 && !masters?.attachmentFolderConfigured) {
+              throw new Error('添付保存先が未設定です。設定シートの ATTACHMENT_FOLDER_ID を設定してください。');
+            }
+            var encodedFiles = await Promise.all((pendingFiles || []).map(toBase64Payload));
+            payload.keepAttachmentIds = (existingAttachments || []).map(a => a.fileId).filter(Boolean);
+            payload.newAttachments = encodedFiles;
+            payload.user = user ? { name: user.name, email: user.email } : null;
+          }
           await Api.updateSupportRecord(payload);
           const updatedCases = await Api.getAllCases();
           setCases(updatedCases);
           setModalMode(null);
+          setPendingFiles([]);
+          setExistingAttachments([]);
+          setDragOverAttachments(false);
 
           if (payload.status === 'completed') {
             setActiveTab('completed');
@@ -734,6 +817,9 @@
           content: selectedCase.content || '',
           status: selectedCase.status
         });
+        setExistingAttachments(Array.isArray(selectedCase.attachments) ? selectedCase.attachments : []);
+        setPendingFiles([]);
+        setDragOverAttachments(false);
       };
 
       if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-teal-600 w-8 h-8"/></div>;
@@ -1041,6 +1127,25 @@
                           <span className="font-bold block mb-1">記録:</span>{selectedCase.content}
                         </div>
                       )}
+                      {selectedCase.attachments && selectedCase.attachments.length > 0 && (
+                        <div className="bg-slate-50 p-4 rounded-2xl">
+                          <span className="font-bold block mb-2 text-xs text-slate-600">添付ファイル ({selectedCase.attachments.length}件)</span>
+                          <div className="space-y-1.5">
+                            {selectedCase.attachments.map((att, idx) => (
+                              <a
+                                key={(att.fileId || 'att') + '-' + idx}
+                                href={att.url || '#'}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex items-center gap-2 text-xs font-bold text-sky-700 hover:text-sky-800 hover:underline"
+                              >
+                                <Paperclip size={12} />
+                                <span className="truncate">{att.name || ('添付ファイル' + (idx + 1))}</span>
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </section>
                     )}
                     {/* 過去の対応記録 */}
@@ -1088,6 +1193,23 @@
                                 <div className="p-3 bg-slate-50 rounded-xl">
                                   <span className="text-[9px] font-black text-slate-400 uppercase block mb-1">実施記録</span>
                                   <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-wrap">{hist.content}</p>
+                                </div>
+                              )}
+                              {hist.attachments && hist.attachments.length > 0 && (
+                                <div className="p-3 bg-slate-50 rounded-xl space-y-1.5">
+                                  <span className="text-[9px] font-black text-slate-400 uppercase block mb-1">添付ファイル</span>
+                                  {hist.attachments.map((att, aIdx) => (
+                                    <a
+                                      key={(att.fileId || 'hist-att') + '-' + aIdx}
+                                      href={att.url || '#'}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="flex items-center gap-1.5 text-xs font-bold text-sky-700 hover:underline"
+                                    >
+                                      <Paperclip size={11} />
+                                      <span className="truncate">{att.name || ('添付ファイル' + (aIdx + 1))}</span>
+                                    </a>
+                                  ))}
                                 </div>
                               )}
                               {hist.remarks && (
@@ -1370,7 +1492,7 @@
                       {modalMode === 'schedule' ? 'Googleカレンダー予定を作成します' : modalMode === 'report' ? 'ステータスを「完了」に変更します' : 'データを上書き保存します'}
                     </p>
                   </div>
-                  <button onClick={() => setModalMode(null)}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
+                  <button onClick={() => { setModalMode(null); setPendingFiles([]); setExistingAttachments([]); setDragOverAttachments(false); }}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
                 </div>
                 <form onSubmit={handleEditSave} className="space-y-6">
                   {(modalMode === 'schedule' || modalMode === 'edit') && (
@@ -1403,6 +1525,79 @@
                     <div className="space-y-1">
                       <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><FileText size={10}/> 実施記録・メモ</label>
                       <textarea rows={6} required={modalMode === 'report'} value={editFormData.content || ''} onChange={e => setEditFormData({...editFormData, content: e.target.value})} className="w-full border-2 border-slate-100 rounded-xl p-3 text-xs font-bold outline-none focus:border-teal-500" placeholder="実施したサポート内容や、次回の引継ぎ事項を入力してください..." />
+                    </div>
+                  )}
+                  {(modalMode === 'report' || modalMode === 'edit') && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><Paperclip size={10}/> 添付ファイル</label>
+                        <span className="text-[10px] font-bold text-slate-400">{getAttachmentCount()} / {MAX_ATTACHMENTS_PER_REPORT}</span>
+                      </div>
+                      {!masters?.attachmentFolderConfigured && (
+                        <p className="text-[10px] text-rose-600 font-bold">
+                          保存先が未設定です。「設定」シートの `ATTACHMENT_FOLDER_ID` を設定してください。
+                        </p>
+                      )}
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => {
+                          addFilesToPending(e.target.files);
+                          e.target.value = '';
+                        }}
+                      />
+                      <div
+                        onDragOver={(e) => { e.preventDefault(); setDragOverAttachments(true); }}
+                        onDragLeave={(e) => { e.preventDefault(); setDragOverAttachments(false); }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setDragOverAttachments(false);
+                          addFilesToPending(e.dataTransfer.files);
+                        }}
+                        className={`border-2 border-dashed rounded-2xl p-4 transition-colors ${
+                          dragOverAttachments ? 'border-teal-400 bg-teal-50' : 'border-slate-200 bg-slate-50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+                            <UploadCloud size={14} />
+                            ここにドラッグ＆ドロップ（最大5件）
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="px-3 py-1.5 rounded-lg bg-slate-800 text-white text-[10px] font-black hover:bg-slate-700"
+                          >
+                            ファイル選択
+                          </button>
+                        </div>
+                      </div>
+                      {(existingAttachments.length > 0 || pendingFiles.length > 0) && (
+                        <div className="space-y-2">
+                          {existingAttachments.map((att, idx) => (
+                            <div key={(att.fileId || 'existing') + '-' + idx} className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+                              <Paperclip size={12} className="text-slate-500 shrink-0" />
+                              <a href={att.url || '#'} target="_blank" rel="noreferrer" className="flex-1 min-w-0 truncate text-xs font-bold text-sky-700 hover:underline">
+                                {att.name || ('添付ファイル' + (idx + 1))}
+                              </a>
+                              <button type="button" onClick={() => removeExistingAttachment(att.fileId)} className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50" title="削除">
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          ))}
+                          {pendingFiles.map((file, idx) => (
+                            <div key={file.name + '-' + idx} className="flex items-center gap-2 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2">
+                              <UploadCloud size={12} className="text-emerald-600 shrink-0" />
+                              <span className="flex-1 min-w-0 truncate text-xs font-bold text-emerald-700">{file.name}</span>
+                              <button type="button" onClick={() => removePendingFile(idx)} className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50" title="削除">
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                   {modalMode === 'edit' && (
