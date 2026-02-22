@@ -69,7 +69,7 @@
       MessageSquare, ChevronRight, X, Eye, Lock,
       AlertTriangle, FileText, Clock, Info, CheckCircle2,
       Mail, Send, Reply, RotateCcw, Search, Filter, XCircle,
-      Paperclip, UploadCloud, Trash2
+      Paperclip, UploadCloud, Trash2, Shield, Settings2, Save
     } from 'lucide-react';
 
     // ======================================================================
@@ -82,6 +82,7 @@
       rejected: '対応不可'
     };
     const STATUS_KEYS = ['unhandled', 'inProgress', 'completed', 'rejected'];
+    const ADMIN_ROLE_LABELS = { admin: '管理者', staff: 'タダメン', disabled: '無効' };
     const MAX_ATTACHMENTS_PER_REPORT = 5;
 
     // ======================================================================
@@ -98,6 +99,10 @@
         { email: 'test@tadakayo.jp', name: 'テスト太郎' },
         { email: 'tanaka@tadakayo.jp', name: '田中花子' }
       ],
+      limits: {
+        annual: 10,
+        caseSupport: 3
+      },
       emailTemplates: {
         initialSubject: 'タダサポ｜ご相談を承りました',
         initialBody: '{{名前}} 様\n\nこの度はタダサポへご相談いただきありがとうございます。\n担当させていただきます{{担当者名}}と申します。\n\nご相談内容を確認いたしました。\n追ってサポート日時のご連絡をさせていただきます。\n\n何かご不明な点がございましたら、お気軽にお問い合わせください。\n\n今後ともよろしくお願いいたします。',
@@ -177,6 +182,26 @@
       // ── パターン14: 完了（1回目で完了・再開可能） ──
       { id: '2025-12-10T11:00:00', timestamp: '2025-12-10T11:00:00', email: 'nakamura@group.jp', officeName: 'なかむらグループホーム', requesterName: '中村太一', prefecture: '北海道', details: 'Googleフォームでの満足度アンケート作成を手伝ってほしい。', serviceType: '有料老人ホーム', status: 'completed', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: '2025-12-20T10:00:00', supportCount: 1, method: 'GoogleMeet', businessType: '有料老人ホーム', content: 'Googleフォームで満足度アンケートを作成。回答の集計方法と共有設定を説明。', remarks: null, eventId: 'evt008', meetUrl: 'https://meet.google.com/form-meet-001', currentFiscalYearCount: 2, supportHistory: [], threadIds: [], threads: [] }
     ];
+    let mockStaffMembers = [
+      { email: 'test@tadakayo.jp', name: 'テスト太郎', role: 'admin', isActive: true },
+      { email: 'tanaka@tadakayo.jp', name: '田中花子', role: 'staff', isActive: true },
+      { email: 'sato@tadakayo.jp', name: '佐藤次郎', role: 'staff', isActive: true },
+      { email: 'inactive@tadakayo.jp', name: '無効メンバー', role: 'staff', isActive: false }
+    ];
+    let mockAdminSettings = {
+      MAIL_FORCE_CC: '',
+      ANNUAL_USAGE_LIMIT: '10',
+      CASE_USAGE_LIMIT: '3',
+      MAIL_INITIAL_SUBJECT: MOCK_MASTERS.emailTemplates.initialSubject,
+      MAIL_INITIAL_BODY: MOCK_MASTERS.emailTemplates.initialBody,
+      MAIL_DECLINED_SUBJECT: MOCK_MASTERS.emailTemplates.declinedSubject,
+      MAIL_DECLINED_BODY: MOCK_MASTERS.emailTemplates.declinedBody,
+      SHARED_CALENDAR_ID: '',
+      ATTACHMENT_FOLDER_ID: '',
+      ZOOM_ACCOUNT_ID: '',
+      ZOOM_CLIENT_ID: '',
+      ZOOM_CLIENT_SECRET: ''
+    };
 
     // ======================================================================
     // 3. API Adapter
@@ -379,6 +404,118 @@
         return new Promise((resolve, reject) => {
           google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).updateSupportRecord(recordData);
         });
+      },
+      getAdminPanelData: () => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            resolve({
+              staffMembers: mockStaffMembers.map(s => ({ ...s })),
+              settings: { ...mockAdminSettings },
+              auditLogs: []
+            });
+          }, 200));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).getAdminPanelData();
+        });
+      },
+      upsertStaffMember: (payload) => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            const email = String(payload?.email || '').trim().toLowerCase();
+            const role = payload?.role === 'admin' ? 'admin' : 'staff';
+            if (!email) throw new Error('email が必要です。');
+            const idx = mockStaffMembers.findIndex(x => x.email === email);
+            if (idx >= 0) {
+              mockStaffMembers[idx] = { ...mockStaffMembers[idx], role, isActive: true };
+            }
+            resolve();
+          }, 200));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).upsertStaffMember(payload);
+        });
+      },
+      deactivateStaffMember: (email) => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            const target = String(email || '').trim().toLowerCase();
+            const idx = mockStaffMembers.findIndex(x => x.email === target);
+            if (idx >= 0) mockStaffMembers[idx] = { ...mockStaffMembers[idx], isActive: false };
+            resolve();
+          }, 200));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).deactivateStaffMember(email);
+        });
+      },
+      updateSettingsAdmin: (patch) => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            mockAdminSettings = { ...mockAdminSettings, ...patch };
+            if (Object.prototype.hasOwnProperty.call(patch, 'ANNUAL_USAGE_LIMIT')) {
+              MOCK_MASTERS.limits.annual = Number(patch.ANNUAL_USAGE_LIMIT) || MOCK_MASTERS.limits.annual;
+            }
+            if (Object.prototype.hasOwnProperty.call(patch, 'CASE_USAGE_LIMIT')) {
+              MOCK_MASTERS.limits.caseSupport = Number(patch.CASE_USAGE_LIMIT) || MOCK_MASTERS.limits.caseSupport;
+            }
+            resolve({ ...mockAdminSettings });
+          }, 300));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).updateSettingsAdmin(patch);
+        });
+      },
+      reassignCaseAdmin: (caseId, staffEmail) => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            const target = mockStaffMembers.find(x => x.email === String(staffEmail || '').toLowerCase());
+            mockCases = mockCases.map(c => c.id === caseId
+              ? { ...c, staffEmail: target?.email || '', staffName: target?.name || '' }
+              : c
+            );
+            resolve();
+          }, 250));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).reassignCaseAdmin(caseId, staffEmail);
+        });
+      },
+      setCaseStatusAdmin: (caseId, status) => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            mockCases = mockCases.map(c => c.id === caseId ? { ...c, status } : c);
+            resolve();
+          }, 250));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).setCaseStatusAdmin(caseId, status);
+        });
+      },
+      updateCaseDataAdmin: (caseId, payload) => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            const casePatch = payload?.casePatch || {};
+            const recordPatch = payload?.recordPatch || {};
+            mockCases = mockCases.map(c => {
+              if (c.id !== caseId) return c;
+              const staff = recordPatch.staffEmail
+                ? mockStaffMembers.find(x => x.email === String(recordPatch.staffEmail).toLowerCase())
+                : null;
+              return {
+                ...c,
+                ...casePatch,
+                ...recordPatch,
+                staffEmail: Object.prototype.hasOwnProperty.call(recordPatch, 'staffEmail') ? (staff?.email || '') : c.staffEmail,
+                staffName: Object.prototype.hasOwnProperty.call(recordPatch, 'staffEmail') ? (staff?.name || '') : c.staffName
+              };
+            });
+            resolve();
+          }, 300));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).updateCaseDataAdmin(caseId, payload);
+        });
       }
     };
 
@@ -457,12 +594,17 @@
       const [activeTab, setActiveTab] = useState('unhandled');
       const [selectedCaseId, setSelectedCaseId] = useState(null);
       const [isDashboardMode, setIsDashboardMode] = useState(false);
+      const [isAdminMode, setIsAdminMode] = useState(false);
 
       // 検索
       const [searchOpen, setSearchOpen] = useState(false);
       const [searchWord, setSearchWord] = useState('');
       const [searchDateFrom, setSearchDateFrom] = useState('');
       const [searchDateTo, setSearchDateTo] = useState('');
+      const [searchPrefecture, setSearchPrefecture] = useState('');
+      const [searchServiceType, setSearchServiceType] = useState('');
+      const [searchAssigned, setSearchAssigned] = useState('all');
+      const [searchStaffEmail, setSearchStaffEmail] = useState('');
       const searchInputRef = useRef(null);
 
       const [modalMode, setModalMode] = useState(null);
@@ -477,6 +619,17 @@
       const [threadGroups, setThreadGroups] = useState([]);
       const [threadLoading, setThreadLoading] = useState(false);
       const [openThreadId, setOpenThreadId] = useState(null);
+      const [adminPanelData, setAdminPanelData] = useState(null);
+      const [adminPanelLoading, setAdminPanelLoading] = useState(false);
+      const [adminRoleDialogOpen, setAdminRoleDialogOpen] = useState(false);
+      const [adminSettingsDialogOpen, setAdminSettingsDialogOpen] = useState(false);
+      const [roleSearchWord, setRoleSearchWord] = useState('');
+      const [roleStatusFilter, setRoleStatusFilter] = useState('all');
+      const [settingsDraft, setSettingsDraft] = useState({});
+      const [settingsTab, setSettingsTab] = useState('limits');
+      const [adminReassignEmail, setAdminReassignEmail] = useState('');
+      const [adminStatusValue, setAdminStatusValue] = useState('');
+      const [adminCaseEditDraft, setAdminCaseEditDraft] = useState({});
 
       // Dialog state
       const [toasts, setToasts] = useState([]);
@@ -498,6 +651,31 @@
       }, []);
 
       useEffect(() => {
+        if (!user?.isAdmin && isAdminMode) {
+          setIsAdminMode(false);
+        }
+      }, [user, isAdminMode]);
+
+      const refreshAdminPanelData = useCallback(async () => {
+        if (!user?.isAdmin) return;
+        setAdminPanelLoading(true);
+        try {
+          const data = await Api.getAdminPanelData();
+          setAdminPanelData(data);
+          setSettingsDraft(data?.settings || {});
+        } catch (e) {
+          showToast(e.message || String(e), { type: 'error', title: '管理データ取得エラー' });
+        } finally {
+          setAdminPanelLoading(false);
+        }
+      }, [showToast, user]);
+
+      useEffect(() => {
+        if (!isAdminMode) return;
+        refreshAdminPanelData();
+      }, [isAdminMode, refreshAdminPanelData]);
+
+      useEffect(() => {
         Api.getInitialData()
           .then(data => {
             setUser(data.user);
@@ -511,8 +689,22 @@
           });
       }, []);
 
-      const hasActiveSearch = searchWord.trim() !== '' || searchDateFrom !== '' || searchDateTo !== '';
-      const clearSearch = useCallback(() => { setSearchWord(''); setSearchDateFrom(''); setSearchDateTo(''); }, []);
+      const hasActiveSearch = searchWord.trim() !== ''
+        || searchDateFrom !== ''
+        || searchDateTo !== ''
+        || searchPrefecture !== ''
+        || searchServiceType !== ''
+        || searchAssigned !== 'all'
+        || searchStaffEmail !== '';
+      const clearSearch = useCallback(() => {
+        setSearchWord('');
+        setSearchDateFrom('');
+        setSearchDateTo('');
+        setSearchPrefecture('');
+        setSearchServiceType('');
+        setSearchAssigned('all');
+        setSearchStaffEmail('');
+      }, []);
 
       const filteredCases = useMemo(() => {
         if (!user) return [];
@@ -534,11 +726,52 @@
             var to = new Date(searchDateTo); to.setHours(23,59,59,999);
             if (new Date(c.timestamp) > to) return false;
           }
+          if (searchPrefecture && c.prefecture !== searchPrefecture) return false;
+          if (searchServiceType && c.serviceType !== searchServiceType) return false;
+          if (searchAssigned === 'assigned' && !c.staffEmail) return false;
+          if (searchAssigned === 'unassigned' && c.staffEmail) return false;
+          if (searchStaffEmail && isDashboardMode && c.staffEmail !== searchStaffEmail) return false;
           return true;
         }).sort((a, b) => b.timestamp.localeCompare(a.timestamp));
-      }, [cases, activeTab, isDashboardMode, user, searchWord, searchDateFrom, searchDateTo]);
+      }, [
+        cases,
+        activeTab,
+        isDashboardMode,
+        user,
+        searchWord,
+        searchDateFrom,
+        searchDateTo,
+        searchPrefecture,
+        searchServiceType,
+        searchAssigned,
+        searchStaffEmail
+      ]);
 
       const selectedCase = useMemo(() => cases.find(c => c.id === selectedCaseId) || null, [cases, selectedCaseId]);
+      const isReadOnlyMode = isDashboardMode && !isAdminMode;
+      const activeStaffMembers = useMemo(() => {
+        const base = adminPanelData?.staffMembers || masters?.allStaff || [];
+        return base.filter(s => s && s.email && (s.isActive === undefined || s.isActive));
+      }, [adminPanelData, masters]);
+
+      useEffect(() => {
+        if (!selectedCase) return;
+        setAdminReassignEmail(selectedCase.staffEmail || '');
+        setAdminStatusValue(selectedCase.status || 'unhandled');
+        setAdminCaseEditDraft({
+          officeName: selectedCase.officeName || '',
+          requesterName: selectedCase.requesterName || '',
+          email: selectedCase.email || '',
+          details: selectedCase.details || '',
+          prefecture: selectedCase.prefecture || '',
+          serviceType: selectedCase.serviceType || '',
+          supportCount: String(selectedCase.supportCount || 1),
+          caseLimitOverride: selectedCase.caseLimitOverride === undefined || selectedCase.caseLimitOverride === null ? '' : String(selectedCase.caseLimitOverride),
+          annualLimitOverride: selectedCase.annualLimitOverride === undefined || selectedCase.annualLimitOverride === null ? '' : String(selectedCase.annualLimitOverride),
+          content: selectedCase.content || '',
+          remarks: selectedCase.remarks || ''
+        });
+      }, [selectedCase]);
 
       // 案件切り替え時にスレッドを読み込み
       useEffect(() => {
@@ -822,6 +1055,159 @@
         setDragOverAttachments(false);
       };
 
+      const handleAdminReassign = async () => {
+        if (!selectedCase || !adminReassignEmail || adminReassignEmail === (selectedCase.staffEmail || '')) return;
+        setSubmitting(true);
+        try {
+          await Api.reassignCaseAdmin(selectedCase.timestamp, adminReassignEmail);
+          const updatedCases = await Api.getAllCases();
+          setCases(updatedCases);
+          showToast('担当者を変更しました。', { type: 'success', title: '管理者操作' });
+        } catch (e) {
+          showToast(e.message || String(e), { type: 'error', title: '担当者変更エラー' });
+        } finally {
+          setSubmitting(false);
+        }
+      };
+
+      const handleAdminStatusChange = async () => {
+        if (!selectedCase || !adminStatusValue || adminStatusValue === selectedCase.status) return;
+        setSubmitting(true);
+        try {
+          await Api.setCaseStatusAdmin(selectedCase.timestamp, adminStatusValue);
+          const updatedCases = await Api.getAllCases();
+          setCases(updatedCases);
+          setActiveTab(adminStatusValue);
+          showToast('案件ステータスを更新しました。', { type: 'success', title: '管理者操作' });
+        } catch (e) {
+          showToast(e.message || String(e), { type: 'error', title: 'ステータス変更エラー' });
+        } finally {
+          setSubmitting(false);
+        }
+      };
+
+      const handleAdminCaseEditSave = async () => {
+        if (!selectedCase) return;
+        const payload = {
+          casePatch: {
+            officeName: adminCaseEditDraft.officeName,
+            requesterName: adminCaseEditDraft.requesterName,
+            email: adminCaseEditDraft.email,
+            details: adminCaseEditDraft.details,
+            prefecture: adminCaseEditDraft.prefecture,
+            serviceType: adminCaseEditDraft.serviceType
+          },
+          recordPatch: {
+            supportCount: Number(adminCaseEditDraft.supportCount || 1),
+            caseLimitOverride: adminCaseEditDraft.caseLimitOverride === '' ? null : Number(adminCaseEditDraft.caseLimitOverride),
+            annualLimitOverride: adminCaseEditDraft.annualLimitOverride === '' ? null : Number(adminCaseEditDraft.annualLimitOverride),
+            content: adminCaseEditDraft.content,
+            remarks: adminCaseEditDraft.remarks
+          }
+        };
+        setSubmitting(true);
+        try {
+          await Api.updateCaseDataAdmin(selectedCase.timestamp, payload);
+          const updatedCases = await Api.getAllCases();
+          setCases(updatedCases);
+          showToast('案件データを更新しました。', { type: 'success', title: '管理者操作' });
+        } catch (e) {
+          showToast(e.message || String(e), { type: 'error', title: '案件更新エラー' });
+        } finally {
+          setSubmitting(false);
+        }
+      };
+
+      const getRoleStatusValue = useCallback((staff) => {
+        if (!staff?.isActive) return 'disabled';
+        return staff.role === 'admin' ? 'admin' : 'staff';
+      }, []);
+
+      const handleRoleStatusChange = async (staff, nextStatus) => {
+        if (!staff || !staff.email) return;
+        if (staff.email === user?.email) return;
+        const current = getRoleStatusValue(staff);
+        if (current === nextStatus) return;
+        setSubmitting(true);
+        try {
+          if (nextStatus === 'disabled') {
+            await Api.deactivateStaffMember(staff.email);
+          } else {
+            await Api.upsertStaffMember({ email: staff.email, role: nextStatus });
+          }
+          await refreshAdminPanelData();
+          showToast('権限を更新しました。', { type: 'success', title: '権限管理' });
+        } catch (e) {
+          showToast(e.message || String(e), { type: 'error', title: '権限更新エラー' });
+        } finally {
+          setSubmitting(false);
+        }
+      };
+
+      const handleSaveSettings = async () => {
+        if (!adminPanelData?.settings) return;
+        const patch = {};
+        Object.keys(settingsDraft || {}).forEach(k => {
+          if (String(settingsDraft[k] ?? '') !== String(adminPanelData.settings[k] ?? '')) patch[k] = settingsDraft[k];
+        });
+        if (!Object.keys(patch).length) {
+          showToast('変更はありません。', { type: 'info', title: '設定管理' });
+          return;
+        }
+        setSubmitting(true);
+        try {
+          await Api.updateSettingsAdmin(patch);
+          await refreshAdminPanelData();
+          const refreshed = await Api.getInitialData();
+          setMasters(refreshed.masters);
+          showToast('設定を保存しました。', { type: 'success', title: '設定管理' });
+        } catch (e) {
+          showToast(e.message || String(e), { type: 'error', title: '設定更新エラー' });
+        } finally {
+          setSubmitting(false);
+        }
+      };
+
+      const roleMembers = useMemo(() => {
+        const list = adminPanelData?.staffMembers || [];
+        const keyword = roleSearchWord.trim().toLowerCase();
+        return list.filter(staff => {
+          const status = getRoleStatusValue(staff);
+          if (roleStatusFilter !== 'all' && status !== roleStatusFilter) return false;
+          if (!keyword) return true;
+          return [staff.name, staff.email].filter(Boolean).join(' ').toLowerCase().includes(keyword);
+        });
+      }, [adminPanelData, roleSearchWord, roleStatusFilter, getRoleStatusValue]);
+
+      const settingsMeta = useMemo(() => ({
+        ANNUAL_USAGE_LIMIT: { label: '年度利用回数上限', category: 'limits', desc: '1ユーザーの年度内対応上限' },
+        CASE_USAGE_LIMIT: { label: '案件ごとの対応上限', category: 'limits', desc: '1案件あたりの対応上限' },
+        MAIL_FORCE_CC: { label: '通常CCメールアドレス（任意）', category: 'mail', desc: '通常のCCとして追加されます（未設定可）' },
+        MAIL_INITIAL_SUBJECT: { label: '初回メール件名', category: 'mail', desc: '案件の初回送信時に使用' },
+        MAIL_INITIAL_BODY: { label: '初回メール本文', category: 'mail', desc: 'テンプレート本文（タグ利用可）' },
+        MAIL_DECLINED_SUBJECT: { label: '回数超過メール件名', category: 'mail', desc: '回数超過時に使用' },
+        MAIL_DECLINED_BODY: { label: '回数超過メール本文', category: 'mail', desc: '回数超過時のテンプレート本文' },
+        SHARED_CALENDAR_ID: { label: '共有カレンダーID', category: 'integration', desc: '予定作成に使用' },
+        ATTACHMENT_FOLDER_ID: { label: '添付保存先フォルダID', category: 'integration', desc: '添付ファイル保存先' },
+        ZOOM_ACCOUNT_ID: { label: 'Zoom Account ID', category: 'integration', desc: 'Zoom連携情報' },
+        ZOOM_CLIENT_ID: { label: 'Zoom Client ID', category: 'integration', desc: 'Zoom連携情報' },
+        ZOOM_CLIENT_SECRET: { label: 'Zoom Client Secret', category: 'integration', desc: 'Zoom連携情報' }
+      }), []);
+
+      const visibleSettingCategories = useMemo(() => {
+        const byCategory = { limits: 0, mail: 0, integration: 0, other: 0 };
+        Object.keys(settingsDraft || {}).forEach(k => {
+          const category = settingsMeta[k]?.category || 'other';
+          byCategory[category] = (byCategory[category] || 0) + 1;
+        });
+        return Object.keys(byCategory).filter(c => byCategory[c] > 0);
+      }, [settingsDraft, settingsMeta]);
+
+      useEffect(() => {
+        if (!visibleSettingCategories.length) return;
+        if (!visibleSettingCategories.includes(settingsTab)) setSettingsTab(visibleSettingCategories[0]);
+      }, [settingsTab, visibleSettingCategories]);
+
       if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-teal-600 w-8 h-8"/></div>;
       if (authError) return <div className="h-screen flex items-center justify-center bg-rose-50 text-rose-600 font-bold p-10">{authError}</div>;
 
@@ -833,20 +1219,10 @@
           <ConfirmDialog dialog={confirmDialog} onClose={() => setConfirmDialog(null)} />
 
           {/* Header */}
-          <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 z-20 shadow-sm relative">
+          <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-3 sm:px-4 lg:px-6 shrink-0 z-20 shadow-sm">
             <div className="flex items-center gap-3">
               <div className="bg-teal-600 text-white p-1.5 rounded-lg"><Activity size={18} /></div>
               <span className="font-black text-base tracking-tighter hidden sm:inline">タダサポ管理</span>
-            </div>
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-               <button
-                 onClick={() => { setIsDashboardMode(!isDashboardMode); setSelectedCaseId(null); }}
-                 className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-black transition-all border ${
-                   isDashboardMode ? 'bg-slate-800 text-white border-slate-900 shadow-md' : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
-                 }`}>
-                 {isDashboardMode ? <Eye size={14} className="text-emerald-400"/> : <Lock size={14}/>}
-                 {isDashboardMode ? '閲覧モード (全体)' : '通常モード (自分)'}
-               </button>
             </div>
             <div className="flex items-center gap-3">
               <div className="text-right hidden sm:block">
@@ -858,6 +1234,77 @@
               </div>
             </div>
           </header>
+          <div className="px-3 sm:px-4 lg:px-6 py-2 bg-white border-b border-slate-100">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between" role="toolbar" aria-label="表示モード切替">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black text-slate-500">表示</span>
+                <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 p-1" role="group" aria-label="表示モード">
+                  <button
+                    type="button"
+                    aria-pressed={!isDashboardMode && !isAdminMode}
+                    onClick={() => {
+                      setIsDashboardMode(false);
+                      setIsAdminMode(false);
+                      setSelectedCaseId(null);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black transition-colors ${
+                      !isDashboardMode && !isAdminMode ? 'bg-white text-slate-900 shadow-sm border border-slate-200' : 'text-slate-500 hover:bg-slate-100'
+                    }`}
+                  >
+                    通常
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={isDashboardMode && !isAdminMode}
+                    onClick={() => {
+                      setIsDashboardMode(true);
+                      setIsAdminMode(false);
+                      setSelectedCaseId(null);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black transition-colors ${
+                      isDashboardMode && !isAdminMode ? 'bg-white text-slate-900 shadow-sm border border-slate-200' : 'text-slate-500 hover:bg-slate-100'
+                    }`}
+                  >
+                    閲覧
+                  </button>
+                  {user?.isAdmin && (
+                    <button
+                      type="button"
+                      aria-pressed={isAdminMode}
+                      onClick={() => {
+                        setIsDashboardMode(true);
+                        setIsAdminMode(true);
+                        setSelectedCaseId(null);
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-black transition-colors ${
+                        isAdminMode ? 'bg-amber-500 text-white' : 'text-amber-700 hover:bg-amber-100'
+                      }`}
+                    >
+                      管理
+                    </button>
+                  )}
+                </div>
+              </div>
+              {user?.isAdmin && isAdminMode && (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAdminRoleDialogOpen(true)}
+                    className="px-3 py-1.5 rounded-lg text-[10px] font-black bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 flex items-center gap-1.5"
+                  >
+                    <Shield size={12} /> 権限管理
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAdminSettingsDialogOpen(true)}
+                    className="px-3 py-1.5 rounded-lg text-[10px] font-black bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 flex items-center gap-1.5"
+                  >
+                    <Settings2 size={12} /> 設定管理
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
 
           <main className="flex-1 flex overflow-hidden">
             {/* Sidebar */}
@@ -942,6 +1389,59 @@
                         </div>
                       </div>
                     </fieldset>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">都道府県</label>
+                        <select
+                          value={searchPrefecture}
+                          onChange={e => setSearchPrefecture(e.target.value)}
+                          className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all"
+                        >
+                          <option value="">すべて</option>
+                          {(masters?.prefectures || []).map(p => <option key={p} value={p}>{p}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">サービス種別</label>
+                        <select
+                          value={searchServiceType}
+                          onChange={e => setSearchServiceType(e.target.value)}
+                          className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all"
+                        >
+                          <option value="">すべて</option>
+                          {(masters?.businessTypes || []).map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">担当状況</label>
+                        <select
+                          value={searchAssigned}
+                          onChange={e => setSearchAssigned(e.target.value)}
+                          className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all"
+                        >
+                          <option value="all">すべて</option>
+                          <option value="assigned">担当あり</option>
+                          <option value="unassigned">未割当</option>
+                        </select>
+                      </div>
+                      {isDashboardMode && (
+                        <div>
+                          <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">担当者（管理/閲覧）</label>
+                          <select
+                            value={searchStaffEmail}
+                            onChange={e => setSearchStaffEmail(e.target.value)}
+                            className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all"
+                          >
+                            <option value="">すべて</option>
+                            {activeStaffMembers.map(s => (
+                              <option key={s.email} value={s.email}>{s.name} ({s.email})</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
                     {/* クリアボタン + 件数 */}
                     <div className="flex items-center justify-between">
                       <p className="text-[10px] font-bold text-slate-400" role="status" aria-live="polite" aria-atomic="true">
@@ -973,7 +1473,8 @@
               )}
               {isDashboardMode && (
                 <div className="px-4 py-2 bg-slate-800 text-white text-[10px] font-bold text-center flex items-center justify-center gap-2" role="status">
-                  <Eye size={12} className="text-emerald-400"/> 全体を表示中（閲覧専用）
+                  {isAdminMode ? <Activity size={12} className="text-amber-300"/> : <Eye size={12} className="text-emerald-400"/>}
+                  {isAdminMode ? '管理モード: 全案件を表示中' : '閲覧モード: 全案件を表示中'}
                 </div>
               )}
               <div id="case-list-panel" role="tabpanel" aria-label={STATUS_LABELS[activeTab] + 'の案件一覧'} className="flex-1 overflow-y-auto p-3 space-y-2">
@@ -1337,6 +1838,101 @@
                         })}
                       </section>
                     )}
+                    {isAdminMode && user?.isAdmin && (
+                      <section className="bg-amber-50 border border-amber-200 p-6 rounded-[2rem] shadow-sm space-y-5">
+                        <h3 className="text-[10px] font-black text-amber-700 uppercase tracking-widest flex items-center gap-2">
+                          <Shield size={12} /> 管理者専用操作
+                        </h3>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                          <div className="bg-white rounded-2xl border border-amber-100 p-4 space-y-2">
+                            <p className="text-xs font-black text-slate-700">1. 担当者の変更</p>
+                            <p className="text-[10px] text-slate-500">現在の担当者を初期値で表示。変更時のみ実行できます。</p>
+                            <select
+                              value={adminReassignEmail}
+                              onChange={e => setAdminReassignEmail(e.target.value)}
+                              className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-amber-400"
+                            >
+                              <option value="">未割当</option>
+                              {activeStaffMembers.map(s => <option key={s.email} value={s.email}>{s.name} ({s.email})</option>)}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={handleAdminReassign}
+                              disabled={submitting || adminReassignEmail === (selectedCase.staffEmail || '')}
+                              className="px-4 py-2 rounded-xl text-xs font-black bg-amber-500 text-white disabled:opacity-40"
+                            >
+                              担当者変更
+                            </button>
+                          </div>
+                          <div className="bg-white rounded-2xl border border-amber-100 p-4 space-y-2">
+                            <p className="text-xs font-black text-slate-700">2. 案件ステータスの直接変更</p>
+                            <p className="text-[10px] text-slate-500">通常フロー外の遷移も管理者が実行できます。</p>
+                            <select
+                              value={adminStatusValue}
+                              onChange={e => setAdminStatusValue(e.target.value)}
+                              className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-amber-400"
+                            >
+                              {STATUS_KEYS.map(k => <option key={k} value={k}>{STATUS_LABELS[k]}</option>)}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={handleAdminStatusChange}
+                              disabled={submitting || adminStatusValue === selectedCase.status}
+                              className="px-4 py-2 rounded-xl text-xs font-black bg-slate-800 text-white disabled:opacity-40"
+                            >
+                              状態変更
+                            </button>
+                          </div>
+                        </div>
+                        <div className="bg-white rounded-2xl border border-amber-100 p-4 space-y-3">
+                          <p className="text-xs font-black text-slate-700">3. 案件データ直接編集（管理者）</p>
+                          <p className="text-[10px] text-slate-500">各項目に説明を付けています。必要な値だけ更新してください。</p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <label className="text-[10px] font-black text-slate-500">事業所名: 案件の対象事業所
+                              <input value={adminCaseEditDraft.officeName || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, officeName: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
+                            </label>
+                            <label className="text-[10px] font-black text-slate-500">担当窓口名: 依頼者名
+                              <input value={adminCaseEditDraft.requesterName || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, requesterName: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
+                            </label>
+                            <label className="text-[10px] font-black text-slate-500">メールアドレス: 送信先
+                              <input value={adminCaseEditDraft.email || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, email: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
+                            </label>
+                            <label className="text-[10px] font-black text-slate-500">サービス種別: 相談カテゴリ
+                              <input value={adminCaseEditDraft.serviceType || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, serviceType: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
+                            </label>
+                            <label className="text-[10px] font-black text-slate-500">都道府県: 事業所所在地
+                              <input value={adminCaseEditDraft.prefecture || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, prefecture: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
+                            </label>
+                            <label className="text-[10px] font-black text-slate-500">対応回数: 現在の回数
+                              <input type="number" min="1" value={adminCaseEditDraft.supportCount || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, supportCount: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
+                            </label>
+                            <label className="text-[10px] font-black text-slate-500">案件ごとの上限（特例）: 空欄で通常
+                              <input type="number" min="1" value={adminCaseEditDraft.caseLimitOverride || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, caseLimitOverride: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
+                            </label>
+                            <label className="text-[10px] font-black text-slate-500">年度上限（特例）: 空欄で通常
+                              <input type="number" min="1" value={adminCaseEditDraft.annualLimitOverride || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, annualLimitOverride: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
+                            </label>
+                          </div>
+                          <label className="text-[10px] font-black text-slate-500 block">相談内容: 受付時の原文
+                            <textarea rows={3} value={adminCaseEditDraft.details || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, details: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
+                          </label>
+                          <label className="text-[10px] font-black text-slate-500 block">対応記録: 実施内容
+                            <textarea rows={3} value={adminCaseEditDraft.content || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, content: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
+                          </label>
+                          <label className="text-[10px] font-black text-slate-500 block">備考: 内部メモ
+                            <textarea rows={2} value={adminCaseEditDraft.remarks || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, remarks: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
+                          </label>
+                          <button
+                            type="button"
+                            onClick={handleAdminCaseEditSave}
+                            disabled={submitting}
+                            className="px-4 py-2 rounded-xl text-xs font-black bg-emerald-600 text-white disabled:opacity-40 inline-flex items-center gap-1.5"
+                          >
+                            <Save size={12} /> 案件データ保存
+                          </button>
+                        </div>
+                      </section>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -1349,7 +1945,7 @@
           </main>
 
           {/* Fixed Action Buttons */}
-          {selectedCase && !isDashboardMode && (
+          {selectedCase && !isReadOnlyMode && (
             <div className="fixed bottom-6 left-0 right-0 px-6 flex justify-center pointer-events-none z-[100]">
               <div className="bg-slate-900/90 backdrop-blur-md p-2 rounded-2xl shadow-2xl flex flex-wrap justify-center gap-2 pointer-events-auto ring-4 ring-white/50 max-w-[90vw]">
                 {selectedCase.status === 'unhandled' && (
@@ -1405,7 +2001,131 @@
           {selectedCase && isDashboardMode && (
             <div className="fixed bottom-6 left-1/2 -translate-x-1/2 pointer-events-none z-[100]">
               <div className="bg-slate-800/80 backdrop-blur text-white px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2">
-                <Lock size={12}/> 閲覧専用モード (操作不可)
+                {isAdminMode ? <Activity size={12}/> : <Lock size={12}/>}
+                {isAdminMode ? '管理モード' : '閲覧専用モード (操作不可)'}
+              </div>
+            </div>
+          )}
+
+          {adminRoleDialogOpen && (
+            <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-sm p-4 flex items-center justify-center">
+              <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-black text-slate-800 flex items-center gap-2"><Shield size={16}/> 権限管理</h3>
+                    <p className="text-[10px] text-slate-500 mt-0.5">管理者 / タダメン / 無効 を設定できます（自分自身は変更不可）。</p>
+                  </div>
+                  <button onClick={() => setAdminRoleDialogOpen(false)} className="p-2 rounded-lg hover:bg-slate-100"><X size={16}/></button>
+                </div>
+                <div className="p-5 space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <input
+                      type="search"
+                      value={roleSearchWord}
+                      onChange={e => setRoleSearchWord(e.target.value)}
+                      placeholder="名前・メールで検索"
+                      className="py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-amber-400"
+                    />
+                    <select
+                      value={roleStatusFilter}
+                      onChange={e => setRoleStatusFilter(e.target.value)}
+                      className="py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-amber-400"
+                    >
+                      <option value="all">すべての状態</option>
+                      <option value="admin">管理者</option>
+                      <option value="staff">タダメン</option>
+                      <option value="disabled">無効</option>
+                    </select>
+                    <p className="text-[11px] font-black text-slate-400 flex items-center">{roleMembers.length} 件</p>
+                  </div>
+                  <div className="max-h-[52vh] overflow-auto border border-slate-100 rounded-2xl">
+                    {roleMembers.map(staff => {
+                      const current = getRoleStatusValue(staff);
+                      const isSelf = staff.email === user?.email;
+                      return (
+                        <div key={staff.email} className="px-3 py-2 border-b border-slate-50 last:border-b-0 flex flex-col md:flex-row md:items-center gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-black text-slate-700 truncate">{staff.name || '(名称未設定)'}</p>
+                            <p className="text-[10px] text-slate-400 truncate">{staff.email}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black text-slate-400">現在: {ADMIN_ROLE_LABELS[current]}</span>
+                            <select
+                              defaultValue={current}
+                              disabled={isSelf || submitting}
+                              onChange={e => handleRoleStatusChange(staff, e.target.value)}
+                              className="py-1.5 px-2 border border-slate-200 rounded-lg text-[11px] font-black disabled:opacity-40"
+                            >
+                              <option value="admin">管理者</option>
+                              <option value="staff">タダメン</option>
+                              <option value="disabled">無効</option>
+                            </select>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {roleMembers.length === 0 && <p className="text-xs text-slate-400 p-5">該当するメンバーがいません。</p>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {adminSettingsDialogOpen && (
+            <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-sm p-4 flex items-center justify-center">
+              <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden">
+                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-black text-slate-800 flex items-center gap-2"><Settings2 size={16}/> 設定管理</h3>
+                    <p className="text-[10px] text-slate-500 mt-0.5">カテゴリ別に設定できます。保存時に変更分のみ反映されます。</p>
+                  </div>
+                  <button onClick={() => setAdminSettingsDialogOpen(false)} className="p-2 rounded-lg hover:bg-slate-100"><X size={16}/></button>
+                </div>
+                <div className="p-5 space-y-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {visibleSettingCategories.map(cat => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setSettingsTab(cat)}
+                        className={`px-3 py-1.5 rounded-lg text-[11px] font-black ${settingsTab === cat ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-600'}`}
+                      >
+                        {cat === 'limits' ? '上限' : cat === 'mail' ? 'メール' : cat === 'integration' ? '連携' : 'その他'}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="max-h-[52vh] overflow-auto border border-slate-100 rounded-2xl divide-y divide-slate-50">
+                    {Object.keys(settingsDraft || {}).filter(k => (settingsMeta[k]?.category || 'other') === settingsTab).map(key => {
+                      const meta = settingsMeta[key] || { label: key, desc: '' };
+                      const isTextArea = key.endsWith('_BODY');
+                      return (
+                        <div key={key} className="p-4 space-y-1">
+                          <p className="text-xs font-black text-slate-700">{meta.label}</p>
+                          <p className="text-[10px] text-slate-400">{meta.desc}</p>
+                          {isTextArea ? (
+                            <textarea
+                              rows={4}
+                              value={settingsDraft[key] || ''}
+                              onChange={e => setSettingsDraft(prev => ({ ...prev, [key]: e.target.value }))}
+                              className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-sky-500"
+                            />
+                          ) : (
+                            <input
+                              value={settingsDraft[key] || ''}
+                              onChange={e => setSettingsDraft(prev => ({ ...prev, [key]: e.target.value }))}
+                              className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-sky-500"
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex justify-end">
+                    <button onClick={handleSaveSettings} disabled={submitting || adminPanelLoading} className="px-4 py-2 rounded-xl text-xs font-black bg-sky-600 text-white disabled:opacity-40 inline-flex items-center gap-1.5">
+                      <Save size={12}/> 設定を保存
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}

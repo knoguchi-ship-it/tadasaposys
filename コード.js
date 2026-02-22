@@ -22,13 +22,14 @@ var SHEET_NAMES = {
   CASES: '案件リスト',
   RECORDS: 'サポート記録',
   STAFF: 'タダメンマスタ',
-  EMAIL_HISTORY: 'メール履歴'
+  EMAIL_HISTORY: 'メール履歴',
+  AUDIT_LOG: '監査ログ'
 };
 
 var IDX = {
   CASES: { PK: 0, EMAIL: 1, OFFICE: 2, NAME: 3, DETAILS: 4, PREFECTURE: 5, SERVICE: 6 },
-  RECORDS: { FK: 0, STATUS: 1, STAFF_EMAIL: 2, STAFF_NAME: 3, DATE: 4, COUNT: 5, METHOD: 6, BUSINESS: 7, CONTENT: 8, REMARKS: 9, HISTORY: 10, EVENT_ID: 11, MEET_URL: 12, THREAD_ID: 13, ATTACHMENTS: 14 },
-  STAFF: { NAME: 1, EMAIL: 2 },
+  RECORDS: { FK: 0, STATUS: 1, STAFF_EMAIL: 2, STAFF_NAME: 3, DATE: 4, COUNT: 5, METHOD: 6, BUSINESS: 7, CONTENT: 8, REMARKS: 9, HISTORY: 10, EVENT_ID: 11, MEET_URL: 12, THREAD_ID: 13, ATTACHMENTS: 14, CASE_LIMIT_OVERRIDE: 15, ANNUAL_LIMIT_OVERRIDE: 16 },
+  STAFF: { NAME: 1, EMAIL: 2, ROLE: 3, IS_ACTIVE: 4 },
   EMAIL: { CASE_ID: 0, SEND_DATE: 1, SENDER_EMAIL: 2, SENDER_NAME: 3, RECIPIENT_EMAIL: 4, SUBJECT: 5, BODY: 6 }
 };
 
@@ -101,6 +102,158 @@ function getForcedCc_() {
   return raw ? raw : null;
 }
 
+/**
+ * MAIL_DRY_RUN の設定値を bool として返す。
+ * true / 1 / yes / on を有効として扱う。
+ */
+function isMailDryRun_() {
+  var raw = String(getSetting_('MAIL_DRY_RUN', '') || '').trim().toLowerCase();
+  return raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on';
+}
+
+function parsePositiveIntegerSetting_(key, defaultValue) {
+  var raw = String(getSetting_(key, String(defaultValue)) || '').trim();
+  var num = Number(raw);
+  if (!isFinite(num)) return Number(defaultValue);
+  var intNum = Math.floor(num);
+  return intNum > 0 ? intNum : Number(defaultValue);
+}
+
+function getAnnualUsageLimit_() {
+  return parsePositiveIntegerSetting_('ANNUAL_USAGE_LIMIT', 10);
+}
+
+function getCaseUsageLimit_() {
+  return parsePositiveIntegerSetting_('CASE_USAGE_LIMIT', 3);
+}
+
+function parseNullablePositiveInteger_(value) {
+  if (value === null || value === undefined || String(value).trim() === '') return null;
+  var num = Number(value);
+  if (!isFinite(num)) throw new Error('上限値は1以上の整数で入力してください。');
+  var intNum = Math.floor(num);
+  if (intNum < 1) throw new Error('上限値は1以上の整数で入力してください。');
+  return intNum;
+}
+
+function normalizeEmail_(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+function parseBoolean_(v, defaultValue) {
+  if (v === true || v === false) return v;
+  var raw = String(v || '').trim().toLowerCase();
+  if (!raw) return !!defaultValue;
+  return raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on';
+}
+
+function getStaffRoleByEmail_(email) {
+  var target = normalizeEmail_(email);
+  if (!target) return null;
+
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
+  if (!sheet || sheet.getLastRow() <= 1) return null;
+
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    var em = normalizeEmail_(data[i][IDX.STAFF.EMAIL]);
+    if (em !== target) continue;
+    var active = parseBoolean_(data[i][IDX.STAFF.IS_ACTIVE], true);
+    if (!active) return null;
+    var role = String(data[i][IDX.STAFF.ROLE] || '').trim().toLowerCase();
+    return role || 'staff';
+  }
+  return null;
+}
+
+function isAdminEmail_(email) {
+  var role = getStaffRoleByEmail_(email);
+  if (role === 'admin') return true;
+  var adminEmails = getAdminEmails_();
+  return adminEmails.indexOf(normalizeEmail_(email)) !== -1;
+}
+
+function getActor_() {
+  var actorEmail = normalizeEmail_(Session.getActiveUser().getEmail());
+  if (!actorEmail) {
+    throw new Error('ユーザー情報の取得に失敗しました。');
+  }
+  var staff = getStaffByEmail(actorEmail);
+  if (!staff) {
+    throw new Error('アクセス権限がありません。');
+  }
+  var role = getStaffRoleByEmail_(actorEmail) || (isAdminEmail_(actorEmail) ? 'admin' : 'staff');
+  return {
+    name: staff.name,
+    email: actorEmail,
+    role: role,
+    isAdmin: role === 'admin'
+  };
+}
+
+function requireAdmin_() {
+  var actor = getActor_();
+  if (!actor.isAdmin) {
+    throw new Error('管理者権限が必要です。');
+  }
+  return actor;
+}
+
+function getCaseRecordRowIndex_(caseId) {
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][IDX.RECORDS.FK]) === String(caseId)) return i + 1;
+  }
+  return -1;
+}
+
+function ensureCaseEditableByActor_(caseId, actor, allowUnassigned) {
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  var rowIndex = getCaseRecordRowIndex_(caseId);
+  if (rowIndex === -1) return true;
+
+  var row = sheet.getRange(rowIndex, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var staffEmail = normalizeEmail_(row[IDX.RECORDS.STAFF_EMAIL]);
+  if (!staffEmail && allowUnassigned) return true;
+  if (actor.isAdmin) return true;
+  if (staffEmail && staffEmail === normalizeEmail_(actor.email)) return true;
+  throw new Error('この案件を操作する権限がありません。');
+}
+
+function getOrCreateAuditLogSheet_() {
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.AUDIT_LOG);
+  if (sheet) return sheet;
+  sheet = ss.insertSheet(SHEET_NAMES.AUDIT_LOG);
+  sheet.getRange(1, 1, 1, 8).setValues([[
+    'timestamp', 'actorEmail', 'actorName', 'action', 'targetType', 'targetId', 'beforeJson', 'afterJson'
+  ]]);
+  sheet.setFrozenRows(1);
+  return sheet;
+}
+
+function appendAuditLog_(actor, action, targetType, targetId, beforeObj, afterObj) {
+  try {
+    var sheet = getOrCreateAuditLogSheet_();
+    sheet.appendRow([
+      new Date(),
+      actor && actor.email ? actor.email : '',
+      actor && actor.name ? actor.name : '',
+      action || '',
+      targetType || '',
+      String(targetId || ''),
+      beforeObj ? JSON.stringify(beforeObj) : '',
+      afterObj ? JSON.stringify(afterObj) : ''
+    ]);
+  } catch (e) {
+    Logger.log('audit log failed: ' + e.message);
+  }
+}
+
 // ======================================================================
 // Webアプリ エントリポイント
 // ======================================================================
@@ -120,20 +273,20 @@ function doGet() {
 function getInitialData() {
   ensureAttachmentSchema_();
 
-  var userEmail = Session.getActiveUser().getEmail();
+  var userEmail = normalizeEmail_(Session.getActiveUser().getEmail());
   var staff = getStaffByEmail(userEmail);
 
   if (!staff) {
     throw new Error('アクセス権限がありません。管理者によりタダメンマスタへの登録が必要です。');
   }
 
-  var adminEmails = getAdminEmails_();
-  var isAdmin = adminEmails.indexOf(userEmail.toLowerCase()) !== -1;
+  var role = getStaffRoleByEmail_(userEmail) || (isAdminEmail_(userEmail) ? 'admin' : 'staff');
+  var isAdmin = role === 'admin';
   var cases = getAllCasesJoined();
   var masters = getMasters();
 
   return {
-    user: { name: staff.name, email: userEmail, isAdmin: isAdmin },
+    user: { name: staff.name, email: userEmail, isAdmin: isAdmin, role: role },
     cases: cases,
     masters: masters
   };
@@ -200,6 +353,14 @@ function getAllCasesJoined() {
       meetUrl: r[IDX.RECORDS.MEET_URL],
       eventId: r[IDX.RECORDS.EVENT_ID],
       threadId: r[IDX.RECORDS.THREAD_ID] || null,
+      caseLimitOverride: (function(v) {
+        var n = Number(v);
+        return isFinite(n) && n > 0 ? Math.floor(n) : null;
+      })(r[IDX.RECORDS.CASE_LIMIT_OVERRIDE]),
+      annualLimitOverride: (function(v) {
+        var n = Number(v);
+        return isFinite(n) && n > 0 ? Math.floor(n) : null;
+      })(r[IDX.RECORDS.ANNUAL_LIMIT_OVERRIDE]),
       supportHistory: parsedHistory,
       attachments: parsedAttachments
     };
@@ -239,6 +400,8 @@ function getAllCasesJoined() {
       content: record.content, remarks: record.remarks,
       meetUrl: record.meetUrl, eventId: record.eventId,
       threadId: record.threadId || null,
+      caseLimitOverride: record.caseLimitOverride || null,
+      annualLimitOverride: record.annualLimitOverride || null,
       supportHistory: record.supportHistory || [],
       attachments: record.attachments || [],
       currentFiscalYearCount: count,
@@ -253,6 +416,9 @@ function getAllCasesJoined() {
 // 案件アサイン
 // ======================================================================
 function assignCase(caseId, user) {
+  var actor = getActor_();
+  ensureCaseEditableByActor_(caseId, actor, true);
+
   var ss = getSpreadsheet_();
   var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
   var data = sheet.getDataRange().getValues();
@@ -267,13 +433,23 @@ function assignCase(caseId, user) {
 
   if (rowIndex === -1) {
     sheet.appendRow([
-      caseId, 'inProgress', user.email, user.name,
-      null, 1, null, null, null, null, null, null, null, null, '[]'
+      caseId, 'inProgress', actor.email, actor.name,
+      null, 1, null, null, null, null, null, null, null, null, '[]', '', ''
     ]);
   } else {
+    var before = {
+      status: String(data[rowIndex - 1][IDX.RECORDS.STATUS] || ''),
+      staffEmail: String(data[rowIndex - 1][IDX.RECORDS.STAFF_EMAIL] || ''),
+      staffName: String(data[rowIndex - 1][IDX.RECORDS.STAFF_NAME] || '')
+    };
     sheet.getRange(rowIndex, IDX.RECORDS.STATUS + 1).setValue('inProgress');
-    sheet.getRange(rowIndex, IDX.RECORDS.STAFF_EMAIL + 1).setValue(user.email);
-    sheet.getRange(rowIndex, IDX.RECORDS.STAFF_NAME + 1).setValue(user.name);
+    sheet.getRange(rowIndex, IDX.RECORDS.STAFF_EMAIL + 1).setValue(actor.email);
+    sheet.getRange(rowIndex, IDX.RECORDS.STAFF_NAME + 1).setValue(actor.name);
+    appendAuditLog_(actor, 'assign_case', 'case', caseId, before, {
+      status: 'inProgress',
+      staffEmail: actor.email,
+      staffName: actor.name
+    });
   }
 }
 
@@ -287,6 +463,9 @@ function assignCase(caseId, user) {
  * supportCount >= 3 の場合はエラー。
  */
 function reopenCase(caseId, user) {
+  var actor = getActor_();
+  ensureCaseEditableByActor_(caseId, actor, false);
+
   var ss = getSpreadsheet_();
   var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
   var data = sheet.getDataRange().getValues();
@@ -302,7 +481,8 @@ function reopenCase(caseId, user) {
 
   var row = data[rowIndex - 1];
   var currentCount = Number(row[IDX.RECORDS.COUNT]) || 1;
-  if (currentCount >= 3) throw new Error('この案件は対応上限（3回）に達しているため再開できません。');
+  var caseLimit = parseNullablePositiveInteger_(row[IDX.RECORDS.CASE_LIMIT_OVERRIDE]) || getCaseUsageLimit_();
+  if (currentCount >= caseLimit) throw new Error('この案件は対応上限（' + caseLimit + '回）に達しているため再開できません。');
 
   // 現在の回の記録を履歴に保存
   var historyJson = row[IDX.RECORDS.HISTORY] ? String(row[IDX.RECORDS.HISTORY]) : '[]';
@@ -333,13 +513,18 @@ function reopenCase(caseId, user) {
   sheet.getRange(rowIndex, IDX.RECORDS.EVENT_ID + 1).setValue(null);
   sheet.getRange(rowIndex, IDX.RECORDS.MEET_URL + 1).setValue(null);
   sheet.getRange(rowIndex, IDX.RECORDS.ATTACHMENTS + 1).setValue('[]');
+  appendAuditLog_(actor, 'reopen_case', 'case', caseId, { supportCount: currentCount }, { supportCount: currentCount + 1, status: 'inProgress' });
 }
 
 function ensureAttachmentSchema_() {
   try {
+    ensureAdminSchema_();
     addForcedCcSetting();
+    addMailDryRunSetting();
+    addUsageLimitSettings();
     addAttachmentFolderSetting();
     addAttachmentsColumnToRecords();
+    addCaseLimitOverrideColumnsToRecords();
   } catch (e) {
     throw new Error('添付機能の初期化に失敗しました。管理者に連絡してください。詳細: ' + e.message);
   }
@@ -354,6 +539,9 @@ function ensureAttachmentSchema_() {
  * 回数超過メールを送信し、ステータスを rejected に変更する。
  */
 function declineCase(caseId, user, subject, body) {
+  var actor = getActor_();
+  ensureCaseEditableByActor_(caseId, actor, true);
+
   var recipientEmail = getRecipientEmail_(caseId);
   if (!recipientEmail) throw new Error('案件が見つかりません: ' + caseId);
 
@@ -372,19 +560,34 @@ function declineCase(caseId, user, subject, body) {
   if (rowIndex === -1) {
     // レコードが無い場合は新規作成
     sheet.appendRow([
-      caseId, 'rejected', user.email, user.name,
-      null, 1, null, null, null, null, null, null, null, null, '[]'
+      caseId, 'rejected', actor.email, actor.name,
+      null, 1, null, null, null, null, null, null, null, null, '[]', '', ''
     ]);
+    appendAuditLog_(actor, 'decline_case', 'case', caseId, null, {
+      status: 'rejected',
+      staffEmail: actor.email,
+      staffName: actor.name
+    });
   } else {
+    var before = {
+      status: String(data[rowIndex - 1][IDX.RECORDS.STATUS] || ''),
+      staffEmail: String(data[rowIndex - 1][IDX.RECORDS.STAFF_EMAIL] || ''),
+      staffName: String(data[rowIndex - 1][IDX.RECORDS.STAFF_NAME] || '')
+    };
     sheet.getRange(rowIndex, IDX.RECORDS.STATUS + 1).setValue('rejected');
-    sheet.getRange(rowIndex, IDX.RECORDS.STAFF_EMAIL + 1).setValue(user.email);
-    sheet.getRange(rowIndex, IDX.RECORDS.STAFF_NAME + 1).setValue(user.name);
+    sheet.getRange(rowIndex, IDX.RECORDS.STAFF_EMAIL + 1).setValue(actor.email);
+    sheet.getRange(rowIndex, IDX.RECORDS.STAFF_NAME + 1).setValue(actor.name);
+    appendAuditLog_(actor, 'decline_case', 'case', caseId, before, {
+      status: 'rejected',
+      staffEmail: actor.email,
+      staffName: actor.name
+    });
   }
 
   // メール送信
   var result = sendInThread_(recipientEmail, subject, body, null, null);
   storeThreadId_(caseId, result.threadId);
-  recordEmail_(caseId, user, recipientEmail, subject, body);
+  recordEmail_(caseId, actor, recipientEmail, subject, body);
 }
 
 // ======================================================================
@@ -491,8 +694,51 @@ function sendInThread_(to, subject, body, threadId, inReplyTo) {
   var request = { raw: encoded };
   if (threadId) request.threadId = threadId;
 
+  if (isMailDryRun_()) {
+    var stamp = String(new Date().getTime());
+    Logger.log('[MAIL_DRY_RUN] send skipped. to=%s cc=%s subject=%s threadId=%s', to, forceCc || '', subject, threadId || '');
+    return {
+      messageId: 'dryrun-msg-' + stamp,
+      threadId: threadId || ('dryrun-thread-' + stamp),
+      dryRun: true,
+      to: to,
+      cc: forceCc || null
+    };
+  }
+
   var result = Gmail.Users.Messages.send(request, 'me');
-  return { messageId: result.id, threadId: result.threadId };
+  return { messageId: result.id, threadId: result.threadId, dryRun: false, to: to, cc: forceCc || null };
+}
+
+/**
+ * テスト用: ドライラン送信でCCが付与されるかを確認する。
+ * 送信先は .invalid ドメインを使用する。
+ */
+function verifyCcDryRun() {
+  if (!isMailDryRun_()) {
+    throw new Error('MAIL_DRY_RUN が有効ではありません。テスト時のみ true にしてください。');
+  }
+  var forceCc = getForcedCc_();
+  if (!forceCc) {
+    throw new Error('MAIL_FORCE_CC が未設定です。CC確認のため設定してください。');
+  }
+
+  var result = sendInThread_(
+    'dry-run-check@example.invalid',
+    '[DRY RUN] CC確認',
+    'This is a dry-run verification mail.',
+    null,
+    null
+  );
+
+  return {
+    ok: !!(result && result.dryRun && result.cc),
+    dryRun: !!(result && result.dryRun),
+    cc: result ? result.cc : null,
+    to: result ? result.to : null,
+    messageId: result ? result.messageId : null,
+    threadId: result ? result.threadId : null
+  };
 }
 
 /**
@@ -571,7 +817,8 @@ function getAllStaffEmails_() {
   var data = sheet.getDataRange().getValues();
   var emails = [];
   for (var i = 1; i < data.length; i++) {
-    if (data[i][IDX.STAFF.EMAIL]) {
+    var isActive = parseBoolean_(data[i][IDX.STAFF.IS_ACTIVE], true);
+    if (isActive && data[i][IDX.STAFF.EMAIL]) {
       emails.push(String(data[i][IDX.STAFF.EMAIL]).toLowerCase());
     }
   }
@@ -587,10 +834,13 @@ function getAllStaffEmails_() {
  * Gmail API でスレッドIDを取得し、サポート記録に保存する。
  */
 function assignAndSendEmail(caseId, user, subject, body) {
+  var actor = getActor_();
+  ensureCaseEditableByActor_(caseId, actor, true);
+
   var recipientEmail = getRecipientEmail_(caseId);
   if (!recipientEmail) throw new Error('案件が見つかりません: ' + caseId);
 
-  assignCase(caseId, user);
+  assignCase(caseId, actor);
 
   // Gmail API で送信（新規スレッド開始）
   var result = sendInThread_(recipientEmail, subject, body, null, null);
@@ -599,7 +849,7 @@ function assignAndSendEmail(caseId, user, subject, body) {
   storeThreadId_(caseId, result.threadId);
 
   // メール履歴にも記録（バックアップ）
-  recordEmail_(caseId, user, recipientEmail, subject, body);
+  recordEmail_(caseId, actor, recipientEmail, subject, body);
 }
 
 // ======================================================================
@@ -611,12 +861,15 @@ function assignAndSendEmail(caseId, user, subject, body) {
  * 「メール送信」ボタンから呼ばれる。
  */
 function sendNewCaseEmail(caseId, user, subject, body) {
+  var actor = getActor_();
+  ensureCaseEditableByActor_(caseId, actor, false);
+
   var recipientEmail = getRecipientEmail_(caseId);
   if (!recipientEmail) throw new Error('案件が見つかりません: ' + caseId);
 
   var result = sendInThread_(recipientEmail, subject, body, null, null);
   storeThreadId_(caseId, result.threadId);
-  recordEmail_(caseId, user, recipientEmail, subject, body);
+  recordEmail_(caseId, actor, recipientEmail, subject, body);
 }
 
 // ======================================================================
@@ -628,6 +881,9 @@ function sendNewCaseEmail(caseId, user, subject, body) {
  * threadIdを指定して呼ばれる。
  */
 function sendCaseEmail(caseId, user, subject, body, threadId) {
+  var actor = getActor_();
+  ensureCaseEditableByActor_(caseId, actor, false);
+
   var recipientEmail = getRecipientEmail_(caseId);
   if (!recipientEmail) throw new Error('案件が見つかりません: ' + caseId);
 
@@ -643,7 +899,7 @@ function sendCaseEmail(caseId, user, subject, body, threadId) {
     storeThreadId_(caseId, result.threadId);
   }
 
-  recordEmail_(caseId, user, recipientEmail, subject, body);
+  recordEmail_(caseId, actor, recipientEmail, subject, body);
 }
 
 // ======================================================================
@@ -656,6 +912,9 @@ function sendCaseEmail(caseId, user, subject, body, threadId) {
  * 戻り値: [{ threadId, subject, messages: [{ sendDate, senderName, fromEmail, subject, body, isStaff }] }]
  */
 function getThreadMessages(caseId) {
+  var actor = getActor_();
+  ensureCaseEditableByActor_(caseId, actor, false);
+
   var threadIds = getThreadIdsForCase_(caseId);
 
   // スレッドIDが無い場合はメール履歴シートから返す（フォールバック）
@@ -884,6 +1143,9 @@ function trashRemovedAttachments_(existingAttachments, keepIdMap) {
 // サポート記録の更新（方法別: Meet / Zoom / その他）
 // ======================================================================
 function updateSupportRecord(recordData) {
+  var actor = getActor_();
+  ensureCaseEditableByActor_(recordData.timestamp, actor, false);
+
   var ss = getSpreadsheet_();
   var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
   var data = sheet.getDataRange().getValues();
@@ -896,6 +1158,13 @@ function updateSupportRecord(recordData) {
     }
   }
   if (rowIndex === -1) throw new Error('レコードが見つかりません ID: ' + recordData.timestamp);
+
+  var before = {
+    status: data[rowIndex - 1][IDX.RECORDS.STATUS],
+    scheduledDateTime: data[rowIndex - 1][IDX.RECORDS.DATE],
+    method: data[rowIndex - 1][IDX.RECORDS.METHOD],
+    content: data[rowIndex - 1][IDX.RECORDS.CONTENT]
+  };
 
   var currentMeetUrl = data[rowIndex - 1][IDX.RECORDS.MEET_URL];
   var currentAttachments = parseJsonArray_(data[rowIndex - 1][IDX.RECORDS.ATTACHMENTS]);
@@ -947,19 +1216,28 @@ function updateSupportRecord(recordData) {
     trashRemovedAttachments_(currentAttachments, keepIdMap);
     sheet.getRange(rowIndex, IDX.RECORDS.ATTACHMENTS + 1).setValue(JSON.stringify(mergedAttachments));
   }
+
+  appendAuditLog_(actor, 'update_support_record', 'case', recordData.timestamp, before, {
+    status: recordData.status,
+    scheduledDateTime: recordData.scheduledDateTime || null,
+    method: recordData.method || null
+  });
 }
 
 // ======================================================================
 // マスタデータ
 // ======================================================================
 function getStaffByEmail(email) {
+  var normalized = normalizeEmail_(email);
   var ss = getSpreadsheet_();
   var sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
   var data = sheet.getDataRange().getValues();
 
   for (var i = 1; i < data.length; i++) {
-    if (String(data[i][IDX.STAFF.EMAIL]).toLowerCase() === email.toLowerCase()) {
-      return { name: data[i][IDX.STAFF.NAME], email: email };
+    var staffEmail = normalizeEmail_(data[i][IDX.STAFF.EMAIL]);
+    var isActive = parseBoolean_(data[i][IDX.STAFF.IS_ACTIVE], true);
+    if (isActive && staffEmail === normalized) {
+      return { name: data[i][IDX.STAFF.NAME], email: normalized };
     }
   }
   return null;
@@ -970,11 +1248,37 @@ function getMasters() {
   var attachmentFolderConfigured = !!getSetting_('ATTACHMENT_FOLDER_ID');
   var methods = ['GoogleMeet', '電話等', '対面'];
   if (zoomEnabled) methods.splice(1, 0, 'Zoom');
+  var allStaff = [];
+  try {
+    var ss = getSpreadsheet_();
+    var staffSheet = ss.getSheetByName(SHEET_NAMES.STAFF);
+    if (staffSheet && staffSheet.getLastRow() > 1) {
+      var rows = staffSheet.getDataRange().getValues();
+      for (var i = 1; i < rows.length; i++) {
+        var em = normalizeEmail_(rows[i][IDX.STAFF.EMAIL]);
+        if (!em) continue;
+        var active = parseBoolean_(rows[i][IDX.STAFF.IS_ACTIVE], true);
+        if (!active) continue;
+        allStaff.push({
+          name: String(rows[i][IDX.STAFF.NAME] || ''),
+          email: em,
+          role: String(rows[i][IDX.STAFF.ROLE] || 'staff').toLowerCase()
+        });
+      }
+    }
+  } catch (e) {
+    allStaff = [];
+  }
+
   return {
     methods: methods,
     businessTypes: ['訪問介護', '通所介護', '居宅介護支援', '福祉用具貸与', '小規模多機能', '有料老人ホーム', 'その他'],
     prefectures: ['東京都', '神奈川県', '大阪府', '愛知県', '福岡県', '北海道', 'その他'],
-    allStaff: [],
+    allStaff: allStaff,
+    limits: {
+      annual: getAnnualUsageLimit_(),
+      caseSupport: getCaseUsageLimit_()
+    },
     attachmentFolderConfigured: attachmentFolderConfigured,
     emailTemplates: {
       initialSubject: getSetting_('MAIL_INITIAL_SUBJECT', 'タダサポ｜ご相談を承りました'),
@@ -983,6 +1287,319 @@ function getMasters() {
       declinedBody: getSetting_('MAIL_DECLINED_BODY', '{{名前}} 様\n\nいつもタダサポをご利用いただきありがとうございます。\n\n誠に恐れ入りますが、{{事業所名}} 様の今年度のご利用回数が上限（10回）に達しております。\nそのため、今回のご相談につきましては対応を見送らせていただくこととなりました。\n\n大変申し訳ございませんが、何卒ご理解くださいますようお願い申し上げます。\n次年度のご利用をお待ちしております。')
     }
   };
+}
+
+function getEditableSettingsKeys_() {
+  return [
+    'MAIL_FORCE_CC',
+    'ANNUAL_USAGE_LIMIT',
+    'CASE_USAGE_LIMIT',
+    'MAIL_INITIAL_SUBJECT',
+    'MAIL_INITIAL_BODY',
+    'MAIL_DECLINED_SUBJECT',
+    'MAIL_DECLINED_BODY',
+    'SHARED_CALENDAR_ID',
+    'ATTACHMENT_FOLDER_ID',
+    'ZOOM_ACCOUNT_ID',
+    'ZOOM_CLIENT_ID',
+    'ZOOM_CLIENT_SECRET'
+  ];
+}
+
+function ensureStaffAdminSchema_() {
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
+  if (!sheet) return;
+  var headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
+  var roleHeader = String(headers[IDX.STAFF.ROLE] || '').trim();
+  var activeHeader = String(headers[IDX.STAFF.IS_ACTIVE] || '').trim();
+
+  if (sheet.getLastColumn() < 5) {
+    sheet.insertColumnsAfter(sheet.getLastColumn(), 5 - sheet.getLastColumn());
+  }
+  if (!roleHeader) sheet.getRange(1, IDX.STAFF.ROLE + 1).setValue('ROLE');
+  if (!activeHeader) sheet.getRange(1, IDX.STAFF.IS_ACTIVE + 1).setValue('IS_ACTIVE');
+
+  if (sheet.getLastRow() > 1) {
+    var roleRange = sheet.getRange(2, IDX.STAFF.ROLE + 1, sheet.getLastRow() - 1, 1);
+    var activeRange = sheet.getRange(2, IDX.STAFF.IS_ACTIVE + 1, sheet.getLastRow() - 1, 1);
+    var roleValues = roleRange.getValues();
+    var activeValues = activeRange.getValues();
+    for (var i = 0; i < roleValues.length; i++) {
+      if (!String(roleValues[i][0] || '').trim()) roleValues[i][0] = 'staff';
+      if (String(activeValues[i][0] || '').trim() === '') activeValues[i][0] = 'true';
+    }
+    roleRange.setValues(roleValues);
+    activeRange.setValues(activeValues);
+  }
+}
+
+function migrateAdminEmailsToStaffRoles_() {
+  var adminMap = {};
+  getAdminEmails_().forEach(function(e) { adminMap[normalizeEmail_(e)] = true; });
+  if (!Object.keys(adminMap).length) return;
+
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
+  if (!sheet || sheet.getLastRow() <= 1) return;
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    var em = normalizeEmail_(data[i][IDX.STAFF.EMAIL]);
+    if (!em) continue;
+    if (adminMap[em]) {
+      sheet.getRange(i + 1, IDX.STAFF.ROLE + 1).setValue('admin');
+    }
+  }
+}
+
+function ensureAdminSchema_() {
+  ensureStaffAdminSchema_();
+  migrateAdminEmailsToStaffRoles_();
+  getOrCreateAuditLogSheet_();
+}
+
+function listStaffMembers_() {
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
+  if (!sheet || sheet.getLastRow() <= 1) return [];
+  var data = sheet.getDataRange().getValues();
+  var out = [];
+  for (var i = 1; i < data.length; i++) {
+    var em = normalizeEmail_(data[i][IDX.STAFF.EMAIL]);
+    if (!em) continue;
+    out.push({
+      rowIndex: i + 1,
+      name: String(data[i][IDX.STAFF.NAME] || ''),
+      email: em,
+      role: String(data[i][IDX.STAFF.ROLE] || 'staff').trim().toLowerCase() || 'staff',
+      isActive: parseBoolean_(data[i][IDX.STAFF.IS_ACTIVE], true)
+    });
+  }
+  return out;
+}
+
+function getAdminPanelData() {
+  requireAdmin_();
+  ensureAdminSchema_();
+
+  var settings = loadSettings_();
+  var allowed = getEditableSettingsKeys_();
+  var filteredSettings = {};
+  for (var i = 0; i < allowed.length; i++) {
+    filteredSettings[allowed[i]] = settings[allowed[i]] || '';
+  }
+
+  var auditSheet = getOrCreateAuditLogSheet_();
+  var logs = [];
+  if (auditSheet.getLastRow() > 1) {
+    var data = auditSheet.getRange(2, 1, Math.min(100, auditSheet.getLastRow() - 1), 8).getValues();
+    for (var j = 0; j < data.length; j++) {
+      logs.push({
+        timestamp: data[j][0] ? new Date(data[j][0]).toISOString() : null,
+        actorEmail: String(data[j][1] || ''),
+        actorName: String(data[j][2] || ''),
+        action: String(data[j][3] || ''),
+        targetType: String(data[j][4] || ''),
+        targetId: String(data[j][5] || '')
+      });
+    }
+    logs.reverse();
+  }
+
+  return {
+    staffMembers: listStaffMembers_(),
+    settings: filteredSettings,
+    auditLogs: logs
+  };
+}
+
+function upsertStaffMember(payload) {
+  var actor = requireAdmin_();
+  ensureAdminSchema_();
+  if (!payload) throw new Error('payload が必要です。');
+
+  var email = normalizeEmail_(payload.email);
+  var name = String(payload.name || '').trim();
+  var role = String(payload.role || 'staff').trim().toLowerCase();
+  var hasIsActive = Object.prototype.hasOwnProperty.call(payload, 'isActive');
+  var isActive = hasIsActive ? parseBoolean_(payload.isActive, true) : null;
+
+  if (!email) throw new Error('メールアドレスは必須です。');
+  if (role !== 'admin' && role !== 'staff') throw new Error('role は admin または staff を指定してください。');
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var ss = getSpreadsheet_();
+    var sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
+    if (!sheet) throw new Error('スタッフシートが見つかりません。');
+    var data = sheet.getDataRange().getValues();
+    var rowIndex = -1;
+    var before = null;
+    for (var i = 1; i < data.length; i++) {
+      if (normalizeEmail_(data[i][IDX.STAFF.EMAIL]) === email) {
+        rowIndex = i + 1;
+        before = {
+          name: String(data[i][IDX.STAFF.NAME] || ''),
+          email: email,
+          role: String(data[i][IDX.STAFF.ROLE] || 'staff').toLowerCase(),
+          isActive: parseBoolean_(data[i][IDX.STAFF.IS_ACTIVE], true)
+        };
+        break;
+      }
+    }
+
+    if (rowIndex === -1) {
+      throw new Error('新規メンバー追加はできません。既存メンバーの権限のみ変更できます。');
+    }
+
+    if (!name) name = String(data[rowIndex - 1][IDX.STAFF.NAME] || '');
+    if (!hasIsActive) {
+      isActive = parseBoolean_(data[rowIndex - 1][IDX.STAFF.IS_ACTIVE], true);
+    }
+    sheet.getRange(rowIndex, IDX.STAFF.ROLE + 1).setValue(role);
+    sheet.getRange(rowIndex, IDX.STAFF.IS_ACTIVE + 1).setValue(String(isActive));
+    _settingsCache = null;
+    appendAuditLog_(actor, 'upsert_staff', 'staff', email, before, {
+      name: name,
+      email: email,
+      role: role,
+      isActive: isActive
+    });
+  } finally {
+    lock.releaseLock();
+  }
+
+  return listStaffMembers_();
+}
+
+function deactivateStaffMember(email) {
+  var actor = requireAdmin_();
+  ensureAdminSchema_();
+  var target = normalizeEmail_(email);
+  if (!target) throw new Error('email が必要です。');
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var ss = getSpreadsheet_();
+    var sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
+    if (!sheet || sheet.getLastRow() <= 1) return listStaffMembers_();
+    var data = sheet.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if (normalizeEmail_(data[i][IDX.STAFF.EMAIL]) === target) {
+        var before = {
+          name: String(data[i][IDX.STAFF.NAME] || ''),
+          email: target,
+          role: String(data[i][IDX.STAFF.ROLE] || 'staff').toLowerCase(),
+          isActive: parseBoolean_(data[i][IDX.STAFF.IS_ACTIVE], true)
+        };
+        sheet.getRange(i + 1, IDX.STAFF.IS_ACTIVE + 1).setValue('false');
+        appendAuditLog_(actor, 'deactivate_staff', 'staff', target, before, {
+          name: before.name,
+          email: target,
+          role: before.role,
+          isActive: false
+        });
+        break;
+      }
+    }
+  } finally {
+    lock.releaseLock();
+  }
+  return listStaffMembers_();
+}
+
+function updateSettingsAdmin(patch) {
+  var actor = requireAdmin_();
+  ensureAdminSchema_();
+  if (!patch || typeof patch !== 'object') throw new Error('patch が必要です。');
+
+  var allowMap = {};
+  getEditableSettingsKeys_().forEach(function(k) { allowMap[k] = true; });
+
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
+  if (!sheet) throw new Error('設定シートが見つかりません。');
+  var data = sheet.getDataRange().getValues();
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var before = {};
+    var after = {};
+    Object.keys(patch).forEach(function(key) {
+      if (!allowMap[key]) throw new Error('更新不可の設定キーです: ' + key);
+      var found = false;
+      for (var i = 1; i < data.length; i++) {
+        if (String(data[i][0]) === key) {
+          before[key] = String(data[i][2] || '');
+          sheet.getRange(i + 1, 3).setValue(String(patch[key] || ''));
+          after[key] = String(patch[key] || '');
+          found = true;
+          break;
+        }
+      }
+      if (!found) throw new Error('設定キーが見つかりません: ' + key);
+    });
+    _settingsCache = null;
+    appendAuditLog_(actor, 'update_settings', 'settings', 'settings', before, after);
+  } finally {
+    lock.releaseLock();
+  }
+
+  var settings = loadSettings_();
+  var out = {};
+  getEditableSettingsKeys_().forEach(function(key) { out[key] = settings[key] || ''; });
+  return out;
+}
+
+function reassignCaseAdmin(caseId, staffEmail) {
+  var actor = requireAdmin_();
+  ensureAdminSchema_();
+  var targetEmail = normalizeEmail_(staffEmail);
+  if (!targetEmail) throw new Error('staffEmail が必要です。');
+
+  var targetStaff = getStaffByEmail(targetEmail);
+  if (!targetStaff) throw new Error('対象スタッフが見つかりません。');
+
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  var data = sheet.getDataRange().getValues();
+  var rowIndex = -1;
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][IDX.RECORDS.FK]) === String(caseId)) {
+      rowIndex = i + 1;
+      break;
+    }
+  }
+  if (rowIndex === -1) {
+    sheet.appendRow([
+      caseId, 'inProgress', targetEmail, targetStaff.name,
+      null, 1, null, null, null, null, null, null, null, null, '[]', '', ''
+    ]);
+    appendAuditLog_(actor, 'reassign_case', 'case', caseId, null, {
+      status: 'inProgress',
+      staffEmail: targetEmail,
+      staffName: targetStaff.name
+    });
+    return;
+  }
+
+  var before = {
+    status: String(data[rowIndex - 1][IDX.RECORDS.STATUS] || ''),
+    staffEmail: String(data[rowIndex - 1][IDX.RECORDS.STAFF_EMAIL] || ''),
+    staffName: String(data[rowIndex - 1][IDX.RECORDS.STAFF_NAME] || '')
+  };
+
+  sheet.getRange(rowIndex, IDX.RECORDS.STATUS + 1).setValue('inProgress');
+  sheet.getRange(rowIndex, IDX.RECORDS.STAFF_EMAIL + 1).setValue(targetEmail);
+  sheet.getRange(rowIndex, IDX.RECORDS.STAFF_NAME + 1).setValue(targetStaff.name);
+  appendAuditLog_(actor, 'reassign_case', 'case', caseId, before, {
+    status: 'inProgress',
+    staffEmail: targetEmail,
+    staffName: targetStaff.name
+  });
 }
 
 // ======================================================================
@@ -1000,6 +1617,178 @@ function getMasters() {
  *   D列 = 入力例
  *   E列 = 説明・注意事項
  */
+function normalizeAdminCaseStatus_(status) {
+  var normalized = String(status || '').trim();
+  if (normalized === 'unhandled' || normalized === 'inProgress' || normalized === 'completed' || normalized === 'rejected') {
+    return normalized;
+  }
+  throw new Error('status は unhandled / inProgress / completed / rejected を指定してください。');
+}
+
+function getCaseRowIndex_(sheet, caseId) {
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][IDX.CASES.PK]) === String(caseId)) return i + 1;
+  }
+  return -1;
+}
+
+function ensureRecordRowForCase_(sheet, caseId) {
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][IDX.RECORDS.FK]) === String(caseId)) return i + 1;
+  }
+  sheet.appendRow([
+    caseId, 'unhandled', '', '',
+    null, 1, null, null, null, null, '[]', null, null, null, '[]', '', ''
+  ]);
+  return sheet.getLastRow();
+}
+
+function setCaseStatusAdmin(caseId, status) {
+  var actor = requireAdmin_();
+  ensureAdminSchema_();
+
+  var normalizedStatus = normalizeAdminCaseStatus_(status);
+  var ss = getSpreadsheet_();
+  var recordSheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  if (!recordSheet) throw new Error('サポート記録シートが見つかりません。');
+
+  var rowIndex = ensureRecordRowForCase_(recordSheet, caseId);
+  var row = recordSheet.getRange(rowIndex, 1, 1, recordSheet.getLastColumn()).getValues()[0];
+  var before = {
+    status: String(row[IDX.RECORDS.STATUS] || ''),
+    staffEmail: String(row[IDX.RECORDS.STAFF_EMAIL] || ''),
+    staffName: String(row[IDX.RECORDS.STAFF_NAME] || '')
+  };
+
+  recordSheet.getRange(rowIndex, IDX.RECORDS.STATUS + 1).setValue(normalizedStatus);
+  appendAuditLog_(actor, 'admin_set_case_status', 'case', caseId, before, { status: normalizedStatus });
+}
+
+function updateCaseDataAdmin(caseId, payload) {
+  var actor = requireAdmin_();
+  ensureAdminSchema_();
+  if (!payload || typeof payload !== 'object') throw new Error('payload が不正です。');
+
+  var casePatch = payload.casePatch || payload.case || {};
+  var recordPatch = payload.recordPatch || payload.record || {};
+  if (typeof casePatch !== 'object' || typeof recordPatch !== 'object') throw new Error('casePatch / recordPatch が不正です。');
+
+  var ss = getSpreadsheet_();
+  var caseSheet = ss.getSheetByName(SHEET_NAMES.CASES);
+  var recordSheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  if (!caseSheet || !recordSheet) throw new Error('必要なシートが見つかりません。');
+
+  var caseRowIndex = getCaseRowIndex_(caseSheet, caseId);
+  if (caseRowIndex === -1) throw new Error('案件が見つかりません: ' + caseId);
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var beforeCaseRow = caseSheet.getRange(caseRowIndex, 1, 1, caseSheet.getLastColumn()).getValues()[0];
+    var recordRowIndex = ensureRecordRowForCase_(recordSheet, caseId);
+    var beforeRecordRow = recordSheet.getRange(recordRowIndex, 1, 1, recordSheet.getLastColumn()).getValues()[0];
+
+    if (Object.prototype.hasOwnProperty.call(casePatch, 'email')) {
+      caseSheet.getRange(caseRowIndex, IDX.CASES.EMAIL + 1).setValue(String(casePatch.email || '').trim());
+    }
+    if (Object.prototype.hasOwnProperty.call(casePatch, 'officeName')) {
+      caseSheet.getRange(caseRowIndex, IDX.CASES.OFFICE + 1).setValue(String(casePatch.officeName || '').trim());
+    }
+    if (Object.prototype.hasOwnProperty.call(casePatch, 'requesterName')) {
+      caseSheet.getRange(caseRowIndex, IDX.CASES.NAME + 1).setValue(String(casePatch.requesterName || '').trim());
+    }
+    if (Object.prototype.hasOwnProperty.call(casePatch, 'details')) {
+      caseSheet.getRange(caseRowIndex, IDX.CASES.DETAILS + 1).setValue(String(casePatch.details || '').trim());
+    }
+    if (Object.prototype.hasOwnProperty.call(casePatch, 'prefecture')) {
+      caseSheet.getRange(caseRowIndex, IDX.CASES.PREFECTURE + 1).setValue(String(casePatch.prefecture || '').trim());
+    }
+    if (Object.prototype.hasOwnProperty.call(casePatch, 'serviceType')) {
+      caseSheet.getRange(caseRowIndex, IDX.CASES.SERVICE + 1).setValue(String(casePatch.serviceType || '').trim());
+    }
+
+    if (Object.prototype.hasOwnProperty.call(recordPatch, 'status')) {
+      recordSheet.getRange(recordRowIndex, IDX.RECORDS.STATUS + 1).setValue(normalizeAdminCaseStatus_(recordPatch.status));
+    }
+    if (Object.prototype.hasOwnProperty.call(recordPatch, 'staffEmail')) {
+      var targetEmail = normalizeEmail_(recordPatch.staffEmail);
+      var staff = targetEmail ? getStaffByEmail(targetEmail) : null;
+      if (targetEmail && !staff) throw new Error('存在しないスタッフです: ' + targetEmail);
+      recordSheet.getRange(recordRowIndex, IDX.RECORDS.STAFF_EMAIL + 1).setValue(targetEmail);
+      if (!Object.prototype.hasOwnProperty.call(recordPatch, 'staffName')) {
+        recordSheet.getRange(recordRowIndex, IDX.RECORDS.STAFF_NAME + 1).setValue(staff ? staff.name : '');
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(recordPatch, 'staffName')) {
+      recordSheet.getRange(recordRowIndex, IDX.RECORDS.STAFF_NAME + 1).setValue(String(recordPatch.staffName || '').trim());
+    }
+    if (Object.prototype.hasOwnProperty.call(recordPatch, 'scheduledDateTime')) {
+      var dt = recordPatch.scheduledDateTime;
+      recordSheet.getRange(recordRowIndex, IDX.RECORDS.DATE + 1).setValue(dt ? new Date(dt) : null);
+    }
+    if (Object.prototype.hasOwnProperty.call(recordPatch, 'supportCount')) {
+      var count = Number(recordPatch.supportCount);
+      if (!isFinite(count) || count < 1) throw new Error('supportCount は1以上の数値を指定してください。');
+      recordSheet.getRange(recordRowIndex, IDX.RECORDS.COUNT + 1).setValue(Math.floor(count));
+    }
+    if (Object.prototype.hasOwnProperty.call(recordPatch, 'caseLimitOverride')) {
+      var caseOverride = parseNullablePositiveInteger_(recordPatch.caseLimitOverride);
+      recordSheet.getRange(recordRowIndex, IDX.RECORDS.CASE_LIMIT_OVERRIDE + 1).setValue(caseOverride === null ? '' : caseOverride);
+    }
+    if (Object.prototype.hasOwnProperty.call(recordPatch, 'annualLimitOverride')) {
+      var annualOverride = parseNullablePositiveInteger_(recordPatch.annualLimitOverride);
+      recordSheet.getRange(recordRowIndex, IDX.RECORDS.ANNUAL_LIMIT_OVERRIDE + 1).setValue(annualOverride === null ? '' : annualOverride);
+    }
+    if (Object.prototype.hasOwnProperty.call(recordPatch, 'method')) {
+      recordSheet.getRange(recordRowIndex, IDX.RECORDS.METHOD + 1).setValue(String(recordPatch.method || '').trim());
+    }
+    if (Object.prototype.hasOwnProperty.call(recordPatch, 'businessType')) {
+      recordSheet.getRange(recordRowIndex, IDX.RECORDS.BUSINESS + 1).setValue(String(recordPatch.businessType || '').trim());
+    }
+    if (Object.prototype.hasOwnProperty.call(recordPatch, 'content')) {
+      recordSheet.getRange(recordRowIndex, IDX.RECORDS.CONTENT + 1).setValue(String(recordPatch.content || '').trim());
+    }
+    if (Object.prototype.hasOwnProperty.call(recordPatch, 'remarks')) {
+      recordSheet.getRange(recordRowIndex, IDX.RECORDS.REMARKS + 1).setValue(String(recordPatch.remarks || '').trim());
+    }
+    if (Object.prototype.hasOwnProperty.call(recordPatch, 'eventId')) {
+      recordSheet.getRange(recordRowIndex, IDX.RECORDS.EVENT_ID + 1).setValue(String(recordPatch.eventId || '').trim());
+    }
+    if (Object.prototype.hasOwnProperty.call(recordPatch, 'meetUrl')) {
+      recordSheet.getRange(recordRowIndex, IDX.RECORDS.MEET_URL + 1).setValue(String(recordPatch.meetUrl || '').trim());
+    }
+    if (Object.prototype.hasOwnProperty.call(recordPatch, 'threadId')) {
+      recordSheet.getRange(recordRowIndex, IDX.RECORDS.THREAD_ID + 1).setValue(String(recordPatch.threadId || '').trim());
+    }
+
+    appendAuditLog_(actor, 'admin_update_case_data', 'case', caseId, {
+      caseRow: {
+        email: String(beforeCaseRow[IDX.CASES.EMAIL] || ''),
+        officeName: String(beforeCaseRow[IDX.CASES.OFFICE] || ''),
+        requesterName: String(beforeCaseRow[IDX.CASES.NAME] || ''),
+        details: String(beforeCaseRow[IDX.CASES.DETAILS] || ''),
+        prefecture: String(beforeCaseRow[IDX.CASES.PREFECTURE] || ''),
+        serviceType: String(beforeCaseRow[IDX.CASES.SERVICE] || '')
+      },
+      recordRow: {
+        status: String(beforeRecordRow[IDX.RECORDS.STATUS] || ''),
+        staffEmail: String(beforeRecordRow[IDX.RECORDS.STAFF_EMAIL] || ''),
+        staffName: String(beforeRecordRow[IDX.RECORDS.STAFF_NAME] || ''),
+        supportCount: Number(beforeRecordRow[IDX.RECORDS.COUNT]) || 1,
+        caseLimitOverride: Number(beforeRecordRow[IDX.RECORDS.CASE_LIMIT_OVERRIDE]) || null,
+        annualLimitOverride: Number(beforeRecordRow[IDX.RECORDS.ANNUAL_LIMIT_OVERRIDE]) || null
+      }
+    }, {
+      casePatch: casePatch,
+      recordPatch: recordPatch
+    });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function setupSettingsSheet() {
   var ss = getSpreadsheet_();
   var existing = ss.getSheetByName(SHEET_NAMES.SETTINGS);
@@ -1040,7 +1829,10 @@ function setupSettingsSheet() {
 
     // カテゴリ: メールテンプレート
     ['#メールテンプレート', 'メールテンプレート設定', '', '', ''],
-    ['MAIL_FORCE_CC',      '強制CCメールアドレス',        '', 'cc@example.com, cc2@example.com', 'ここにメールアドレスを設定すると、全ての送信メールにCCが自動付与されます。\n空欄の場合はCCなしで送信されます。'],
+    ['MAIL_FORCE_CC',      'CCメールアドレス（任意）',    '', 'cc@example.com, cc2@example.com', '通常のCCとして追加送信されます。\n空欄の場合はCCなしで送信されます。'],
+    ['MAIL_DRY_RUN',       'メールドライラン',            'false', 'true / false', 'true の場合、メールは外部送信せずドライランとして記録のみ行います。\n本番運用時は false にしてください。'],
+    ['ANNUAL_USAGE_LIMIT', '年度利用回数上限',            '10', '1 以上の整数', '1ユーザー1年度あたりの利用回数上限です。年度内の総対応回数がこの値を超えると新規対応/再開を制限します。'],
+    ['CASE_USAGE_LIMIT',   '案件ごとの対応上限',          '3', '1 以上の整数', '1案件あたりの対応回数上限です。対応回数がこの値に達すると再開できません。'],
     ['MAIL_INITIAL_SUBJECT', '初回メール件名',       'タダサポ｜ご相談を承りました', 'タダサポ｜{{事業所名}}様のご相談を承りました', '「担当する」ボタン押下時に送信されるメールの件名。\n使用可能タグ: {{事業所名}} {{名前}} {{担当者名}}'],
     ['MAIL_INITIAL_BODY',    '初回メール本文',       '{{名前}} 様\n\nこの度はタダサポへご相談いただきありがとうございます。\n担当させていただきます{{担当者名}}と申します。\n\nご相談内容を確認いたしました。\n追ってサポート日時のご連絡をさせていただきます。\n\n何かご不明な点がございましたら、お気軽にお問い合わせください。\n\n今後ともよろしくお願いいたします。', '（デフォルト文を参照）', '初回メール本文。C列のセル内で改行可能（Ctrl+Enter）。\n使用可能タグ: {{事業所名}} {{名前}} {{担当者名}} {{相談内容}}'],
     ['MAIL_DECLINED_SUBJECT', '回数超過メール件名', 'タダサポ｜ご利用回数上限のお知らせ', 'タダサポ｜{{事業所名}}様 ご利用上限のお知らせ', '年間利用回数超過時に送信されるメールの件名。\n使用可能タグ: {{事業所名}} {{名前}} {{担当者名}}'],
@@ -1214,10 +2006,10 @@ function addForcedCcSetting() {
 
   var newRow = [
     'MAIL_FORCE_CC',
-    '強制CCメールアドレス',
+    'CCメールアドレス（任意）',
     '',
     'cc@example.com, cc2@example.com',
-    'ここにメールアドレスを設定すると、全ての送信メールにCCが自動付与されます。\n空欄の場合はCCなしで送信されます。'
+    '通常のCCとして追加送信されます。\n空欄の場合はCCなしで送信されます。'
   ];
 
   if (insertAfterRow > 0) {
@@ -1244,6 +2036,129 @@ function addForcedCcSetting() {
  * 既存の設定シートに ATTACHMENT_FOLDER_ID 行を追加するヘルパー。
  * 既に存在する場合はスキップする。
  */
+/**
+ * 既存の設定シートに MAIL_DRY_RUN 行を追加するヘルパー。
+ * 既に存在する場合はスキップする。
+ */
+function addMailDryRunSetting() {
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
+  if (!sheet) {
+    Logger.log('「設定」シートが見つかりません。先に setupSettingsSheet を実行してください。');
+    return;
+  }
+
+  var data = sheet.getDataRange().getValues();
+  for (var i = 0; i < data.length; i++) {
+    if (String(data[i][0]) === 'MAIL_DRY_RUN') {
+      Logger.log('MAIL_DRY_RUN は既に設定シートに存在します。');
+      return;
+    }
+  }
+
+  var insertAfterRow = -1;
+  for (var j = 0; j < data.length; j++) {
+    if (String(data[j][0]) === 'MAIL_FORCE_CC') {
+      insertAfterRow = j + 1;
+      break;
+    }
+  }
+
+  var newRow = [
+    'MAIL_DRY_RUN',
+    'メールドライラン',
+    'false',
+    'true / false',
+    'true の場合、メールは外部送信せずドライランとして記録のみ行います。\n本番運用時は false にしてください。'
+  ];
+
+  if (insertAfterRow > 0) {
+    sheet.insertRowAfter(insertAfterRow);
+    sheet.getRange(insertAfterRow + 1, 1, 1, 5).setValues([newRow]);
+  } else {
+    var last = sheet.getLastRow();
+    sheet.getRange(last + 1, 1, 1, 5).setValues([newRow]);
+    insertAfterRow = last;
+  }
+
+  var rowNum = insertAfterRow + 1;
+  sheet.getRange(rowNum, 3).setBackground('#fffbeb').setBorder(true, true, true, true, null, null, '#f59e0b', SpreadsheetApp.BorderStyle.SOLID).setFontWeight('bold');
+  sheet.getRange(rowNum, 1).setFontColor('#9ca3af').setFontSize(8);
+  sheet.getRange(rowNum, 2).setFontWeight('bold').setFontColor('#1e293b');
+  sheet.getRange(rowNum, 4).setFontColor('#9ca3af').setFontSize(9);
+  sheet.getRange(rowNum, 5).setFontColor('#64748b').setFontSize(9);
+  sheet.setRowHeight(rowNum, 40);
+
+  Logger.log('MAIL_DRY_RUN の設定行を追加しました。');
+}
+
+function addUsageLimitSettings() {
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
+  if (!sheet) {
+    Logger.log('「設定」シートが見つかりません。先に setupSettingsSheet を実行してください。');
+    return;
+  }
+
+  var data = sheet.getDataRange().getValues();
+  var hasAnnual = false;
+  var hasCase = false;
+  for (var i = 0; i < data.length; i++) {
+    var key = String(data[i][0] || '');
+    if (key === 'ANNUAL_USAGE_LIMIT') hasAnnual = true;
+    if (key === 'CASE_USAGE_LIMIT') hasCase = true;
+  }
+  if (hasAnnual && hasCase) return;
+
+  var insertAfterRow = -1;
+  for (var j = 0; j < data.length; j++) {
+    if (String(data[j][0]) === 'MAIL_DRY_RUN') {
+      insertAfterRow = j + 1;
+      break;
+    }
+  }
+
+  var newRows = [];
+  if (!hasAnnual) {
+    newRows.push([
+      'ANNUAL_USAGE_LIMIT',
+      '年度利用回数上限',
+      '10',
+      '1 以上の整数',
+      '1ユーザー1年度あたりの利用回数上限です。年度内の総対応回数がこの値を超えると新規対応/再開を制限します。'
+    ]);
+  }
+  if (!hasCase) {
+    newRows.push([
+      'CASE_USAGE_LIMIT',
+      '案件ごとの対応上限',
+      '3',
+      '1 以上の整数',
+      '1案件あたりの対応回数上限です。対応回数がこの値に達すると再開できません。'
+    ]);
+  }
+  if (!newRows.length) return;
+
+  if (insertAfterRow > 0) {
+    sheet.insertRowsAfter(insertAfterRow, newRows.length);
+    sheet.getRange(insertAfterRow + 1, 1, newRows.length, 5).setValues(newRows);
+  } else {
+    var last = sheet.getLastRow();
+    sheet.getRange(last + 1, 1, newRows.length, 5).setValues(newRows);
+    insertAfterRow = last;
+  }
+
+  for (var r = 0; r < newRows.length; r++) {
+    var rowNum = insertAfterRow + 1 + r;
+    sheet.getRange(rowNum, 3).setBackground('#fffbeb').setBorder(true, true, true, true, null, null, '#f59e0b', SpreadsheetApp.BorderStyle.SOLID).setFontWeight('bold');
+    sheet.getRange(rowNum, 1).setFontColor('#9ca3af').setFontSize(8);
+    sheet.getRange(rowNum, 2).setFontWeight('bold').setFontColor('#1e293b');
+    sheet.getRange(rowNum, 4).setFontColor('#9ca3af').setFontSize(9);
+    sheet.getRange(rowNum, 5).setFontColor('#64748b').setFontSize(9);
+    sheet.setRowHeight(rowNum, 40);
+  }
+}
+
 function addAttachmentFolderSetting() {
   var ss = getSpreadsheet_();
   var sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
@@ -1347,9 +2262,35 @@ function addAttachmentsColumnToRecords() {
  * 1) 設定シートへ ATTACHMENT_FOLDER_ID を追加
  * 2) サポート記録へ ATTACHMENTS 列を追加
  */
+function addCaseLimitOverrideColumnsToRecords() {
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  if (!sheet) throw new Error('「サポート記録」シートが見つかりません。');
+
+  var expectedCaseHeader = '案件上限上書き';
+  var expectedAnnualHeader = '年度上限上書き';
+  var requiredColumns = IDX.RECORDS.ANNUAL_LIMIT_OVERRIDE + 1;
+
+  if (sheet.getLastColumn() < requiredColumns) {
+    sheet.insertColumnsAfter(sheet.getLastColumn(), requiredColumns - sheet.getLastColumn());
+  }
+  if (String(sheet.getRange(1, IDX.RECORDS.CASE_LIMIT_OVERRIDE + 1).getValue() || '').trim() !== expectedCaseHeader) {
+    sheet.getRange(1, IDX.RECORDS.CASE_LIMIT_OVERRIDE + 1).setValue(expectedCaseHeader);
+  }
+  if (String(sheet.getRange(1, IDX.RECORDS.ANNUAL_LIMIT_OVERRIDE + 1).getValue() || '').trim() !== expectedAnnualHeader) {
+    sheet.getRange(1, IDX.RECORDS.ANNUAL_LIMIT_OVERRIDE + 1).setValue(expectedAnnualHeader);
+  }
+}
+
 function setupAttachmentFeatureSchema() {
+  ensureAdminSchema_();
   addForcedCcSetting();
+  addMailDryRunSetting();
+  addUsageLimitSettings();
   addAttachmentFolderSetting();
   addAttachmentsColumnToRecords();
+  addCaseLimitOverrideColumnsToRecords();
   Logger.log('添付機能向けスキーマ整備が完了しました。');
 }
+
+
