@@ -46,8 +46,8 @@ clasp push --force && clasp deploy -i <DEPLOY_ID> -d "vX.X.X"
 
 ## データモデル（IDX定数 — コード.js 30行目付近）
 - 全シート左詰め、ギャップなし
-- RECORDS: FK=0 〜 THREAD_ID=13（14列）
-- STAFF: NAME=1, EMAIL=2（A=ID, B=氏名, C=メール）
+- RECORDS: FK=0 〜 ATTACHMENTS=14, CASE_LIMIT_OVERRIDE=15, ANNUAL_LIMIT_OVERRIDE=16（**17列**）
+- STAFF: NAME=1, EMAIL=2, ROLE=3, IS_ACTIVE=4（A=ID, B=氏名, C=メール）
 - 年度計算: 4月開始。inProgress/completed の supportCount 合算
 
 ## ビジネスルール
@@ -64,8 +64,8 @@ clasp push --force && clasp deploy -i <DEPLOY_ID> -d "vX.X.X"
 - Webapp: `executeAs: USER_DEPLOYING`, `access: ANYONE`
 
 ## ドキュメント
-- `docs/HANDOVER.md` — 引き継ぎ書 v1.8.1
-- `docs/SDD.md` — 設計書 v1.8.1
+- `docs/HANDOVER.md` — 引き継ぎ書 v1.9.0
+- `docs/SDD.md` — 設計書 v1.9.0
 - `docs/RD.md` — 要件定義
 - `docs/ADR.md` — アーキテクチャ判断記録
 - `docs/Manual.md` — 操作マニュアル
