@@ -258,6 +258,32 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 - 案件単位の特例上限を追加: `caseLimitOverride` / `annualLimitOverride`（管理者の案件直接編集で設定）。
 - 判定は「案件上書き値があれば優先、なければ全体設定」を使用。
 
+## v1.9.0 引き継ぎ追記（検索UI刷新・管理インライン編集・新着バッジ）
+
+### 検索機能
+- キーワード検索を常時表示（サイドバー上部）
+- アクティブフィルタをチップ（pill）形式で表示・個別削除
+- 詳細フィルタ: 期間プリセット（今月/先月/今年度/前年度）、並び順トグル
+- 日付計算のタイムゾーンバグ修正（`toISOString` → ローカル時間フォーマット `getDateRange()` ヘルパー）
+
+### 管理モード インライン編集
+- ステータスバッジをクリックして直接変更（`setCaseStatusAdmin`）
+- 担当者バッジをクリックして変更（100名以上対応の名前/メール検索絞り込み付き）（`reassignCaseAdmin`）
+- 案件回数・今年度利用数をクリックして上限を特例変更（`updateCaseDataAdmin` の sparse payload）
+- 「特例」バッジで上書き中を可視化、空欄でリセット
+- Escapeキーでポップオーバーを閉じる
+
+### 新着バッジ
+- タブごとの新着件数を `+N` バッジで表示
+- 「最後にタブをクリックした時点のケースIDセット」をlocalStorageに保存し差分計算
+- 通常モード: 自分担当ケースのみカウント（未対応は全員共有）
+- 管理モード: 全件カウント、BellボタンでバッジOFF/ON（localStorage永続）
+- 閲覧モード: バッジ非表示
+- localStorage キー: `tadasapo_seenIds_{userEmail}`、`tadasapo_showNewBadge`
+
+### デプロイ情報
+- GAS Version: 14（`clasp deploy -i ... -d "v1.9.0"`）
+
 ## v1.8.3 引き継ぎ追記（管理モード復元）
 - `index.html` の管理モード切替・管理者UIを再実装。
 - 失われていた管理者向け検索条件を復元（都道府県/サービス種別/担当状況/担当者）。
