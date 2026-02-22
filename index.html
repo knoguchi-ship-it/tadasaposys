@@ -69,7 +69,8 @@
       MessageSquare, ChevronRight, X, Eye, Lock,
       AlertTriangle, FileText, Clock, Info, CheckCircle2,
       Mail, Send, Reply, RotateCcw, Search, Filter, XCircle,
-      Paperclip, UploadCloud, Trash2, Shield, Settings2, Save
+      Paperclip, UploadCloud, Trash2, Shield, Settings2, Save,
+      Bell, BellOff
     } from 'lucide-react';
 
     // ======================================================================
@@ -84,6 +85,26 @@
     const STATUS_KEYS = ['unhandled', 'inProgress', 'completed', 'rejected'];
     const ADMIN_ROLE_LABELS = { admin: '管理者', staff: 'タダメン', disabled: '無効' };
     const MAX_ATTACHMENTS_PER_REPORT = 5;
+
+    // 期間プリセット計算ユーティリティ（ローカル時間基準でフォーマット）
+    function getDateRange(preset) {
+      const today = new Date();
+      const y = today.getFullYear();
+      const m = today.getMonth(); // 0-indexed
+      // toISOString() はUTC変換されるためタイムゾーンがずれる。ローカル時間でフォーマット
+      const fmt = d => {
+        const yy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        return `${yy}-${mm}-${dd}`;
+      };
+      if (preset === 'thisMonth') return { from: fmt(new Date(y, m, 1)), to: fmt(new Date(y, m + 1, 0)) };
+      if (preset === 'lastMonth') return { from: fmt(new Date(y, m - 1, 1)), to: fmt(new Date(y, m, 0)) };
+      const fyStart = m >= 3 ? y : y - 1; // 4月始まり
+      if (preset === 'thisFiscal') return { from: fmt(new Date(fyStart, 3, 1)), to: fmt(new Date(fyStart + 1, 2, 31)) };
+      if (preset === 'lastFiscal') return { from: fmt(new Date(fyStart - 1, 3, 1)), to: fmt(new Date(fyStart, 2, 31)) };
+      return { from: '', to: '' };
+    }
 
     // ======================================================================
     // 2. Mock Data
@@ -605,7 +626,15 @@
       const [searchServiceType, setSearchServiceType] = useState('');
       const [searchAssigned, setSearchAssigned] = useState('all');
       const [searchStaffEmail, setSearchStaffEmail] = useState('');
+      const [searchSortOrder, setSearchSortOrder] = useState('newest');
       const searchInputRef = useRef(null);
+
+      // 新着バッジ: 最後に閲覧したタブのケースIDセット
+      const [seenCaseIds, setSeenCaseIds] = useState({});
+      // 管理モード: 新着バッジ表示フラグ（localStorage永続）
+      const [showNewBadge, setShowNewBadge] = useState(() =>
+        localStorage.getItem('tadasapo_showNewBadge') !== 'false'
+      );
 
       const [modalMode, setModalMode] = useState(null);
       const [editFormData, setEditFormData] = useState({});
@@ -630,6 +659,9 @@
       const [adminReassignEmail, setAdminReassignEmail] = useState('');
       const [adminStatusValue, setAdminStatusValue] = useState('');
       const [adminCaseEditDraft, setAdminCaseEditDraft] = useState({});
+      const [inlineEditField, setInlineEditField] = useState(null); // 'status' | 'staff' | 'caseLimit' | 'annualLimit' | null
+      const [staffDropdownSearch, setStaffDropdownSearch] = useState('');
+      const [inlineLimitDraft, setInlineLimitDraft] = useState('');
 
       // Dialog state
       const [toasts, setToasts] = useState([]);
@@ -695,7 +727,8 @@
         || searchPrefecture !== ''
         || searchServiceType !== ''
         || searchAssigned !== 'all'
-        || searchStaffEmail !== '';
+        || searchStaffEmail !== ''
+        || searchSortOrder !== 'newest';
       const clearSearch = useCallback(() => {
         setSearchWord('');
         setSearchDateFrom('');
@@ -704,6 +737,7 @@
         setSearchServiceType('');
         setSearchAssigned('all');
         setSearchStaffEmail('');
+        setSearchSortOrder('newest');
       }, []);
 
       const filteredCases = useMemo(() => {
@@ -732,7 +766,9 @@
           if (searchAssigned === 'unassigned' && c.staffEmail) return false;
           if (searchStaffEmail && isDashboardMode && c.staffEmail !== searchStaffEmail) return false;
           return true;
-        }).sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+        }).sort((a, b) => searchSortOrder === 'oldest'
+          ? a.timestamp.localeCompare(b.timestamp)
+          : b.timestamp.localeCompare(a.timestamp));
       }, [
         cases,
         activeTab,
@@ -744,7 +780,8 @@
         searchPrefecture,
         searchServiceType,
         searchAssigned,
-        searchStaffEmail
+        searchStaffEmail,
+        searchSortOrder
       ]);
 
       const selectedCase = useMemo(() => cases.find(c => c.id === selectedCaseId) || null, [cases, selectedCaseId]);
@@ -753,6 +790,83 @@
         const base = adminPanelData?.staffMembers || masters?.allStaff || [];
         return base.filter(s => s && s.email && (s.isActive === undefined || s.isActive));
       }, [adminPanelData, masters]);
+
+      // 詳細フィルタのアクティブ数（バッジ表示用）
+      const advancedFilterCount = useMemo(() => [
+        searchDateFrom || searchDateTo,
+        searchPrefecture,
+        searchServiceType,
+        searchAssigned !== 'all',
+        searchStaffEmail,
+        searchSortOrder !== 'newest',
+      ].filter(Boolean).length, [searchDateFrom, searchDateTo, searchPrefecture, searchServiceType, searchAssigned, searchStaffEmail, searchSortOrder]);
+
+      // 有効な上限値（案件特例 → 全体設定 → ハードコードデフォルト の優先順）
+      const effectiveCaseLimit = selectedCase?.caseLimitOverride || masters?.limits?.caseSupport || 3;
+      const effectiveAnnualLimit = selectedCase?.annualLimitOverride || masters?.limits?.annual || 10;
+
+      // タブごとのケース一覧（新着バッジ計算・seenIds更新用。検索フィルタ非適用）
+      const getTabCases = useCallback((tabKey) => {
+        return cases.filter(c => {
+          if (c.status !== tabKey) return false;
+          if (tabKey === 'unhandled') return true; // 未対応は全員共有
+          if (isDashboardMode) return true; // 閲覧・管理モードは全件
+          return c.staffEmail === user?.email; // 通常モードは自分の案件のみ
+        });
+      }, [cases, isDashboardMode, user?.email]);
+
+      // 各タブの新着件数（seenCaseIds に存在しない案件をカウント）
+      const newCaseCounts = useMemo(() => {
+        if (!showNewBadge) return {};
+        if (isDashboardMode && !isAdminMode) return {}; // 閲覧モードは不要
+        const result = {};
+        STATUS_KEYS.forEach(tabKey => {
+          const seenIds = new Set(seenCaseIds[tabKey] || []);
+          result[tabKey] = getTabCases(tabKey).filter(c => !seenIds.has(c.id)).length;
+        });
+        return result;
+      }, [cases, seenCaseIds, showNewBadge, isDashboardMode, isAdminMode, getTabCases]);
+
+      // 担当者ドロップダウン内の検索フィルタ
+      const filteredStaffForDropdown = useMemo(() => {
+        if (!staffDropdownSearch.trim()) return activeStaffMembers;
+        const kw = staffDropdownSearch.trim().toLowerCase();
+        return activeStaffMembers.filter(s =>
+          s.name.toLowerCase().includes(kw) || (s.email || '').toLowerCase().includes(kw)
+        );
+      }, [activeStaffMembers, staffDropdownSearch]);
+
+      // アクティブフィルターチップ（個別削除可能なピル）
+      const activeChips = useMemo(() => [
+        searchWord.trim() ? { id: 'keyword', label: `「${searchWord.trim()}」`, clear: () => setSearchWord('') } : null,
+        (searchDateFrom || searchDateTo) ? { id: 'date', label: `${searchDateFrom || '…'} 〜 ${searchDateTo || '…'}`, clear: () => { setSearchDateFrom(''); setSearchDateTo(''); } } : null,
+        searchPrefecture ? { id: 'pref', label: searchPrefecture, clear: () => setSearchPrefecture('') } : null,
+        searchServiceType ? { id: 'service', label: searchServiceType, clear: () => setSearchServiceType('') } : null,
+        searchAssigned !== 'all' ? { id: 'assigned', label: searchAssigned === 'assigned' ? '担当あり' : '未割当', clear: () => setSearchAssigned('all') } : null,
+        searchStaffEmail ? { id: 'staff', label: activeStaffMembers.find(s => s.email === searchStaffEmail)?.name || searchStaffEmail, clear: () => setSearchStaffEmail('') } : null,
+        searchSortOrder !== 'newest' ? { id: 'sort', label: '古い順', clear: () => setSearchSortOrder('newest') } : null,
+      ].filter(Boolean), [searchWord, searchDateFrom, searchDateTo, searchPrefecture, searchServiceType, searchAssigned, searchStaffEmail, searchSortOrder, activeStaffMembers]);
+
+      useEffect(() => {
+        setInlineEditField(null); // 案件切替でポップオーバーを閉じる
+      }, [selectedCaseId]);
+
+      // ユーザー確定後: localStorage から seenCaseIds を復元
+      useEffect(() => {
+        if (!user?.email) return;
+        try {
+          const stored = localStorage.getItem(`tadasapo_seenIds_${user.email}`);
+          if (stored) setSeenCaseIds(JSON.parse(stored));
+        } catch {}
+      }, [user?.email]);
+
+      useEffect(() => {
+        const handleKeyDown = (e) => {
+          if (e.key === 'Escape' && inlineEditField) setInlineEditField(null);
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+      }, [inlineEditField]);
 
       useEffect(() => {
         if (!selectedCase) return;
@@ -1086,6 +1200,87 @@
         }
       };
 
+      // タブクリック: activeTab切替 + seenCaseIds更新（閲覧モードは記録しない）
+      const handleTabClick = useCallback((tabKey) => {
+        setActiveTab(tabKey);
+        if (isDashboardMode && !isAdminMode) return; // 閲覧モードは不要
+        if (!user?.email) return;
+        const currentIds = getTabCases(tabKey).map(c => c.id);
+        const updated = { ...seenCaseIds, [tabKey]: currentIds };
+        setSeenCaseIds(updated);
+        try {
+          localStorage.setItem(`tadasapo_seenIds_${user.email}`, JSON.stringify(updated));
+        } catch {}
+      }, [isDashboardMode, isAdminMode, user?.email, getTabCases, seenCaseIds]);
+
+      // インライン編集ハンドラー（クリックで即時変更）
+      const handleAdminStatusChangeInline = async (newStatus) => {
+        setInlineEditField(null);
+        if (!selectedCase || newStatus === selectedCase.status) return;
+        setSubmitting(true);
+        try {
+          await Api.setCaseStatusAdmin(selectedCase.timestamp, newStatus);
+          const updatedCases = await Api.getAllCases();
+          setCases(updatedCases);
+          setActiveTab(newStatus);
+          showToast('ステータスを変更しました。', { type: 'success', title: '管理者操作' });
+        } catch (e) {
+          showToast(e.message || String(e), { type: 'error', title: 'ステータス変更エラー' });
+        } finally {
+          setSubmitting(false);
+        }
+      };
+
+      const handleAdminCaseLimitInline = async () => {
+        const newLimit = inlineLimitDraft.trim() === '' ? null : Number(inlineLimitDraft);
+        setInlineEditField(null);
+        if (!selectedCase) return;
+        setSubmitting(true);
+        try {
+          await Api.updateCaseDataAdmin(selectedCase.timestamp, { casePatch: {}, recordPatch: { caseLimitOverride: newLimit } });
+          const updatedCases = await Api.getAllCases();
+          setCases(updatedCases);
+          showToast(newLimit ? `案件上限を${newLimit}回に変更しました。` : '案件上限をデフォルトに戻しました。', { type: 'success', title: '管理者操作' });
+        } catch (e) {
+          showToast(e.message || String(e), { type: 'error', title: '上限更新エラー' });
+        } finally {
+          setSubmitting(false);
+        }
+      };
+
+      const handleAdminAnnualLimitInline = async () => {
+        const newLimit = inlineLimitDraft.trim() === '' ? null : Number(inlineLimitDraft);
+        setInlineEditField(null);
+        if (!selectedCase) return;
+        setSubmitting(true);
+        try {
+          await Api.updateCaseDataAdmin(selectedCase.timestamp, { casePatch: {}, recordPatch: { annualLimitOverride: newLimit } });
+          const updatedCases = await Api.getAllCases();
+          setCases(updatedCases);
+          showToast(newLimit ? `年度上限を${newLimit}回に変更しました。` : '年度上限をデフォルトに戻しました。', { type: 'success', title: '管理者操作' });
+        } catch (e) {
+          showToast(e.message || String(e), { type: 'error', title: '上限更新エラー' });
+        } finally {
+          setSubmitting(false);
+        }
+      };
+
+      const handleAdminReassignInline = async (staffEmail) => {
+        setInlineEditField(null);
+        if (!selectedCase || staffEmail === (selectedCase.staffEmail || '')) return;
+        setSubmitting(true);
+        try {
+          await Api.reassignCaseAdmin(selectedCase.timestamp, staffEmail);
+          const updatedCases = await Api.getAllCases();
+          setCases(updatedCases);
+          showToast('担当者を変更しました。', { type: 'success', title: '管理者操作' });
+        } catch (e) {
+          showToast(e.message || String(e), { type: 'error', title: '担当者変更エラー' });
+        } finally {
+          setSubmitting(false);
+        }
+      };
+
       const handleAdminCaseEditSave = async () => {
         if (!selectedCase) return;
         const payload = {
@@ -1301,6 +1496,23 @@
                   >
                     <Settings2 size={12} /> 設定管理
                   </button>
+                  {/* 新着通知トグル */}
+                  <button
+                    type="button"
+                    title={showNewBadge ? '新着バッジを非表示にする' : '新着バッジを表示する'}
+                    onClick={() => {
+                      const next = !showNewBadge;
+                      setShowNewBadge(next);
+                      localStorage.setItem('tadasapo_showNewBadge', String(next));
+                    }}
+                    className={`p-1.5 rounded-lg text-[10px] font-black border flex items-center gap-1.5 transition-all ${
+                      showNewBadge
+                        ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100'
+                        : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    {showNewBadge ? <Bell size={13} /> : <BellOff size={13} />}
+                  </button>
                 </div>
               )}
             </div>
@@ -1310,72 +1522,121 @@
             {/* Sidebar */}
             <div className={`flex-none w-full md:w-[320px] lg:w-[380px] bg-white border-r border-slate-200 flex flex-col z-10 ${selectedCaseId ? 'hidden md:flex' : 'flex'}`}
               role="region" aria-label="案件一覧">
-              {/* ステータスタブ + 検索トグル */}
-              <div className="p-3 border-b border-slate-100 bg-slate-50/50">
+              {/* ステータスタブ + 詳細フィルタトグル + キーワード検索（常時表示） */}
+              <div className="p-3 border-b border-slate-100 bg-slate-50/50 space-y-2">
                 <div className="flex items-center gap-1">
                   <div className="flex gap-1 flex-1 overflow-x-auto" role="tablist" aria-label="ステータス切替">
-                    {STATUS_KEYS.map(s => (
-                      <button key={s} role="tab" aria-selected={activeTab === s} aria-controls="case-list-panel"
-                        onClick={() => setActiveTab(s)}
-                        className={`px-3 py-2 rounded-lg text-[10px] font-black whitespace-nowrap transition-all ${activeTab === s ? 'bg-white shadow-sm text-teal-700 ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}>
-                        {STATUS_LABELS[s]}
-                        <span className="ml-1 opacity-50">
-                          ({cases.filter(c => {
-                            if (c.status !== s) return false;
-                            if (s === 'unhandled') return true;
-                            if (isDashboardMode) return true;
-                            return c.staffEmail === user?.email;
-                          }).length})
-                        </span>
-                      </button>
-                    ))}
+                    {STATUS_KEYS.map(s => {
+                      const tabCount = getTabCases(s).length;
+                      const newCount = newCaseCounts[s] || 0;
+                      return (
+                        <button key={s} role="tab" aria-selected={activeTab === s} aria-controls="case-list-panel"
+                          onClick={() => handleTabClick(s)}
+                          className={`relative px-3 py-2 rounded-lg text-[10px] font-black whitespace-nowrap transition-all ${activeTab === s ? 'bg-white shadow-sm text-teal-700 ring-1 ring-slate-200' : 'text-slate-400 hover:text-slate-600'}`}>
+                          {STATUS_LABELS[s]}
+                          <span className="ml-1 opacity-50">({tabCount})</span>
+                          {newCount > 0 && (
+                            <span className="ml-1 inline-flex items-center justify-center px-1.5 py-0.5 bg-rose-500 text-white rounded-full text-[9px] font-black leading-none">
+                              +{newCount}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
+                  {/* 詳細フィルタトグル（アクティブ数バッジ付き） */}
                   <button
-                    onClick={() => { setSearchOpen(!searchOpen); if (!searchOpen) setTimeout(() => searchInputRef.current?.focus(), 100); }}
-                    aria-expanded={searchOpen} aria-controls="search-panel" aria-label="検索パネルを開く"
-                    className={`shrink-0 p-2 rounded-lg transition-all ${searchOpen || hasActiveSearch ? 'bg-teal-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'}`}>
-                    <Search size={14} />
+                    onClick={() => setSearchOpen(!searchOpen)}
+                    aria-expanded={searchOpen} aria-controls="search-panel" aria-label="詳細フィルタを開く"
+                    className={`relative shrink-0 p-2 rounded-lg transition-all ${searchOpen || advancedFilterCount > 0 ? 'bg-teal-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'}`}>
+                    <Filter size={14} />
+                    {advancedFilterCount > 0 && (
+                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white rounded-full text-[9px] font-black flex items-center justify-center">
+                        {advancedFilterCount}
+                      </span>
+                    )}
                   </button>
                 </div>
+                {/* キーワード検索（常時表示） */}
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" aria-hidden="true" />
+                  <input
+                    ref={searchInputRef} type="search" autoComplete="off"
+                    value={searchWord} onChange={e => setSearchWord(e.target.value)}
+                    placeholder="事業所名・担当者名・内容を検索..."
+                    aria-label="キーワードで案件を検索"
+                    className="w-full pl-9 pr-8 py-2 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all placeholder:text-slate-300 bg-white"
+                  />
+                  {searchWord && (
+                    <button onClick={() => setSearchWord('')} aria-label="キーワードをクリア"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-slate-300 hover:text-slate-500 transition-colors">
+                      <XCircle size={14} />
+                    </button>
+                  )}
+                </div>
               </div>
-              {/* 検索パネル */}
+              {/* アクティブフィルターチップ（個別削除可能なピル表示） */}
+              {activeChips.length > 0 && (
+                <div className="px-3 py-1.5 bg-teal-50 border-b border-teal-100 flex flex-wrap gap-1 items-center">
+                  {activeChips.map(chip => (
+                    <span key={chip.id} className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-white border border-teal-200 text-teal-800 rounded-full text-[10px] font-bold shadow-sm">
+                      {chip.label}
+                      <button onClick={chip.clear} aria-label={`${chip.label}をクリア`}
+                        className="ml-0.5 hover:bg-teal-100 rounded-full p-0.5 transition-colors">
+                        <X size={9} />
+                      </button>
+                    </span>
+                  ))}
+                  {activeChips.length > 1 && (
+                    <button onClick={clearSearch} aria-label="検索条件をすべてクリア"
+                      className="text-[10px] font-black text-slate-400 hover:text-rose-500 transition-colors ml-0.5">
+                      すべてクリア
+                    </button>
+                  )}
+                  <span className="ml-auto text-[10px] font-bold text-teal-600" role="status" aria-live="polite" aria-atomic="true">
+                    {filteredCases.length} 件
+                  </span>
+                </div>
+              )}
+              {/* 詳細フィルタパネル */}
               {searchOpen && (
-                <div id="search-panel" role="search" aria-label="案件検索" className="border-b border-slate-200 bg-white animate-in fade-in duration-200">
+                <div id="search-panel" role="search" aria-label="案件絞り込み" className="border-b border-slate-200 bg-white animate-in fade-in duration-200">
                   <div className="p-3 space-y-3">
-                    {/* キーワード */}
-                    <div>
-                      <label htmlFor="search-keyword" className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">
-                        キーワード検索
-                      </label>
-                      <div className="relative">
-                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" aria-hidden="true" />
-                        <input
-                          id="search-keyword" ref={searchInputRef} type="search" autoComplete="off"
-                          value={searchWord} onChange={e => setSearchWord(e.target.value)}
-                          placeholder="事業所名、担当者名、メール、内容..."
-                          aria-label="キーワードで案件を検索"
-                          className="w-full pl-9 pr-8 py-2.5 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all placeholder:text-slate-300"
-                        />
-                        {searchWord && (
-                          <button onClick={() => setSearchWord('')} aria-label="キーワードをクリア"
-                            className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-slate-300 hover:text-slate-500 transition-colors">
-                            <XCircle size={14} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    {/* 期間 */}
+                    {/* 期間 + プリセットボタン */}
                     <fieldset>
-                      <legend className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">
+                      <legend className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1.5">
                         期間で絞り込み
                       </legend>
+                      <div className="flex gap-1 flex-wrap mb-2">
+                        {[
+                          { label: '今月', preset: 'thisMonth' },
+                          { label: '先月', preset: 'lastMonth' },
+                          { label: '今年度', preset: 'thisFiscal' },
+                          { label: '前年度', preset: 'lastFiscal' },
+                        ].map(({ label, preset }) => {
+                          const range = getDateRange(preset);
+                          const isActive = searchDateFrom === range.from && searchDateTo === range.to;
+                          return (
+                            <button key={preset}
+                              onClick={() => {
+                                if (isActive) { setSearchDateFrom(''); setSearchDateTo(''); }
+                                else { setSearchDateFrom(range.from); setSearchDateTo(range.to); }
+                              }}
+                              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${
+                                isActive ? 'bg-teal-500 text-white border-teal-500 shadow-sm' : 'border-slate-200 text-slate-500 hover:border-teal-300 hover:text-teal-600 bg-white'
+                              }`}>
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
                       <div className="flex items-center gap-2">
                         <div className="flex-1">
                           <label htmlFor="search-date-from" className="sr-only">開始日</label>
                           <input id="search-date-from" type="date" value={searchDateFrom}
                             onChange={e => setSearchDateFrom(e.target.value)}
                             aria-label="検索開始日"
-                            className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all"
+                            className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all bg-white"
                           />
                         </div>
                         <span className="text-xs font-black text-slate-300 shrink-0" aria-hidden="true">〜</span>
@@ -1384,18 +1645,19 @@
                           <input id="search-date-to" type="date" value={searchDateTo}
                             onChange={e => setSearchDateTo(e.target.value)}
                             aria-label="検索終了日"
-                            className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all"
+                            className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all bg-white"
                           />
                         </div>
                       </div>
                     </fieldset>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {/* 都道府県 + サービス種別 */}
+                    <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">都道府県</label>
                         <select
                           value={searchPrefecture}
                           onChange={e => setSearchPrefecture(e.target.value)}
-                          className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all"
+                          className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all bg-white"
                         >
                           <option value="">すべて</option>
                           {(masters?.prefectures || []).map(p => <option key={p} value={p}>{p}</option>)}
@@ -1406,20 +1668,21 @@
                         <select
                           value={searchServiceType}
                           onChange={e => setSearchServiceType(e.target.value)}
-                          className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all"
+                          className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all bg-white"
                         >
                           <option value="">すべて</option>
                           {(masters?.businessTypes || []).map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
                       </div>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {/* 担当状況 + 担当者 */}
+                    <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">担当状況</label>
                         <select
                           value={searchAssigned}
                           onChange={e => setSearchAssigned(e.target.value)}
-                          className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all"
+                          className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all bg-white"
                         >
                           <option value="all">すべて</option>
                           <option value="assigned">担当あり</option>
@@ -1428,47 +1691,37 @@
                       </div>
                       {isDashboardMode && (
                         <div>
-                          <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">担当者（管理/閲覧）</label>
+                          <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">担当者</label>
                           <select
                             value={searchStaffEmail}
                             onChange={e => setSearchStaffEmail(e.target.value)}
-                            className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all"
+                            className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all bg-white"
                           >
                             <option value="">すべて</option>
                             {activeStaffMembers.map(s => (
-                              <option key={s.email} value={s.email}>{s.name} ({s.email})</option>
+                              <option key={s.email} value={s.email}>{s.name}</option>
                             ))}
                           </select>
                         </div>
                       )}
                     </div>
-                    {/* クリアボタン + 件数 */}
+                    {/* 並び順 */}
                     <div className="flex items-center justify-between">
-                      <p className="text-[10px] font-bold text-slate-400" role="status" aria-live="polite" aria-atomic="true">
-                        {hasActiveSearch ? `${filteredCases.length} 件ヒット` : '条件を入力してください'}
-                      </p>
-                      {hasActiveSearch && (
-                        <button onClick={clearSearch} aria-label="検索条件をすべてクリア"
-                          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[10px] font-black text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors">
-                          <X size={12} /> クリア
+                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider">並び順</span>
+                      <div className="flex gap-0.5 bg-slate-100 rounded-lg p-0.5">
+                        <button
+                          onClick={() => setSearchSortOrder('newest')}
+                          className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all ${searchSortOrder === 'newest' ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                          新しい順
                         </button>
-                      )}
+                        <button
+                          onClick={() => setSearchSortOrder('oldest')}
+                          className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all ${searchSortOrder === 'oldest' ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                          古い順
+                        </button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
-              {/* 検索中バッジ（パネル閉じてても条件があれば表示） */}
-              {!searchOpen && hasActiveSearch && (
-                <div className="px-3 py-1.5 bg-teal-50 border-b border-teal-100 flex items-center justify-between">
-                  <p className="text-[10px] font-black text-teal-700 flex items-center gap-1" role="status" aria-live="polite">
-                    <Filter size={10} /> 検索中: {filteredCases.length} 件
-                    {searchWord.trim() && <span className="bg-teal-100 px-1.5 py-0.5 rounded ml-1">「{searchWord.trim()}」</span>}
-                    {(searchDateFrom || searchDateTo) && <span className="bg-teal-100 px-1.5 py-0.5 rounded ml-1">{searchDateFrom || '...'} 〜 {searchDateTo || '...'}</span>}
-                  </p>
-                  <button onClick={clearSearch} aria-label="検索条件をすべてクリア"
-                    className="p-1 rounded hover:bg-teal-100 text-teal-600 transition-colors">
-                    <X size={12} />
-                  </button>
                 </div>
               )}
               {isDashboardMode && (
@@ -1522,35 +1775,245 @@
                   <div className="bg-white p-6 lg:p-10 rounded-[2rem] shadow-sm border border-slate-100 relative overflow-hidden">
                     <div className="flex justify-between items-start mb-4">
                       <div className="flex items-center gap-3">
-                        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${
-                          selectedCase.status === 'unhandled' ? 'bg-rose-50 text-rose-600 border-rose-100' :
-                          selectedCase.status === 'inProgress' ? 'bg-sky-50 text-sky-600 border-sky-100' :
-                          selectedCase.status === 'completed' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                          'bg-slate-100 text-slate-500 border-slate-200'
-                        }`}>{STATUS_LABELS[selectedCase.status]}</span>
-                        {selectedCase.staffName && (
-                          <span className="flex items-center gap-1.5 text-xs font-black text-indigo-600">
-                            <UserIcon size={14}/> {selectedCase.staffName}
-                          </span>
+                        {/* ステータスバッジ：管理者モードではクリックでインライン変更 */}
+                        {isAdminMode && user?.isAdmin ? (
+                          <div className="relative">
+                            {inlineEditField === 'status' && (
+                              <div className="fixed inset-0 z-40" onClick={() => setInlineEditField(null)} />
+                            )}
+                            <button
+                              onClick={() => setInlineEditField(inlineEditField === 'status' ? null : 'status')}
+                              disabled={submitting}
+                              title="クリックしてステータスを変更"
+                              className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border transition-all flex items-center gap-1.5 ${
+                                selectedCase.status === 'unhandled' ? 'bg-rose-50 text-rose-600 border-rose-100 hover:bg-rose-100' :
+                                selectedCase.status === 'inProgress' ? 'bg-sky-50 text-sky-600 border-sky-100 hover:bg-sky-100' :
+                                selectedCase.status === 'completed' ? 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100' :
+                                'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
+                              } ${inlineEditField === 'status' ? 'ring-2 ring-amber-400' : ''}`}>
+                              {STATUS_LABELS[selectedCase.status]}
+                              <Edit size={9} className="opacity-40"/>
+                            </button>
+                            {inlineEditField === 'status' && (
+                              <div className="absolute top-full left-0 mt-1 bg-white shadow-xl rounded-xl border border-slate-200 z-50 overflow-hidden min-w-[120px] py-1">
+                                {STATUS_KEYS.map(k => (
+                                  <button key={k}
+                                    onClick={() => handleAdminStatusChangeInline(k)}
+                                    className={`w-full px-4 py-2.5 text-xs font-bold text-left flex items-center gap-2 transition-colors hover:bg-slate-50 ${
+                                      k === selectedCase.status ? 'text-teal-600 bg-teal-50' : 'text-slate-700'
+                                    }`}>
+                                    {k === selectedCase.status && <CheckCircle size={10}/>}
+                                    {k !== selectedCase.status && <span className="w-[10px]"/>}
+                                    {STATUS_LABELS[k]}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${
+                            selectedCase.status === 'unhandled' ? 'bg-rose-50 text-rose-600 border-rose-100' :
+                            selectedCase.status === 'inProgress' ? 'bg-sky-50 text-sky-600 border-sky-100' :
+                            selectedCase.status === 'completed' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                            'bg-slate-100 text-slate-500 border-slate-200'
+                          }`}>{STATUS_LABELS[selectedCase.status]}</span>
+                        )}
+                        {/* 担当者：管理者モードではクリックでインライン変更 */}
+                        {isAdminMode && user?.isAdmin ? (
+                          <div className="relative">
+                            {inlineEditField === 'staff' && (
+                              <div className="fixed inset-0 z-40" onClick={() => setInlineEditField(null)} />
+                            )}
+                            <button
+                              onClick={() => {
+                                if (inlineEditField !== 'staff') setStaffDropdownSearch('');
+                                setInlineEditField(inlineEditField === 'staff' ? null : 'staff');
+                              }}
+                              disabled={submitting}
+                              title="クリックして担当者を変更"
+                              className={`flex items-center gap-1.5 text-xs font-black px-2 py-1 rounded-lg transition-all ${
+                                selectedCase.staffName ? 'text-indigo-600 hover:bg-indigo-50' : 'text-slate-400 hover:bg-slate-100'
+                              } ${inlineEditField === 'staff' ? 'ring-2 ring-amber-400 bg-indigo-50' : ''}`}>
+                              <UserIcon size={14}/>
+                              {selectedCase.staffName || '担当者未設定'}
+                              <Edit size={9} className="opacity-40"/>
+                            </button>
+                            {inlineEditField === 'staff' && (
+                              <div className="absolute top-full left-0 mt-1 bg-white shadow-xl rounded-2xl border border-slate-200 z-50 overflow-hidden min-w-[230px]">
+                                {/* 検索入力（100名以上対応） */}
+                                <div className="p-2 border-b border-slate-100">
+                                  <div className="relative">
+                                    <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                    <input
+                                      type="text" autoFocus
+                                      value={staffDropdownSearch}
+                                      onChange={e => setStaffDropdownSearch(e.target.value)}
+                                      placeholder="名前・メールで検索..."
+                                      className="w-full pl-7 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:border-teal-400"
+                                    />
+                                  </div>
+                                  {staffDropdownSearch && (
+                                    <p className="text-[10px] text-slate-400 mt-1 pl-1">{filteredStaffForDropdown.length} 件</p>
+                                  )}
+                                </div>
+                                <div className="overflow-y-auto max-h-52 py-1">
+                                  {/* 未割当は検索がない場合のみ表示 */}
+                                  {!staffDropdownSearch && (
+                                    <button
+                                      onClick={() => handleAdminReassignInline('')}
+                                      className={`w-full px-4 py-2.5 text-xs font-bold text-left flex items-center gap-2 transition-colors hover:bg-slate-50 ${
+                                        !selectedCase.staffEmail ? 'text-teal-600 bg-teal-50' : 'text-slate-500'
+                                      }`}>
+                                      {!selectedCase.staffEmail && <CheckCircle size={10}/>}
+                                      {selectedCase.staffEmail && <span className="w-[10px]"/>}
+                                      未割当
+                                    </button>
+                                  )}
+                                  {filteredStaffForDropdown.length === 0 && (
+                                    <p className="text-xs text-slate-400 text-center py-4">一致なし</p>
+                                  )}
+                                  {filteredStaffForDropdown.map(s => (
+                                    <button key={s.email}
+                                      onClick={() => handleAdminReassignInline(s.email)}
+                                      className={`w-full px-4 py-2.5 text-xs font-bold text-left flex items-center gap-2 transition-colors hover:bg-slate-50 ${
+                                        s.email === selectedCase.staffEmail ? 'text-teal-600 bg-teal-50' : 'text-slate-700'
+                                      }`}>
+                                      {s.email === selectedCase.staffEmail && <CheckCircle size={10}/>}
+                                      {s.email !== selectedCase.staffEmail && <span className="w-[10px]"/>}
+                                      <span className="flex-1">{s.name}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          selectedCase.staffName && (
+                            <span className="flex items-center gap-1.5 text-xs font-black text-indigo-600">
+                              <UserIcon size={14}/> {selectedCase.staffName}
+                            </span>
+                          )
                         )}
                       </div>
                       <div className="flex gap-3 sm:gap-6 shrink-0">
+                        {/* 案件回数：管理者モードでクリックして上限を変更 */}
                         {selectedCase.status !== 'unhandled' && (
+                          isAdminMode && user?.isAdmin ? (
+                            <div className="relative text-right">
+                              {inlineEditField === 'caseLimit' && (
+                                <div className="fixed inset-0 z-40" onClick={() => setInlineEditField(null)} />
+                              )}
+                              <div className="flex items-center justify-end gap-1">
+                                <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase">案件回数</p>
+                                {selectedCase.caseLimitOverride && <span className="text-[8px] font-black text-amber-500 bg-amber-50 px-1 rounded">特例</span>}
+                              </div>
+                              <button
+                                onClick={() => {
+                                  setInlineLimitDraft(selectedCase.caseLimitOverride == null ? '' : String(selectedCase.caseLimitOverride));
+                                  setInlineEditField(inlineEditField === 'caseLimit' ? null : 'caseLimit');
+                                }}
+                                disabled={submitting}
+                                title="クリックして上限を変更"
+                                className={`text-lg sm:text-xl font-black flex items-center justify-end gap-1 hover:opacity-70 transition-opacity ${
+                                  (selectedCase.supportCount || 1) >= effectiveCaseLimit ? 'text-rose-600' : 'text-slate-800'
+                                } ${inlineEditField === 'caseLimit' ? 'opacity-70' : ''}`}>
+                                {(selectedCase.supportCount || 1) >= effectiveCaseLimit && <AlertTriangle size={16}/>}
+                                {selectedCase.supportCount || 1} / {effectiveCaseLimit}
+                                <Edit size={9} className="opacity-30 ml-0.5"/>
+                              </button>
+                              {inlineEditField === 'caseLimit' && (
+                                <div className="absolute top-full right-0 mt-1 bg-white shadow-xl rounded-2xl border border-slate-200 z-50 p-3 w-52 text-left">
+                                  <p className="text-[10px] font-black text-slate-500 mb-1.5">案件ごとの最大回数</p>
+                                  <p className="text-[9px] text-slate-400 mb-2">デフォルト: {masters?.limits?.caseSupport || 3}回　空欄でリセット</p>
+                                  <input
+                                    type="number" min="1" max="20" autoFocus
+                                    value={inlineLimitDraft}
+                                    onChange={e => setInlineLimitDraft(e.target.value)}
+                                    placeholder={String(masters?.limits?.caseSupport || 3)}
+                                    onKeyDown={e => e.key === 'Enter' && handleAdminCaseLimitInline()}
+                                    className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-sm font-black outline-none focus:border-amber-400 text-center"
+                                  />
+                                  <div className="flex gap-1 mt-2">
+                                    <button onClick={() => setInlineEditField(null)}
+                                      className="flex-1 py-1.5 rounded-xl text-xs font-bold border border-slate-200 text-slate-500 hover:bg-slate-50">
+                                      キャンセル
+                                    </button>
+                                    <button onClick={handleAdminCaseLimitInline}
+                                      className="flex-1 py-1.5 rounded-xl text-xs font-bold bg-amber-500 text-white hover:bg-amber-600">
+                                      保存
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="text-right">
+                              <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase">案件回数</p>
+                              <div className={`text-lg sm:text-xl font-black flex items-center justify-end gap-1 ${(selectedCase.supportCount || 1) >= effectiveCaseLimit ? 'text-rose-600' : 'text-slate-800'}`}>
+                                {(selectedCase.supportCount || 1) >= effectiveCaseLimit && <AlertTriangle size={16}/>}
+                                {selectedCase.supportCount || 1} / {effectiveCaseLimit}
+                              </div>
+                            </div>
+                          )
+                        )}
+                        {/* 今年度利用数：管理者モードでクリックして上限を変更 */}
+                        {isAdminMode && user?.isAdmin ? (
+                          <div className="relative text-right">
+                            {inlineEditField === 'annualLimit' && (
+                              <div className="fixed inset-0 z-40" onClick={() => setInlineEditField(null)} />
+                            )}
+                            <div className="flex items-center justify-end gap-1">
+                              <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase">今年度利用数</p>
+                              {selectedCase.annualLimitOverride && <span className="text-[8px] font-black text-amber-500 bg-amber-50 px-1 rounded">特例</span>}
+                            </div>
+                            <button
+                              onClick={() => {
+                                setInlineLimitDraft(selectedCase.annualLimitOverride == null ? '' : String(selectedCase.annualLimitOverride));
+                                setInlineEditField(inlineEditField === 'annualLimit' ? null : 'annualLimit');
+                              }}
+                              disabled={submitting}
+                              title="クリックして上限を変更"
+                              className={`text-lg sm:text-xl font-black flex items-center justify-end gap-1 hover:opacity-70 transition-opacity ${
+                                selectedCase.currentFiscalYearCount >= effectiveAnnualLimit ? 'text-rose-600' : 'text-slate-800'
+                              } ${inlineEditField === 'annualLimit' ? 'opacity-70' : ''}`}>
+                              {selectedCase.currentFiscalYearCount >= effectiveAnnualLimit && <AlertTriangle size={16}/>}
+                              {selectedCase.currentFiscalYearCount} / {effectiveAnnualLimit}
+                              <Edit size={9} className="opacity-30 ml-0.5"/>
+                            </button>
+                            {inlineEditField === 'annualLimit' && (
+                              <div className="absolute top-full right-0 mt-1 bg-white shadow-xl rounded-2xl border border-slate-200 z-50 p-3 w-52 text-left">
+                                <p className="text-[10px] font-black text-slate-500 mb-1.5">今年度の最大利用回数</p>
+                                <p className="text-[9px] text-slate-400 mb-2">デフォルト: {masters?.limits?.annual || 10}回　空欄でリセット</p>
+                                <input
+                                  type="number" min="1" max="100" autoFocus
+                                  value={inlineLimitDraft}
+                                  onChange={e => setInlineLimitDraft(e.target.value)}
+                                  placeholder={String(masters?.limits?.annual || 10)}
+                                  onKeyDown={e => e.key === 'Enter' && handleAdminAnnualLimitInline()}
+                                  className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-sm font-black outline-none focus:border-amber-400 text-center"
+                                />
+                                <div className="flex gap-1 mt-2">
+                                  <button onClick={() => setInlineEditField(null)}
+                                    className="flex-1 py-1.5 rounded-xl text-xs font-bold border border-slate-200 text-slate-500 hover:bg-slate-50">
+                                    キャンセル
+                                  </button>
+                                  <button onClick={handleAdminAnnualLimitInline}
+                                    className="flex-1 py-1.5 rounded-xl text-xs font-bold bg-amber-500 text-white hover:bg-amber-600">
+                                    保存
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
                           <div className="text-right">
-                            <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase">案件回数</p>
-                            <div className={`text-lg sm:text-xl font-black flex items-center justify-end gap-1 ${(selectedCase.supportCount || 1) >= 3 ? 'text-rose-600' : 'text-slate-800'}`}>
-                              {(selectedCase.supportCount || 1) >= 3 && <AlertTriangle size={16}/>}
-                              {selectedCase.supportCount || 1} / 3
+                            <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase">今年度利用数</p>
+                            <div className={`text-lg sm:text-xl font-black flex items-center justify-end gap-1 ${selectedCase.currentFiscalYearCount >= effectiveAnnualLimit ? 'text-rose-600' : 'text-slate-800'}`}>
+                              {selectedCase.currentFiscalYearCount >= effectiveAnnualLimit && <AlertTriangle size={16}/>}
+                              {selectedCase.currentFiscalYearCount} / {effectiveAnnualLimit}
                             </div>
                           </div>
                         )}
-                        <div className="text-right">
-                          <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase">今年度利用数</p>
-                          <div className={`text-lg sm:text-xl font-black flex items-center justify-end gap-1 ${selectedCase.currentFiscalYearCount >= 10 ? 'text-rose-600' : 'text-slate-800'}`}>
-                            {selectedCase.currentFiscalYearCount >= 10 && <AlertTriangle size={16}/>}
-                            {selectedCase.currentFiscalYearCount} / 10
-                          </div>
-                        </div>
                       </div>
                     </div>
                     <h1 className="text-2xl lg:text-3xl font-black text-slate-900 leading-tight">{selectedCase.officeName}</h1>
@@ -1843,47 +2306,7 @@
                         <h3 className="text-[10px] font-black text-amber-700 uppercase tracking-widest flex items-center gap-2">
                           <Shield size={12} /> 管理者専用操作
                         </h3>
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                          <div className="bg-white rounded-2xl border border-amber-100 p-4 space-y-2">
-                            <p className="text-xs font-black text-slate-700">1. 担当者の変更</p>
-                            <p className="text-[10px] text-slate-500">現在の担当者を初期値で表示。変更時のみ実行できます。</p>
-                            <select
-                              value={adminReassignEmail}
-                              onChange={e => setAdminReassignEmail(e.target.value)}
-                              className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-amber-400"
-                            >
-                              <option value="">未割当</option>
-                              {activeStaffMembers.map(s => <option key={s.email} value={s.email}>{s.name} ({s.email})</option>)}
-                            </select>
-                            <button
-                              type="button"
-                              onClick={handleAdminReassign}
-                              disabled={submitting || adminReassignEmail === (selectedCase.staffEmail || '')}
-                              className="px-4 py-2 rounded-xl text-xs font-black bg-amber-500 text-white disabled:opacity-40"
-                            >
-                              担当者変更
-                            </button>
-                          </div>
-                          <div className="bg-white rounded-2xl border border-amber-100 p-4 space-y-2">
-                            <p className="text-xs font-black text-slate-700">2. 案件ステータスの直接変更</p>
-                            <p className="text-[10px] text-slate-500">通常フロー外の遷移も管理者が実行できます。</p>
-                            <select
-                              value={adminStatusValue}
-                              onChange={e => setAdminStatusValue(e.target.value)}
-                              className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-amber-400"
-                            >
-                              {STATUS_KEYS.map(k => <option key={k} value={k}>{STATUS_LABELS[k]}</option>)}
-                            </select>
-                            <button
-                              type="button"
-                              onClick={handleAdminStatusChange}
-                              disabled={submitting || adminStatusValue === selectedCase.status}
-                              className="px-4 py-2 rounded-xl text-xs font-black bg-slate-800 text-white disabled:opacity-40"
-                            >
-                              状態変更
-                            </button>
-                          </div>
-                        </div>
+                        <p className="text-[10px] text-amber-600">ステータス・担当者はカード上部のバッジをクリックして直接変更できます。</p>
                         <div className="bg-white rounded-2xl border border-amber-100 p-4 space-y-3">
                           <p className="text-xs font-black text-slate-700">3. 案件データ直接編集（管理者）</p>
                           <p className="text-[10px] text-slate-500">各項目に説明を付けています。必要な値だけ更新してください。</p>
