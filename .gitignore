@@ -19,3 +19,8 @@ Thumbs.db
 # Playwright MCP (local dev tool logs)
 .playwright-mcp/
 .mcp.json
+
+# Test output
+output/
+temp_testfiles/
+test*.png
