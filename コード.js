@@ -760,14 +760,44 @@ function getLastMessageId_(threadId) {
 
 /**
  * Gmail メッセージの payload からプレーンテキスト本文を抽出する
+ * Gmail APIはBase64urlをパディングなしで返すため、標準Base64に変換してからデコードする
  */
 function getPlainTextBody_(payload) {
-  if (payload.mimeType === 'text/plain' && payload.body && payload.body.data) {
-    return Utilities.newBlob(Utilities.base64DecodeWebSafe(payload.body.data)).getDataAsString('UTF-8');
+  if (payload.body && payload.body.data &&
+      (payload.mimeType === 'text/plain' || payload.mimeType === 'text/html')) {
+    try {
+      // Base64URL → 標準 Base64 変換（- を +、_ を / に置換）してからパディング補完
+      var data = payload.body.data.replace(/-/g, '+').replace(/_/g, '/');
+      while (data.length % 4 !== 0) data += '=';
+      var bytes = Utilities.base64Decode(data);
+      var text = Utilities.newBlob(bytes).getDataAsString('UTF-8');
+      // HTML の場合はタグを除去してプレーンテキスト化
+      if (payload.mimeType === 'text/html') {
+        text = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+                   .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+                   .replace(/<br\s*\/?>/gi, '\n')
+                   .replace(/<\/p>/gi, '\n')
+                   .replace(/<[^>]+>/g, '')
+                   .replace(/&nbsp;/g, ' ')
+                   .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+                   .replace(/\n{3,}/g, '\n\n').trim();
+      }
+      return text;
+    } catch(e) {
+      return '';
+    }
   }
   if (payload.parts) {
+    // text/plain を優先して再帰探索
     for (var i = 0; i < payload.parts.length; i++) {
-      var result = getPlainTextBody_(payload.parts[i]);
+      if (payload.parts[i].mimeType === 'text/plain') {
+        var r = getPlainTextBody_(payload.parts[i]);
+        if (r) return r;
+      }
+    }
+    // text/plain が見つからなければ再帰（HTML含む）
+    for (var j = 0; j < payload.parts.length; j++) {
+      var result = getPlainTextBody_(payload.parts[j]);
       if (result) return result;
     }
   }
@@ -940,34 +970,27 @@ function getThreadMessages(caseId) {
     return [{ threadId: null, subject: fallbackMsgs[0].subject, messages: fallbackMsgs }];
   }
 
-  // Gmail API から全スレッドを取得
+  // GmailApp でスレッドを取得（base64デコード不要、.getPlainBody() で直接取得）
   var staffEmails = getAllStaffEmails_();
   var threads = [];
 
   for (var t = 0; t < threadIds.length; t++) {
     try {
-      var thread = Gmail.Users.Threads.get('me', threadIds[t], { format: 'full' });
-      var gmailMsgs = thread.messages || [];
+      var thread = GmailApp.getThreadById(threadIds[t]);
+      if (!thread) continue;
+      var gmailMsgs = thread.getMessages();
 
       var parsed = gmailMsgs.map(function(msg) {
-        var hdrs = msg.payload.headers;
-        var from = '', subj = '', date = '';
-        for (var i = 0; i < hdrs.length; i++) {
-          switch(hdrs[i].name.toLowerCase()) {
-            case 'from': from = hdrs[i].value; break;
-            case 'subject': subj = hdrs[i].value; break;
-            case 'date': date = hdrs[i].value; break;
-          }
-        }
+        var from = msg.getFrom();
         var fromEmail = from.match(/<(.+?)>/) ? from.match(/<(.+?)>/)[1] : from;
         var isStaff = staffEmails.indexOf(fromEmail.toLowerCase()) !== -1;
         var senderName = from.match(/^(.+?)\s*</) ? from.match(/^(.+?)\s*</)[1].replace(/"/g, '').trim() : fromEmail;
         return {
-          sendDate: date ? new Date(date).toISOString() : null,
+          sendDate: msg.getDate().toISOString(),
           senderName: senderName,
           fromEmail: fromEmail,
-          subject: subj,
-          body: getPlainTextBody_(msg.payload),
+          subject: msg.getSubject(),
+          body: msg.getPlainBody() || '',
           isStaff: isStaff
         };
       });
@@ -1282,9 +1305,11 @@ function getMasters() {
     attachmentFolderConfigured: attachmentFolderConfigured,
     emailTemplates: {
       initialSubject: getSetting_('MAIL_INITIAL_SUBJECT', 'タダサポ｜ご相談を承りました'),
-      initialBody: getSetting_('MAIL_INITIAL_BODY', '{{名前}} 様\n\nこの度はタダサポへご相談いただきありがとうございます。\n担当させていただきます{{担当者名}}と申します。\n\nご相談内容を確認いたしました。\n追ってサポート日時のご連絡をさせていただきます。\n\n何かご不明な点がございましたら、お気軽にお問い合わせください。\n\n今後ともよろしくお願いいたします。'),
+      initialBody: getSetting_('MAIL_INITIAL_BODY', '{{名前}} 様\n\nこの度はタダサポへご相談いただきありがとうございます。\n担当させていただきます{{担当者名}}と申します。\n\n以下の内容で受付いたしました。\n\n----------------\n【ご相談内容】\n{{相談内容}}\n----------------\n\n追ってサポート日時のご連絡をさせていただきます。\n\n何かご不明な点がございましたら、お気軽にお問い合わせください。\n\n今後ともよろしくお願いいたします。'),
+      includeDetails: getSetting_('MAIL_INITIAL_INCLUDE_DETAILS', 'true'),
       declinedSubject: getSetting_('MAIL_DECLINED_SUBJECT', 'タダサポ｜ご利用回数上限のお知らせ'),
-      declinedBody: getSetting_('MAIL_DECLINED_BODY', '{{名前}} 様\n\nいつもタダサポをご利用いただきありがとうございます。\n\n誠に恐れ入りますが、{{事業所名}} 様の今年度のご利用回数が上限（10回）に達しております。\nそのため、今回のご相談につきましては対応を見送らせていただくこととなりました。\n\n大変申し訳ございませんが、何卒ご理解くださいますようお願い申し上げます。\n次年度のご利用をお待ちしております。')
+      declinedBody: getSetting_('MAIL_DECLINED_BODY', '{{名前}} 様\n\nいつもタダサポをご利用いただきありがとうございます。\n\n誠に恐れ入りますが、{{事業所名}} 様の今年度のご利用回数が上限（10回）に達しております。\nそのため、今回のご相談につきましては対応を見送らせていただくこととなりました。\n\n大変申し訳ございませんが、何卒ご理解くださいますようお願い申し上げます。\n次年度のご利用をお待ちしております。'),
+      newBody: getSetting_('MAIL_NEW_BODY', '{{名前}} 様\n\n\n\n{{担当者名}}')
     }
   };
 }
@@ -1296,8 +1321,10 @@ function getEditableSettingsKeys_() {
     'CASE_USAGE_LIMIT',
     'MAIL_INITIAL_SUBJECT',
     'MAIL_INITIAL_BODY',
+    'MAIL_INITIAL_INCLUDE_DETAILS',
     'MAIL_DECLINED_SUBJECT',
     'MAIL_DECLINED_BODY',
+    'MAIL_NEW_BODY',
     'SHARED_CALENDAR_ID',
     'ATTACHMENT_FOLDER_ID',
     'ZOOM_ACCOUNT_ID',
@@ -1834,7 +1861,7 @@ function setupSettingsSheet() {
     ['ANNUAL_USAGE_LIMIT', '年度利用回数上限',            '10', '1 以上の整数', '1ユーザー1年度あたりの利用回数上限です。年度内の総対応回数がこの値を超えると新規対応/再開を制限します。'],
     ['CASE_USAGE_LIMIT',   '案件ごとの対応上限',          '3', '1 以上の整数', '1案件あたりの対応回数上限です。対応回数がこの値に達すると再開できません。'],
     ['MAIL_INITIAL_SUBJECT', '初回メール件名',       'タダサポ｜ご相談を承りました', 'タダサポ｜{{事業所名}}様のご相談を承りました', '「担当する」ボタン押下時に送信されるメールの件名。\n使用可能タグ: {{事業所名}} {{名前}} {{担当者名}}'],
-    ['MAIL_INITIAL_BODY',    '初回メール本文',       '{{名前}} 様\n\nこの度はタダサポへご相談いただきありがとうございます。\n担当させていただきます{{担当者名}}と申します。\n\nご相談内容を確認いたしました。\n追ってサポート日時のご連絡をさせていただきます。\n\n何かご不明な点がございましたら、お気軽にお問い合わせください。\n\n今後ともよろしくお願いいたします。', '（デフォルト文を参照）', '初回メール本文。C列のセル内で改行可能（Ctrl+Enter）。\n使用可能タグ: {{事業所名}} {{名前}} {{担当者名}} {{相談内容}}'],
+    ['MAIL_INITIAL_BODY',    '初回メール本文',       '{{名前}} 様\n\nこの度はタダサポへご相談いただきありがとうございます。\n担当させていただきます{{担当者名}}と申します。\n\n以下の内容で受付いたしました。\n\n----------------\n【ご相談内容】\n{{相談内容}}\n----------------\n\n追ってサポート日時のご連絡をさせていただきます。\n\n何かご不明な点がございましたら、お気軽にお問い合わせください。\n\n今後ともよろしくお願いいたします。', '（デフォルト文を参照）', '初回メール本文。C列のセル内で改行可能（Ctrl+Enter）。\n使用可能タグ: {{事業所名}} {{名前}} {{担当者名}} {{相談内容}}'],
     ['MAIL_DECLINED_SUBJECT', '回数超過メール件名', 'タダサポ｜ご利用回数上限のお知らせ', 'タダサポ｜{{事業所名}}様 ご利用上限のお知らせ', '年間利用回数超過時に送信されるメールの件名。\n使用可能タグ: {{事業所名}} {{名前}} {{担当者名}}'],
     ['MAIL_DECLINED_BODY',    '回数超過メール本文', '{{名前}} 様\n\nいつもタダサポをご利用いただきありがとうございます。\n\n誠に恐れ入りますが、{{事業所名}} 様の今年度のご利用回数が上限（10回）に達しております。\nそのため、今回のご相談につきましては対応を見送らせていただくこととなりました。\n\n大変申し訳ございませんが、何卒ご理解くださいますようお願い申し上げます。\n次年度のご利用をお待ちしております。', '（デフォルト文を参照）', '回数超過メール本文。\n使用可能タグ: {{事業所名}} {{名前}} {{担当者名}} {{相談内容}}'],
 
@@ -1932,7 +1959,7 @@ function addEmailTemplates() {
   var newRows = [
     ['#メールテンプレート', 'メールテンプレート設定', '', '', ''],
     ['MAIL_INITIAL_SUBJECT', '初回メール件名', 'タダサポ｜ご相談を承りました', 'タダサポ｜{{事業所名}}様のご相談を承りました', '「担当する」ボタン押下時に送信されるメールの件名。\n使用可能タグ: {{事業所名}} {{名前}} {{担当者名}}'],
-    ['MAIL_INITIAL_BODY', '初回メール本文', '{{名前}} 様\n\nこの度はタダサポへご相談いただきありがとうございます。\n担当させていただきます{{担当者名}}と申します。\n\nご相談内容を確認いたしました。\n追ってサポート日時のご連絡をさせていただきます。\n\n何かご不明な点がございましたら、お気軽にお問い合わせください。\n\n今後ともよろしくお願いいたします。', '（デフォルト文を参照）', '初回メール本文。C列のセル内で改行可能（Ctrl+Enter）。\n使用可能タグ: {{事業所名}} {{名前}} {{担当者名}} {{相談内容}}']
+    ['MAIL_INITIAL_BODY', '初回メール本文', '{{名前}} 様\n\nこの度はタダサポへご相談いただきありがとうございます。\n担当させていただきます{{担当者名}}と申します。\n\n以下の内容で受付いたしました。\n\n----------------\n【ご相談内容】\n{{相談内容}}\n----------------\n\n追ってサポート日時のご連絡をさせていただきます。\n\n何かご不明な点がございましたら、お気軽にお問い合わせください。\n\n今後ともよろしくお願いいたします。', '（デフォルト文を参照）', '初回メール本文。C列のセル内で改行可能（Ctrl+Enter）。\n使用可能タグ: {{事業所名}} {{名前}} {{担当者名}} {{相談内容}}']
   ];
 
   // システム情報カテゴリの前に挿入

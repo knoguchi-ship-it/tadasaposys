@@ -126,9 +126,11 @@
       },
       emailTemplates: {
         initialSubject: 'タダサポ｜ご相談を承りました',
-        initialBody: '{{名前}} 様\n\nこの度はタダサポへご相談いただきありがとうございます。\n担当させていただきます{{担当者名}}と申します。\n\nご相談内容を確認いたしました。\n追ってサポート日時のご連絡をさせていただきます。\n\n何かご不明な点がございましたら、お気軽にお問い合わせください。\n\n今後ともよろしくお願いいたします。',
+        initialBody: '{{名前}} 様\n\nこの度はタダサポへご相談いただきありがとうございます。\n担当させていただきます{{担当者名}}と申します。\n\n以下の内容で受付いたしました。\n\n----------------\n【ご相談内容】\n{{相談内容}}\n----------------\n\n追ってサポート日時のご連絡をさせていただきます。\n\n何かご不明な点がございましたら、お気軽にお問い合わせください。\n\n今後ともよろしくお願いいたします。',
         declinedSubject: 'タダサポ｜ご利用回数上限のお知らせ',
-        declinedBody: '{{名前}} 様\n\nいつもタダサポをご利用いただきありがとうございます。\n\n誠に恐れ入りますが、{{事業所名}} 様の今年度のご利用回数が上限（10回）に達しております。\nそのため、今回のご相談につきましては対応を見送らせていただくこととなりました。\n\n大変申し訳ございませんが、何卒ご理解くださいますようお願い申し上げます。\n次年度のご利用をお待ちしております。'
+        declinedBody: '{{名前}} 様\n\nいつもタダサポをご利用いただきありがとうございます。\n\n誠に恐れ入りますが、{{事業所名}} 様の今年度のご利用回数が上限（10回）に達しております。\nそのため、今回のご相談につきましては対応を見送らせていただくこととなりました。\n\n大変申し訳ございませんが、何卒ご理解くださいますようお願い申し上げます。\n次年度のご利用をお待ちしております。',
+        includeDetails: 'true',
+        newBody: '{{名前}} 様\n\n\n\n{{担当者名}}'
       }
     };
     let mockCases = [
@@ -215,8 +217,10 @@
       CASE_USAGE_LIMIT: '3',
       MAIL_INITIAL_SUBJECT: MOCK_MASTERS.emailTemplates.initialSubject,
       MAIL_INITIAL_BODY: MOCK_MASTERS.emailTemplates.initialBody,
+      MAIL_INITIAL_INCLUDE_DETAILS: MOCK_MASTERS.emailTemplates.includeDetails,
       MAIL_DECLINED_SUBJECT: MOCK_MASTERS.emailTemplates.declinedSubject,
       MAIL_DECLINED_BODY: MOCK_MASTERS.emailTemplates.declinedBody,
+      MAIL_NEW_BODY: MOCK_MASTERS.emailTemplates.newBody,
       SHARED_CALENDAR_ID: '',
       ATTACHMENT_FOLDER_ID: '',
       ZOOM_ACCOUNT_ID: '',
@@ -1008,24 +1012,45 @@
         };
 
         const tpl = masters?.emailTemplates || {};
+        const includeDetails = String(tpl.includeDetails) !== 'false';
+        let bodyTemplate = tpl.initialBody || '';
+        if (!includeDetails) {
+          // {{相談内容}}を含む区切りブロック（----------------〜{{相談内容}}〜----------------）を除去
+          bodyTemplate = bodyTemplate.replace(/\n*[-]{3,}\n[\s\S]*?\{\{相談内容\}\}[\s\S]*?\n[-]{3,}/g, '');
+          // 「以下の内容で受付いたしました。」行を除去（相談内容ブロックの見出し相当）
+          bodyTemplate = bodyTemplate.replace(/\n*以下の内容で受付いたしました。[ \t]*\n*/g, '\n\n');
+          // 連続した空行を整理
+          bodyTemplate = bodyTemplate.replace(/\n{3,}/g, '\n\n').trim();
+        }
         setEmailModal({
           mode: 'initial',
           caseId: selectedCase.timestamp,
           to: selectedCase.email,
           subject: replaceTags(tpl.initialSubject || 'タダサポ｜ご相談を承りました'),
-          body: replaceTags(tpl.initialBody || '')
+          body: replaceTags(bodyTemplate)
         });
       };
 
       // 新規メール作成（新しいスレッドを立てる）
       const handleComposeNewEmail = () => {
         if (!selectedCase || !user) return;
+        const tpl = masters?.emailTemplates || {};
+        const newTags = {
+          '{{事業所名}}': selectedCase.officeName || '',
+          '{{名前}}': selectedCase.requesterName || '',
+          '{{担当者名}}': user.name || ''
+        };
+        const replaceNewTags = (str) => {
+          var result = str || '';
+          Object.keys(newTags).forEach(tag => { result = result.split(tag).join(newTags[tag]); });
+          return result;
+        };
         setEmailModal({
           mode: 'new',
           caseId: selectedCase.timestamp,
           to: selectedCase.email,
           subject: '',
-          body: selectedCase.requesterName + ' 様\n\n\n\n' + user.name
+          body: replaceNewTags(tpl.newBody || '{{名前}} 様\n\n\n\n{{担当者名}}')
         });
       };
 
@@ -1380,6 +1405,8 @@
         MAIL_FORCE_CC: { label: '通常CCメールアドレス（任意）', category: 'mail', desc: '通常のCCとして追加されます（未設定可）' },
         MAIL_INITIAL_SUBJECT: { label: '初回メール件名', category: 'mail', desc: '案件の初回送信時に使用' },
         MAIL_INITIAL_BODY: { label: '初回メール本文', category: 'mail', desc: 'テンプレート本文（タグ利用可）' },
+        MAIL_INITIAL_INCLUDE_DETAILS: { label: '初回メールに相談内容を含める', category: 'mail', desc: 'OFFにすると相談内容ブロック（セパレータ含む）を省略します', type: 'boolean' },
+        MAIL_NEW_BODY: { label: '新規メール本文テンプレート', category: 'mail', desc: '「新規メール送信」時の初期本文。使用可能タグ: {{名前}} {{事業所名}} {{担当者名}}' },
         MAIL_DECLINED_SUBJECT: { label: '回数超過メール件名', category: 'mail', desc: '回数超過時に使用' },
         MAIL_DECLINED_BODY: { label: '回数超過メール本文', category: 'mail', desc: '回数超過時のテンプレート本文' },
         SHARED_CALENDAR_ID: { label: '共有カレンダーID', category: 'integration', desc: '予定作成に使用' },
@@ -2517,20 +2544,32 @@
                       </button>
                     ))}
                   </div>
-                  <div className="max-h-[52vh] overflow-auto border border-slate-100 rounded-2xl divide-y divide-slate-50">
+                  <div className="max-h-[65vh] overflow-auto border border-slate-100 rounded-2xl divide-y divide-slate-50">
                     {Object.keys(settingsDraft || {}).filter(k => (settingsMeta[k]?.category || 'other') === settingsTab).map(key => {
                       const meta = settingsMeta[key] || { label: key, desc: '' };
                       const isTextArea = key.endsWith('_BODY');
+                      const isBoolean = meta.type === 'boolean';
+                      const boolVal = String(settingsDraft[key]) === 'true';
                       return (
                         <div key={key} className="p-4 space-y-1">
                           <p className="text-xs font-black text-slate-700">{meta.label}</p>
                           <p className="text-[10px] text-slate-400">{meta.desc}</p>
-                          {isTextArea ? (
+                          {isBoolean ? (
+                            <button
+                              type="button"
+                              onClick={() => setSettingsDraft(prev => ({ ...prev, [key]: boolVal ? 'false' : 'true' }))}
+                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${boolVal ? 'bg-sky-600' : 'bg-slate-200'}`}
+                              aria-checked={boolVal}
+                              role="switch"
+                            >
+                              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${boolVal ? 'translate-x-6' : 'translate-x-1'}`}/>
+                            </button>
+                          ) : isTextArea ? (
                             <textarea
-                              rows={4}
+                              rows={10}
                               value={settingsDraft[key] || ''}
                               onChange={e => setSettingsDraft(prev => ({ ...prev, [key]: e.target.value }))}
-                              className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-sky-500"
+                              className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-sky-500 font-mono leading-relaxed"
                             />
                           ) : (
                             <input
