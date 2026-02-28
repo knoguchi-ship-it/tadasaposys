@@ -20,6 +20,7 @@ var SPREADSHEET_ID = '1hllLdETiK0sk0xW_y0V6vOmnlK7kIkHBjntYiCTom4w';
 var SHEET_NAMES = {
   SETTINGS: '設定',
   CASES: '案件リスト',
+  CASES_OVERRIDE: '案件補正',  // 管理者による案件情報手動補正（案件リストのIMPORTRANGEを保護するため分離）
   RECORDS: 'サポート記録',
   STAFF: 'タダメンマスタ',
   EMAIL_HISTORY: 'メール履歴',
@@ -28,6 +29,8 @@ var SHEET_NAMES = {
 
 var IDX = {
   CASES: { PK: 0, EMAIL: 1, OFFICE: 2, NAME: 3, DETAILS: 4, PREFECTURE: 5, SERVICE: 6 },
+  // 案件補正シートは案件リストと同じ列構造（PK=A列、値が空の列は「補正なし」を意味する）
+  CASES_OVERRIDE: { PK: 0, EMAIL: 1, OFFICE: 2, NAME: 3, DETAILS: 4, PREFECTURE: 5, SERVICE: 6 },
   RECORDS: { FK: 0, STATUS: 1, STAFF_EMAIL: 2, STAFF_NAME: 3, DATE: 4, COUNT: 5, METHOD: 6, BUSINESS: 7, CONTENT: 8, REMARKS: 9, HISTORY: 10, EVENT_ID: 11, MEET_URL: 12, THREAD_ID: 13, ATTACHMENTS: 14, CASE_LIMIT_OVERRIDE: 15, ANNUAL_LIMIT_OVERRIDE: 16 },
   STAFF: { NAME: 1, EMAIL: 2, ROLE: 3, IS_ACTIVE: 4 },
   EMAIL: { CASE_ID: 0, SEND_DATE: 1, SENDER_EMAIL: 2, SENDER_NAME: 3, RECIPIENT_EMAIL: 4, SUBJECT: 5, BODY: 6 }
@@ -312,6 +315,9 @@ function getAllCasesJoined() {
   var caseData = caseSheet.getDataRange().getValues();
   var recordData = recordSheet.getDataRange().getValues();
 
+  // 案件補正マップを読み込む（管理者が修正した値を案件リストに上書き表示するため）
+  var overrideMap = getCasesOverrideMap_(ss);
+
   // メール履歴を読み込み
   var emailMap = {};
   var emailSheet = ss.getSheetByName(SHEET_NAMES.EMAIL_HISTORY);
@@ -370,7 +376,9 @@ function getAllCasesJoined() {
     var c = caseData[j];
     var ts = String(c[IDX.CASES.PK]);
     if (!ts) continue;
-    var email = String(c[IDX.CASES.EMAIL]);
+    // 補正シートにメールアドレスの補正があればそちらを使う（年度集計の正確性のため）
+    var ovr = overrideMap[ts] || {};
+    var email = ovr.email !== null && ovr.email !== undefined ? ovr.email : String(c[IDX.CASES.EMAIL]);
     var record = recordMap[ts] || { status: 'unhandled' };
     if (record.status === 'inProgress' || record.status === 'completed') {
       var fy = getFiscalYear(ts);
@@ -385,15 +393,23 @@ function getAllCasesJoined() {
     var ts = String(c[IDX.CASES.PK]);
     if (!ts) continue;
     var record = recordMap[ts] || { status: 'unhandled', supportCount: 1 };
-    var email = String(c[IDX.CASES.EMAIL]);
+    // 案件補正マップを適用（補正値が存在する場合は上書き、null は補正なし）
+    var ovr = overrideMap[ts] || {};
+    var email       = ovr.email         !== null && ovr.email         !== undefined ? ovr.email         : String(c[IDX.CASES.EMAIL]);
+    var officeName  = ovr.officeName    !== null && ovr.officeName    !== undefined ? ovr.officeName    : c[IDX.CASES.OFFICE];
+    var reqName     = ovr.requesterName !== null && ovr.requesterName !== undefined ? ovr.requesterName : c[IDX.CASES.NAME];
+    var details     = ovr.details       !== null && ovr.details       !== undefined ? ovr.details       : c[IDX.CASES.DETAILS];
+    var prefecture  = ovr.prefecture    !== null && ovr.prefecture    !== undefined ? ovr.prefecture    : (c[IDX.CASES.PREFECTURE] || null);
+    var serviceType = ovr.serviceType   !== null && ovr.serviceType   !== undefined ? ovr.serviceType   : c[IDX.CASES.SERVICE];
     var fy = getFiscalYear(ts);
     var count = fiscalYearCounts[email + '_' + fy] || 0;
 
     joinedCases.push({
       id: ts, timestamp: ts, email: email,
-      officeName: c[IDX.CASES.OFFICE], requesterName: c[IDX.CASES.NAME],
-      details: c[IDX.CASES.DETAILS], serviceType: c[IDX.CASES.SERVICE],
-      prefecture: c[IDX.CASES.PREFECTURE] || null,
+      officeName: officeName, requesterName: reqName,
+      details: details, serviceType: serviceType,
+      prefecture: prefecture,
+      hasOverride: Object.keys(ovr).some(function(k) { return ovr[k] !== null; }),
       status: record.status, staffEmail: record.staffEmail, staffName: record.staffName,
       scheduledDateTime: record.scheduledDateTime, supportCount: record.supportCount,
       method: record.method, businessType: record.businessType,
@@ -643,12 +659,17 @@ function recordEmail_(caseId, user, recipientEmail, subject, body) {
 
 /**
  * 案件の宛先メールアドレスを取得する（内部ヘルパー）
+ * 案件補正シートにメールアドレスの補正がある場合はそちらを優先する。
  */
 function getRecipientEmail_(caseId) {
   var ss = getSpreadsheet_();
+  // 案件補正シートのメール補正を優先チェック
+  var overrideMap = getCasesOverrideMap_(ss);
+  var ovr = overrideMap[String(caseId)];
+  if (ovr && ovr.email !== null) return ovr.email;
+
   var caseSheet = ss.getSheetByName(SHEET_NAMES.CASES);
   var caseData = caseSheet.getDataRange().getValues();
-
   for (var i = 1; i < caseData.length; i++) {
     if (String(caseData[i][IDX.CASES.PK]) === String(caseId)) {
       return String(caseData[i][IDX.CASES.EMAIL]);
@@ -1660,6 +1681,63 @@ function getCaseRowIndex_(sheet, caseId) {
   return -1;
 }
 
+// ======================================================================
+// 案件補正シート ヘルパー
+// 「案件リスト」はIMPORTRANGEで保護するため、管理者による案件情報の手動補正は
+// 別シート「案件補正」に書き込み、getAllCasesJoined でマージして表示する。
+// ======================================================================
+
+/**
+ * 「案件補正」シートを取得する。存在しなければ作成してヘッダを設定する。
+ */
+function ensureCasesOverrideSheet_(ss) {
+  var sheet = ss.getSheetByName(SHEET_NAMES.CASES_OVERRIDE);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_NAMES.CASES_OVERRIDE);
+    sheet.getRange(1, 1, 1, 7).setValues([[
+      'PK', 'メールアドレス', '介護事業所名', 'お名前', '困りごと詳細', '都道府県', 'サービス種別'
+    ]]);
+  }
+  return sheet;
+}
+
+/**
+ * 案件補正シートを読み込み、{ caseId: { email, officeName, ... } } 形式のマップを返す。
+ * 値が空文字のフィールドは null として返す（「補正なし」扱い）。
+ */
+function getCasesOverrideMap_(ss) {
+  var sheet = ss.getSheetByName(SHEET_NAMES.CASES_OVERRIDE);
+  if (!sheet || sheet.getLastRow() < 2) return {};
+  var data = sheet.getDataRange().getValues();
+  var map = {};
+  for (var i = 1; i < data.length; i++) {
+    var pk = String(data[i][IDX.CASES_OVERRIDE.PK]);
+    if (!pk) continue;
+    map[pk] = {
+      email:         data[i][IDX.CASES_OVERRIDE.EMAIL]      !== '' ? String(data[i][IDX.CASES_OVERRIDE.EMAIL])      : null,
+      officeName:    data[i][IDX.CASES_OVERRIDE.OFFICE]     !== '' ? String(data[i][IDX.CASES_OVERRIDE.OFFICE])     : null,
+      requesterName: data[i][IDX.CASES_OVERRIDE.NAME]       !== '' ? String(data[i][IDX.CASES_OVERRIDE.NAME])       : null,
+      details:       data[i][IDX.CASES_OVERRIDE.DETAILS]    !== '' ? String(data[i][IDX.CASES_OVERRIDE.DETAILS])    : null,
+      prefecture:    data[i][IDX.CASES_OVERRIDE.PREFECTURE] !== '' ? String(data[i][IDX.CASES_OVERRIDE.PREFECTURE]) : null,
+      serviceType:   data[i][IDX.CASES_OVERRIDE.SERVICE]    !== '' ? String(data[i][IDX.CASES_OVERRIDE.SERVICE])    : null
+    };
+  }
+  return map;
+}
+
+/**
+ * 案件補正シートで caseId に対応する行番号を返す。
+ * 該当行がなければ PK だけセットした新規行を追加してその行番号を返す。
+ */
+function getOrCreateOverrideRowIndex_(sheet, caseId) {
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][IDX.CASES_OVERRIDE.PK]) === String(caseId)) return i + 1;
+  }
+  sheet.appendRow([caseId, '', '', '', '', '', '']);
+  return sheet.getLastRow();
+}
+
 function ensureRecordRowForCase_(sheet, caseId) {
   var data = sheet.getDataRange().getValues();
   for (var i = 1; i < data.length; i++) {
@@ -1707,8 +1785,12 @@ function updateCaseDataAdmin(caseId, payload) {
   var recordSheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
   if (!caseSheet || !recordSheet) throw new Error('必要なシートが見つかりません。');
 
+  // 案件リストの存在確認（読み取りのみ。書き込みはIMPORTRANGE保護のため行わない）
   var caseRowIndex = getCaseRowIndex_(caseSheet, caseId);
   if (caseRowIndex === -1) throw new Error('案件が見つかりません: ' + caseId);
+
+  // 案件補正シートを取得（casePatch はここに書き込む）
+  var overrideSheet = ensureCasesOverrideSheet_(ss);
 
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
@@ -1717,23 +1799,33 @@ function updateCaseDataAdmin(caseId, payload) {
     var recordRowIndex = ensureRecordRowForCase_(recordSheet, caseId);
     var beforeRecordRow = recordSheet.getRange(recordRowIndex, 1, 1, recordSheet.getLastColumn()).getValues()[0];
 
-    if (Object.prototype.hasOwnProperty.call(casePatch, 'email')) {
-      caseSheet.getRange(caseRowIndex, IDX.CASES.EMAIL + 1).setValue(String(casePatch.email || '').trim());
-    }
-    if (Object.prototype.hasOwnProperty.call(casePatch, 'officeName')) {
-      caseSheet.getRange(caseRowIndex, IDX.CASES.OFFICE + 1).setValue(String(casePatch.officeName || '').trim());
-    }
-    if (Object.prototype.hasOwnProperty.call(casePatch, 'requesterName')) {
-      caseSheet.getRange(caseRowIndex, IDX.CASES.NAME + 1).setValue(String(casePatch.requesterName || '').trim());
-    }
-    if (Object.prototype.hasOwnProperty.call(casePatch, 'details')) {
-      caseSheet.getRange(caseRowIndex, IDX.CASES.DETAILS + 1).setValue(String(casePatch.details || '').trim());
-    }
-    if (Object.prototype.hasOwnProperty.call(casePatch, 'prefecture')) {
-      caseSheet.getRange(caseRowIndex, IDX.CASES.PREFECTURE + 1).setValue(String(casePatch.prefecture || '').trim());
-    }
-    if (Object.prototype.hasOwnProperty.call(casePatch, 'serviceType')) {
-      caseSheet.getRange(caseRowIndex, IDX.CASES.SERVICE + 1).setValue(String(casePatch.serviceType || '').trim());
+    // ─── casePatch: 案件情報の補正は「案件リスト」ではなく「案件補正」シートに書き込む ───
+    // 「案件リスト」はIMPORTRANGEで保護されているため直接書き込み禁止。
+    if (Object.prototype.hasOwnProperty.call(casePatch, 'email') ||
+        Object.prototype.hasOwnProperty.call(casePatch, 'officeName') ||
+        Object.prototype.hasOwnProperty.call(casePatch, 'requesterName') ||
+        Object.prototype.hasOwnProperty.call(casePatch, 'details') ||
+        Object.prototype.hasOwnProperty.call(casePatch, 'prefecture') ||
+        Object.prototype.hasOwnProperty.call(casePatch, 'serviceType')) {
+      var overrideRowIndex = getOrCreateOverrideRowIndex_(overrideSheet, caseId);
+      if (Object.prototype.hasOwnProperty.call(casePatch, 'email')) {
+        overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.EMAIL + 1).setValue(String(casePatch.email || '').trim());
+      }
+      if (Object.prototype.hasOwnProperty.call(casePatch, 'officeName')) {
+        overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.OFFICE + 1).setValue(String(casePatch.officeName || '').trim());
+      }
+      if (Object.prototype.hasOwnProperty.call(casePatch, 'requesterName')) {
+        overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.NAME + 1).setValue(String(casePatch.requesterName || '').trim());
+      }
+      if (Object.prototype.hasOwnProperty.call(casePatch, 'details')) {
+        overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.DETAILS + 1).setValue(String(casePatch.details || '').trim());
+      }
+      if (Object.prototype.hasOwnProperty.call(casePatch, 'prefecture')) {
+        overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.PREFECTURE + 1).setValue(String(casePatch.prefecture || '').trim());
+      }
+      if (Object.prototype.hasOwnProperty.call(casePatch, 'serviceType')) {
+        overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.SERVICE + 1).setValue(String(casePatch.serviceType || '').trim());
+      }
     }
 
     if (Object.prototype.hasOwnProperty.call(recordPatch, 'status')) {

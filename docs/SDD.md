@@ -119,6 +119,26 @@
 | 6 | G列 | 変更前 | `BEFORE_JSON` | String | JSON |
 | 7 | H列 | 変更後 | `AFTER_JSON` | String | JSON |
 
+### S-06: 案件補正 (Case Override)
+*   **用途**: 管理者による案件情報（連絡先・事業所名・相談内容等）の手動補正値を保持する。
+*   **設計方針**: 「案件リスト」シートはGoogleフォームの回答をIMPORTRANGEで取り込んでいる。そのシートに直接書き込むとIMPORTRANGE数式が破壊されるため、補正値を本シートで管理し、`getAllCasesJoined()` でマージして表示する。
+*   **制約**:
+    *   各行は案件リストの PK（タイムスタンプ）を A列に持つ。
+    *   値が空文字のフィールドは「補正なし（案件リストの値をそのまま使用）」を意味する。
+    *   本シートが存在しない場合、初回 `updateCaseDataAdmin` 実行時に自動作成される。
+
+| インデックス | 物理列 | 項目名 | 論理名 | データ型 | 備考 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 0 | A列 | タイムスタンプ（案件ID） | `PK` | String | **FK** → 案件リスト.PK |
+| 1 | B列 | メールアドレス | `EMAIL` | String | 空＝補正なし |
+| 2 | C列 | 介護事業所名 | `OFFICE_NAME` | String | 空＝補正なし |
+| 3 | D列 | お名前 | `REQUESTER_NAME` | String | 空＝補正なし |
+| 4 | E列 | 困りごと詳細 | `DETAILS` | String | 空＝補正なし |
+| 5 | F列 | 都道府県 | `PREFECTURE` | String | 空＝補正なし |
+| 6 | G列 | サービス種別 | `SERVICE_TYPE` | String | 空＝補正なし |
+
+**マージ優先順位**: 案件補正（値あり）＞ 案件リスト（IMPORTRANGE元データ）
+
 ---
 
 ## 2. インターフェース仕様 (Function Specifications)

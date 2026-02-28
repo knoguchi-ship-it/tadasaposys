@@ -82,7 +82,8 @@ tadasaposys/
 ### IDX定数（コード.js 約30行目）
 ```javascript
 var IDX = {
-  CASES:   { PK: 0, EMAIL: 1, OFFICE: 2, NAME: 3, DETAILS: 4, PREFECTURE: 5, SERVICE: 6 },
+  CASES:          { PK: 0, EMAIL: 1, OFFICE: 2, NAME: 3, DETAILS: 4, PREFECTURE: 5, SERVICE: 6 },
+  CASES_OVERRIDE: { PK: 0, EMAIL: 1, OFFICE: 2, NAME: 3, DETAILS: 4, PREFECTURE: 5, SERVICE: 6 }, // 案件補正（案件リストと同列構造）
   RECORDS: { FK: 0, STATUS: 1, STAFF_EMAIL: 2, STAFF_NAME: 3, DATE: 4, COUNT: 5,
              METHOD: 6, BUSINESS: 7, CONTENT: 8, REMARKS: 9, HISTORY: 10,
              EVENT_ID: 11, MEET_URL: 12, THREAD_ID: 13, ATTACHMENTS: 14,
@@ -92,6 +93,11 @@ var IDX = {
              RECIPIENT_EMAIL: 4, SUBJECT: 5, BODY: 6 }
 };
 ```
+
+### ⚠️ 案件リスト (IMPORTRANGE) への書き込み禁止
+「案件リスト」シートは Google フォーム回答から `IMPORTRANGE` で取り込んでいる。
+このシートに `setValue` 等で書き込むと **IMPORTRANGE 数式が破壊される**。
+管理者による案件情報の修正は「**案件補正**」シートに書き込み、`getAllCasesJoined()` でマージして返す（SDD S-06 参照）。
 
 ### 上限値の優先順位
 - **案件回数上限**: `caseLimitOverride`（案件特例）→ `masters.limits.caseSupport`（全体設定）→ `3`（デフォルト）
@@ -126,7 +132,10 @@ unhandled → rejected（回数超過時）
 | `updateSettingsAdmin(patch)` | 設定更新（管理者、許可キーのみ） |
 | `reassignCaseAdmin(caseId, staffEmail)` | 管理者による再アサイン |
 | `setCaseStatusAdmin(caseId, status)` | 管理者による任意ステータス直接変更 |
-| `updateCaseDataAdmin(caseId, payload)` | 管理者による案件データ直接編集（sparse更新対応） |
+| `updateCaseDataAdmin(caseId, payload)` | 管理者による案件データ直接編集（sparse更新対応）。casePatch は「案件補正」シートへ書き込み（案件リストへの書き込み禁止） |
+| `ensureCasesOverrideSheet_(ss)` | 「案件補正」シートの存在確認・自動作成 |
+| `getCasesOverrideMap_(ss)` | 「案件補正」シートを読み込み `{ caseId: { email, officeName, ... } }` を返す |
+| `getOrCreateOverrideRowIndex_(sheet, caseId)` | 案件補正シートの行番号取得（なければ新規追加） |
 
 ---
 
