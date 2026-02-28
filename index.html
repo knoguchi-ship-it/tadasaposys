@@ -70,7 +70,7 @@
       AlertTriangle, FileText, Clock, Info, CheckCircle2,
       Mail, Send, Reply, RotateCcw, Search, Filter, XCircle,
       Paperclip, UploadCloud, Trash2, Shield, Settings2, Save,
-      Bell, BellOff
+      Bell, BellOff, ExternalLink
     } from 'lucide-react';
 
     // ======================================================================
@@ -116,6 +116,7 @@
       businessTypes: ['訪問介護', '通所介護', '居宅介護支援', '福祉用具貸与', '小規模多機能', '有料老人ホーム', 'その他'],
       prefectures: ['東京都', '神奈川県', '大阪府', '愛知県', '福岡県', '北海道', 'その他'],
       attachmentFolderConfigured: true,
+      spreadsheetUrl: 'https://docs.google.com/spreadsheets/d/1hllLdETiK0sk0xW_y0V6vOmnlK7kIkHBjntYiCTom4w/edit',
       allStaff: [
         { email: 'test@tadakayo.jp', name: 'テスト太郎' },
         { email: 'tanaka@tadakayo.jp', name: '田中花子' }
@@ -1523,6 +1524,16 @@
                   >
                     <Settings2 size={12} /> 設定管理
                   </button>
+                  {masters?.spreadsheetUrl && (
+                    <a
+                      href={masters.spreadsheetUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-3 py-1.5 rounded-lg text-[10px] font-black bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 flex items-center gap-1.5"
+                    >
+                      <ExternalLink size={12} /> DBを開く
+                    </a>
+                  )}
                   {/* 新着通知トグル */}
                   <button
                     type="button"

@@ -1319,6 +1319,7 @@ function getMasters() {
     businessTypes: ['訪問介護', '通所介護', '居宅介護支援', '福祉用具貸与', '小規模多機能', '有料老人ホーム', 'その他'],
     prefectures: ['東京都', '神奈川県', '大阪府', '愛知県', '福岡県', '北海道', 'その他'],
     allStaff: allStaff,
+    spreadsheetUrl: getSpreadsheet_().getUrl(),
     limits: {
       annual: getAnnualUsageLimit_(),
       caseSupport: getCaseUsageLimit_()
