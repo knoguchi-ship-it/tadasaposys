@@ -2502,31 +2502,31 @@
               <div className="bg-slate-900/90 backdrop-blur-md p-2 rounded-2xl shadow-2xl flex flex-wrap justify-center gap-2 pointer-events-auto ring-4 ring-white/50 max-w-[90vw]">
                 {selectedCase.status === 'unhandled' && (
                   selectedCase.currentFiscalYearCount >= 10 ? (
-                    <button onClick={handleDecline} className="px-6 py-3 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-sm font-black flex items-center gap-2 transition-all active:scale-95 cursor-pointer ring-2 ring-rose-400">
+                    <button onClick={handleDecline} disabled={submitting} className="px-6 py-3 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-sm font-black flex items-center gap-2 transition-all active:scale-95 cursor-pointer ring-2 ring-rose-400 disabled:opacity-60">
                       <AlertTriangle size={18}/> 回数超過
                     </button>
                   ) : (
                     <>
-                      <button onClick={handleAssign} className="px-6 py-3 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-sm font-black flex items-center gap-2 transition-all active:scale-95 cursor-pointer">
+                      <button onClick={handleAssign} disabled={submitting} className="px-6 py-3 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-sm font-black flex items-center gap-2 transition-all active:scale-95 cursor-pointer disabled:opacity-60">
                         <Mail size={18} /> メール送信して担当
                       </button>
-                      <button onClick={handleAssignOnly} disabled={submitting} className="px-6 py-3 bg-slate-600 hover:bg-slate-700 text-white rounded-xl text-sm font-black flex items-center gap-2 transition-all active:scale-95 cursor-pointer">
-                        <UserIcon size={18} /> 担当する（メールなし）
+                      <button onClick={handleAssignOnly} disabled={submitting} className="px-6 py-3 bg-slate-600 hover:bg-slate-700 text-white rounded-xl text-sm font-black flex items-center gap-2 transition-all active:scale-95 cursor-pointer disabled:opacity-60">
+                        {submitting ? <Loader2 size={18} className="animate-spin"/> : <UserIcon size={18}/>} 担当する（メールなし）
                       </button>
                     </>
                   )
                 )}
                 {selectedCase.status === 'inProgress' && (
                   <>
-                    <button onClick={() => openModal('schedule')} className="px-5 py-3 bg-indigo-500 text-white rounded-xl text-sm font-black flex items-center gap-2 hover:bg-indigo-600 transition-all active:scale-95 cursor-pointer">
+                    <button onClick={() => openModal('schedule')} disabled={submitting} className="px-5 py-3 bg-indigo-500 text-white rounded-xl text-sm font-black flex items-center gap-2 hover:bg-indigo-600 transition-all active:scale-95 cursor-pointer disabled:opacity-60">
                       <Calendar size={18} /> {selectedCase.scheduledDateTime ? '日時変更' : '日時決定'}
                     </button>
-                    <button onClick={handleComposeNewEmail} className="px-5 py-3 bg-sky-500 text-white rounded-xl text-sm font-black flex items-center gap-2 hover:bg-sky-600 transition-all active:scale-95 cursor-pointer">
+                    <button onClick={handleComposeNewEmail} disabled={submitting} className="px-5 py-3 bg-sky-500 text-white rounded-xl text-sm font-black flex items-center gap-2 hover:bg-sky-600 transition-all active:scale-95 cursor-pointer disabled:opacity-60">
                       <Mail size={18} /> メール送信
                     </button>
                     <button onClick={() => openModal('report')} className={`px-5 py-3 rounded-xl text-sm font-black flex items-center gap-2 transition-all active:scale-95 cursor-pointer ${
-                      !selectedCase.scheduledDateTime ? 'bg-slate-700 text-slate-400 opacity-50 cursor-not-allowed' : 'bg-emerald-500 text-white hover:bg-emerald-600'
-                    }`} disabled={!selectedCase.scheduledDateTime}>
+                      !selectedCase.scheduledDateTime || submitting ? 'bg-slate-700 text-slate-400 opacity-50 cursor-not-allowed' : 'bg-emerald-500 text-white hover:bg-emerald-600'
+                    }`} disabled={!selectedCase.scheduledDateTime || submitting}>
                       <CheckCircle size={18} /> 完了報告
                     </button>
                   </>
@@ -2534,14 +2534,14 @@
                 {selectedCase.status === 'completed' && (
                   <>
                     {(selectedCase.supportCount || 1) < 3 && selectedCase.currentFiscalYearCount < 10 && (
-                      <button onClick={handleReopen} disabled={submitting} className="px-5 py-3 bg-violet-500 text-white rounded-xl text-sm font-black flex items-center gap-2 hover:bg-violet-600 transition-all active:scale-95 cursor-pointer">
-                        <RotateCcw size={18} /> {(selectedCase.supportCount || 1) + 1}回目を開始
+                      <button onClick={handleReopen} disabled={submitting} className="px-5 py-3 bg-violet-500 text-white rounded-xl text-sm font-black flex items-center gap-2 hover:bg-violet-600 transition-all active:scale-95 cursor-pointer disabled:opacity-60">
+                        {submitting ? <Loader2 size={18} className="animate-spin"/> : <RotateCcw size={18}/>} {(selectedCase.supportCount || 1) + 1}回目を開始
                       </button>
                     )}
-                    <button onClick={handleComposeNewEmail} className="px-5 py-3 bg-sky-500 text-white rounded-xl text-sm font-black flex items-center gap-2 hover:bg-sky-600 transition-all active:scale-95 cursor-pointer">
+                    <button onClick={handleComposeNewEmail} disabled={submitting} className="px-5 py-3 bg-sky-500 text-white rounded-xl text-sm font-black flex items-center gap-2 hover:bg-sky-600 transition-all active:scale-95 cursor-pointer disabled:opacity-60">
                       <Mail size={18} /> メール送信
                     </button>
-                    <button onClick={() => openModal('edit')} className="px-6 py-3 bg-white text-slate-900 rounded-xl text-sm font-black flex items-center gap-2 hover:bg-slate-100 transition-all active:scale-95 cursor-pointer">
+                    <button onClick={() => openModal('edit')} disabled={submitting} className="px-6 py-3 bg-white text-slate-900 rounded-xl text-sm font-black flex items-center gap-2 hover:bg-slate-100 transition-all active:scale-95 cursor-pointer disabled:opacity-60">
                       <Edit size={18} /> 記録修正
                     </button>
                   </>
@@ -2909,7 +2909,7 @@
                   <button disabled={submitting} className={`w-full py-4 text-white rounded-xl font-black text-sm transition-all shadow-lg shadow-slate-200 ${
                     modalMode === 'schedule' ? 'bg-indigo-600 hover:bg-indigo-700' : modalMode === 'report' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-900 hover:bg-slate-800'
                   }`}>
-                    {submitting ? '処理中...' : modalMode === 'schedule' ? '日時を確定してカレンダー作成' : modalMode === 'report' ? '記録を保存して完了にする' : '変更を保存'}
+                    {submitting ? <><Loader2 size={16} className="animate-spin"/> 処理中...</> : modalMode === 'schedule' ? '日時を確定してカレンダー作成' : modalMode === 'report' ? '記録を保存して完了にする' : '変更を保存'}
                   </button>
                 </form>
               </div>
@@ -3030,7 +3030,7 @@
                 <textarea className={inputCls + ' resize-none'} rows={4} value={form.details} onChange={e => set('details', e.target.value)} placeholder="相談内容を入力してください。" />
               </div>
               <button type="submit" disabled={submitting} className="w-full py-3.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-black text-sm transition-all">
-                {submitting ? '追加中...' : '案件を追加する'}
+                {submitting ? <><Loader2 size={16} className="animate-spin inline mr-1"/>追加中...</> : '案件を追加する'}
               </button>
             </form>
           </div>
