@@ -1635,10 +1635,14 @@ function reassignCaseAdmin(caseId, staffEmail) {
   var actor = requireAdmin_();
   ensureAdminSchema_();
   var targetEmail = normalizeEmail_(staffEmail);
-  if (!targetEmail) throw new Error('staffEmail が必要です。');
 
-  var targetStaff = getStaffByEmail(targetEmail);
-  if (!targetStaff) throw new Error('対象スタッフが見つかりません。');
+  // 未割当の場合（staffEmail が空）: 担当をクリアして unhandled に戻す
+  var isUnassign = !targetEmail;
+  var targetStaff = null;
+  if (!isUnassign) {
+    targetStaff = getStaffByEmail(targetEmail);
+    if (!targetStaff) throw new Error('対象スタッフが見つかりません。');
+  }
 
   var ss = getSpreadsheet_();
   var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
@@ -1650,6 +1654,24 @@ function reassignCaseAdmin(caseId, staffEmail) {
       break;
     }
   }
+
+  if (isUnassign) {
+    // 未割当：レコード行がなければ何もしない（元々 unhandled）
+    if (rowIndex === -1) return;
+    var before = {
+      status: String(data[rowIndex - 1][IDX.RECORDS.STATUS] || ''),
+      staffEmail: String(data[rowIndex - 1][IDX.RECORDS.STAFF_EMAIL] || ''),
+      staffName: String(data[rowIndex - 1][IDX.RECORDS.STAFF_NAME] || '')
+    };
+    sheet.getRange(rowIndex, IDX.RECORDS.STATUS + 1).setValue('unhandled');
+    sheet.getRange(rowIndex, IDX.RECORDS.STAFF_EMAIL + 1).setValue('');
+    sheet.getRange(rowIndex, IDX.RECORDS.STAFF_NAME + 1).setValue('');
+    appendAuditLog_(actor, 'unassign_case', 'case', caseId, before, {
+      status: 'unhandled', staffEmail: '', staffName: ''
+    });
+    return;
+  }
+
   if (rowIndex === -1) {
     sheet.appendRow([
       caseId, 'inProgress', targetEmail, targetStaff.name,

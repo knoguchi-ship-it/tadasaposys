@@ -505,11 +505,19 @@
       reassignCaseAdmin: (caseId, staffEmail) => {
         if (IS_LOCAL) {
           return new Promise(resolve => setTimeout(() => {
-            const target = mockStaffMembers.find(x => x.email === String(staffEmail || '').toLowerCase());
-            mockCases = mockCases.map(c => c.id === caseId
-              ? { ...c, staffEmail: target?.email || '', staffName: target?.name || '' }
-              : c
-            );
+            if (!staffEmail) {
+              // 未割当：担当をクリアして unhandled に戻す
+              mockCases = mockCases.map(c => c.id === caseId
+                ? { ...c, status: 'unhandled', staffEmail: null, staffName: null }
+                : c
+              );
+            } else {
+              const target = mockStaffMembers.find(x => x.email === String(staffEmail).toLowerCase());
+              mockCases = mockCases.map(c => c.id === caseId
+                ? { ...c, staffEmail: target?.email || '', staffName: target?.name || '' }
+                : c
+              );
+            }
             resolve();
           }, 250));
         }
