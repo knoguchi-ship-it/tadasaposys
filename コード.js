@@ -21,6 +21,7 @@ var SHEET_NAMES = {
   SETTINGS: '設定',
   CASES: '案件リスト',
   CASES_OVERRIDE: '案件補正',  // 管理者による案件情報手動補正（案件リストのIMPORTRANGEを保護するため分離）
+  CASES_MANUAL: '案件手動追加', // 管理者がアプリから手動追加した案件（案件リストとは別シートで整合性を保護）
   RECORDS: 'サポート記録',
   STAFF: 'タダメンマスタ',
   EMAIL_HISTORY: 'メール履歴',
@@ -315,6 +316,13 @@ function getAllCasesJoined() {
   var caseData = caseSheet.getDataRange().getValues();
   var recordData = recordSheet.getDataRange().getValues();
 
+  // 手動追加案件シートを読み込み、案件リストとマージ（ヘッダ行を除いた行配列を結合）
+  var manualSheet = ss.getSheetByName(SHEET_NAMES.CASES_MANUAL);
+  var manualRows = (manualSheet && manualSheet.getLastRow() > 1)
+    ? manualSheet.getDataRange().getValues().slice(1)
+    : [];
+  var allCaseRows = caseData.slice(1).concat(manualRows);
+
   // 案件補正マップを読み込む（管理者が修正した値を案件リストに上書き表示するため）
   var overrideMap = getCasesOverrideMap_(ss);
 
@@ -372,8 +380,8 @@ function getAllCasesJoined() {
     };
   }
 
-  for (var j = 1; j < caseData.length; j++) {
-    var c = caseData[j];
+  for (var j = 0; j < allCaseRows.length; j++) {
+    var c = allCaseRows[j];
     var ts = String(c[IDX.CASES.PK]);
     if (!ts) continue;
     // 補正シートにメールアドレスの補正があればそちらを使う（年度集計の正確性のため）
@@ -389,8 +397,8 @@ function getAllCasesJoined() {
 
   var joinedCases = [];
   var seenPks = {};
-  for (var j = 1; j < caseData.length; j++) {
-    var c = caseData[j];
+  for (var j = 0; j < allCaseRows.length; j++) {
+    var c = allCaseRows[j];
     var ts = String(c[IDX.CASES.PK]);
     if (!ts) continue;
     if (seenPks[ts]) continue; // 重複PKをスキップ
@@ -1740,6 +1748,61 @@ function getOrCreateOverrideRowIndex_(sheet, caseId) {
   }
   sheet.appendRow([caseId, '', '', '', '', '', '']);
   return sheet.getLastRow();
+}
+
+// ======================================================================
+// 案件手動追加シート ヘルパー
+// 管理者がアプリから直接登録する案件を保存するシート。
+// 「案件リスト」はIMPORTRANGE保護のため書き込み不可なため分離。
+// PKは "manual_" + UNIXミリ秒 で衝突ゼロを保証。
+// ======================================================================
+
+/**
+ * 「案件手動追加」シートを取得する。存在しなければ作成してヘッダを設定する。
+ */
+function ensureCasesManualSheet_(ss) {
+  var sheet = ss.getSheetByName(SHEET_NAMES.CASES_MANUAL);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_NAMES.CASES_MANUAL);
+    sheet.getRange(1, 1, 1, 7).setValues([[
+      'PK', 'メールアドレス', '介護事業所名', 'お名前', '困りごと詳細', '都道府県', 'サービス種別'
+    ]]);
+  }
+  return sheet;
+}
+
+/**
+ * 管理者が新規案件を手動追加する。
+ * PKは "manual_" + UNIXミリ秒 で生成するため重複は発生しない。
+ */
+function addManualCase(payload) {
+  var actor = requireAdmin_();
+  if (!payload.email)         throw new Error('メールアドレスは必須です。');
+  if (!payload.officeName)    throw new Error('介護事業所名は必須です。');
+  if (!payload.requesterName) throw new Error('お名前は必須です。');
+  if (!payload.details)       throw new Error('困りごと詳細は必須です。');
+
+  var ss = getSpreadsheet_();
+  var sheet = ensureCasesManualSheet_(ss);
+
+  var pk = 'manual_' + new Date().getTime();
+  sheet.appendRow([
+    pk,
+    payload.email,
+    payload.officeName,
+    payload.requesterName,
+    payload.details,
+    payload.prefecture || '',
+    payload.serviceType || ''
+  ]);
+
+  appendAuditLog_(actor, 'add_manual_case', 'case', pk, null, {
+    email: payload.email,
+    officeName: payload.officeName,
+    requesterName: payload.requesterName
+  });
+
+  return pk;
 }
 
 function ensureRecordRowForCase_(sheet, caseId) {

@@ -70,7 +70,7 @@
       AlertTriangle, FileText, Clock, Info, CheckCircle2,
       Mail, Send, Reply, RotateCcw, Search, Filter, XCircle,
       Paperclip, UploadCloud, Trash2, Shield, Settings2, Save,
-      Bell, BellOff, ExternalLink
+      Bell, BellOff, ExternalLink, Plus
     } from 'lucide-react';
 
     // ======================================================================
@@ -542,6 +542,35 @@
         return new Promise((resolve, reject) => {
           google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).updateCaseDataAdmin(caseId, payload);
         });
+      },
+      addManualCase: (payload) => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            var pk = 'manual_' + Date.now();
+            var newCase = {
+              id: pk, timestamp: pk,
+              email: payload.email,
+              officeName: payload.officeName,
+              requesterName: payload.requesterName,
+              details: payload.details,
+              serviceType: payload.serviceType || '',
+              prefecture: payload.prefecture || null,
+              status: 'unhandled',
+              staffEmail: null, staffName: null,
+              scheduledDateTime: null, supportCount: 1,
+              method: null, businessType: null,
+              content: null, remarks: null,
+              eventId: null, meetUrl: null,
+              currentFiscalYearCount: 0,
+              supportHistory: [], attachments: [], emails: []
+            };
+            mockCases = [newCase, ...mockCases];
+            resolve(pk);
+          }, 300));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).addManualCase(payload);
+        });
       }
     };
 
@@ -657,6 +686,7 @@
       const [adminPanelLoading, setAdminPanelLoading] = useState(false);
       const [adminRoleDialogOpen, setAdminRoleDialogOpen] = useState(false);
       const [adminSettingsDialogOpen, setAdminSettingsDialogOpen] = useState(false);
+      const [addCaseDialogOpen, setAddCaseDialogOpen] = useState(false);
       const [roleSearchWord, setRoleSearchWord] = useState('');
       const [roleStatusFilter, setRoleStatusFilter] = useState('all');
       const [settingsDraft, setSettingsDraft] = useState({});
@@ -1510,6 +1540,13 @@
               </div>
               {user?.isAdmin && isAdminMode && (
                 <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAddCaseDialogOpen(true)}
+                    className="px-3 py-1.5 rounded-lg text-[10px] font-black bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 flex items-center gap-1.5"
+                  >
+                    <Plus size={12} /> 新規案件
+                  </button>
                   <button
                     type="button"
                     onClick={() => setAdminRoleDialogOpen(true)}
@@ -2468,6 +2505,19 @@
             </div>
           )}
 
+          {addCaseDialogOpen && (
+            <AddCaseDialog
+              masters={masters}
+              onClose={() => setAddCaseDialogOpen(false)}
+              onAdded={(newCase) => {
+                setCases(prev => [newCase, ...prev]);
+                setAddCaseDialogOpen(false);
+                showToast('案件を追加しました。', { type: 'success', title: '新規案件追加' });
+              }}
+              showToast={showToast}
+            />
+          )}
+
           {adminRoleDialogOpen && (
             <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-sm p-4 flex items-center justify-center">
               <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden">
@@ -2811,6 +2861,112 @@
               </div>
             </div>
           )}
+        </div>
+      );
+    }
+
+    // ======================================================================
+    // 新規案件追加ダイアログ（管理モード専用）
+    // ======================================================================
+    function AddCaseDialog({ masters, onClose, onAdded, showToast }) {
+      const PREFECTURES = masters?.prefectures || [];
+      const SERVICE_TYPES = masters?.businessTypes || [];
+      const [form, setForm] = useState({ email: '', officeName: '', requesterName: '', details: '', prefecture: '', serviceType: '' });
+      const [submitting, setSubmitting] = useState(false);
+
+      const set = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!form.email.trim())         return showToast('メールアドレスを入力してください。', { type: 'error' });
+        if (!form.officeName.trim())    return showToast('介護事業所名を入力してください。', { type: 'error' });
+        if (!form.requesterName.trim()) return showToast('お名前を入力してください。', { type: 'error' });
+        if (!form.details.trim())       return showToast('困りごと詳細を入力してください。', { type: 'error' });
+        setSubmitting(true);
+        try {
+          const pk = await Api.addManualCase({
+            email: form.email.trim(),
+            officeName: form.officeName.trim(),
+            requesterName: form.requesterName.trim(),
+            details: form.details.trim(),
+            prefecture: form.prefecture || '',
+            serviceType: form.serviceType || ''
+          });
+          onAdded({
+            id: pk, timestamp: pk,
+            email: form.email.trim(),
+            officeName: form.officeName.trim(),
+            requesterName: form.requesterName.trim(),
+            details: form.details.trim(),
+            prefecture: form.prefecture || null,
+            serviceType: form.serviceType || '',
+            status: 'unhandled',
+            staffEmail: null, staffName: null,
+            scheduledDateTime: null, supportCount: 1,
+            method: null, businessType: null,
+            content: null, remarks: null,
+            eventId: null, meetUrl: null,
+            currentFiscalYearCount: 0,
+            supportHistory: [], attachments: [], emails: []
+          });
+        } catch (e) {
+          showToast(e.message || String(e), { type: 'error', title: '案件追加エラー' });
+        } finally {
+          setSubmitting(false);
+        }
+      };
+
+      const inputCls = 'w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400';
+      const labelCls = 'block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1';
+
+      return (
+        <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-sm p-4 flex items-center justify-center">
+          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-black text-slate-800 flex items-center gap-2"><Plus size={16}/> 新規案件追加</h3>
+                <p className="text-[10px] text-slate-500 mt-0.5">管理者による手動登録。「案件手動追加」シートに保存されます。</p>
+              </div>
+              <button onClick={onClose} className="p-2 rounded-lg hover:bg-slate-100"><X size={16}/></button>
+            </div>
+            <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4 overflow-y-auto max-h-[70vh]">
+              <div>
+                <label className={labelCls}>メールアドレス <span className="text-rose-500">*</span></label>
+                <input type="email" className={inputCls} value={form.email} onChange={e => set('email', e.target.value)} placeholder="example@kaigo.jp" />
+              </div>
+              <div>
+                <label className={labelCls}>介護事業所名 <span className="text-rose-500">*</span></label>
+                <input type="text" className={inputCls} value={form.officeName} onChange={e => set('officeName', e.target.value)} placeholder="〇〇訪問介護ステーション" />
+              </div>
+              <div>
+                <label className={labelCls}>お名前 <span className="text-rose-500">*</span></label>
+                <input type="text" className={inputCls} value={form.requesterName} onChange={e => set('requesterName', e.target.value)} placeholder="山田 太郎" />
+              </div>
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className={labelCls}>都道府県</label>
+                  <select className={inputCls} value={form.prefecture} onChange={e => set('prefecture', e.target.value)}>
+                    <option value="">未選択</option>
+                    {PREFECTURES.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                </div>
+                <div className="flex-1">
+                  <label className={labelCls}>サービス種別</label>
+                  <select className={inputCls} value={form.serviceType} onChange={e => set('serviceType', e.target.value)}>
+                    <option value="">未選択</option>
+                    {SERVICE_TYPES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className={labelCls}>困りごと詳細 <span className="text-rose-500">*</span></label>
+                <textarea className={inputCls + ' resize-none'} rows={4} value={form.details} onChange={e => set('details', e.target.value)} placeholder="相談内容を入力してください。" />
+              </div>
+              <button type="submit" disabled={submitting} className="w-full py-3.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-black text-sm transition-all">
+                {submitting ? '追加中...' : '案件を追加する'}
+              </button>
+            </form>
+          </div>
         </div>
       );
     }
