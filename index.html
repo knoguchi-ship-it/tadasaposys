@@ -682,6 +682,7 @@
 
       const [modalMode, setModalMode] = useState(null);
       const [editFormData, setEditFormData] = useState({});
+      const [useCalendar, setUseCalendar] = useState(true);
       const [existingAttachments, setExistingAttachments] = useState([]);
       const [pendingFiles, setPendingFiles] = useState([]);
       const [dragOverAttachments, setDragOverAttachments] = useState(false);
@@ -1180,6 +1181,7 @@
             payload.newAttachments = encodedFiles;
             payload.user = user ? { name: user.name, email: user.email } : null;
           }
+          if (modalMode === 'schedule') payload.skipCalendar = !useCalendar;
           await Api.updateSupportRecord(payload);
           const updatedCases = await Api.getAllCases();
           setCases(updatedCases);
@@ -1228,6 +1230,7 @@
       const openModal = (mode) => {
         if (!selectedCase) return;
         setModalMode(mode);
+        setUseCalendar(true); // 毎回デフォルトONでリセット
         setEditFormData({
           scheduledDateTime: selectedCase.scheduledDateTime ? new Date(selectedCase.scheduledDateTime).toISOString().substring(0,16) : '',
           method: selectedCase.method || 'GoogleMeet',
@@ -2501,6 +2504,11 @@
           {selectedCase && !isReadOnlyMode && (
             <div className="fixed bottom-6 left-0 right-0 px-6 flex justify-center pointer-events-none z-[100]">
               <div className="bg-slate-900/90 backdrop-blur-md p-2 rounded-2xl shadow-2xl flex flex-wrap justify-center gap-2 pointer-events-auto ring-4 ring-white/50 max-w-[90vw]">
+                {selectedCase.status === 'unhandled' && isAdminMode && user?.isAdmin && (
+                  <button onClick={() => openModal('schedule')} disabled={submitting} className="px-5 py-3 bg-indigo-500 text-white rounded-xl text-sm font-black flex items-center gap-2 hover:bg-indigo-600 transition-all active:scale-95 cursor-pointer disabled:opacity-60">
+                    <Calendar size={18} /> 日時設定
+                  </button>
+                )}
                 {selectedCase.status === 'unhandled' && (
                   selectedCase.currentFiscalYearCount >= 10 ? (
                     <button onClick={handleDecline} disabled={submitting} className="px-6 py-3 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-sm font-black flex items-center gap-2 transition-all active:scale-95 cursor-pointer ring-2 ring-rose-400 disabled:opacity-60">
@@ -2534,6 +2542,11 @@
                 )}
                 {selectedCase.status === 'completed' && (
                   <>
+                    {isAdminMode && user?.isAdmin && (
+                      <button onClick={() => openModal('schedule')} disabled={submitting} className="px-5 py-3 bg-indigo-500 text-white rounded-xl text-sm font-black flex items-center gap-2 hover:bg-indigo-600 transition-all active:scale-95 cursor-pointer disabled:opacity-60">
+                        <Calendar size={18} /> 日時変更
+                      </button>
+                    )}
                     {(selectedCase.supportCount || 1) < 3 && selectedCase.currentFiscalYearCount < 10 && (
                       <button onClick={handleReopen} disabled={submitting} className="px-5 py-3 bg-violet-500 text-white rounded-xl text-sm font-black flex items-center gap-2 hover:bg-violet-600 transition-all active:scale-95 cursor-pointer disabled:opacity-60">
                         {submitting ? <Loader2 size={18} className="animate-spin"/> : <RotateCcw size={18}/>} {(selectedCase.supportCount || 1) + 1}回目を開始
@@ -2787,7 +2800,7 @@
                       {modalMode === 'schedule' ? '日程の確定・変更' : modalMode === 'report' ? '実施記録・完了報告' : '記録の修正'}
                     </h3>
                     <p className="text-[10px] font-bold text-slate-400 mt-0.5">
-                      {modalMode === 'schedule' ? 'Googleカレンダー予定を作成します' : modalMode === 'report' ? 'ステータスを「完了」に変更します' : 'データを上書き保存します'}
+                      {modalMode === 'schedule' ? '対応日時を設定します（カレンダー登録は任意）' : modalMode === 'report' ? 'ステータスを「完了」に変更します' : 'データを上書き保存します'}
                     </p>
                   </div>
                   <button onClick={() => { setModalMode(null); setPendingFiles([]); setExistingAttachments([]); setDragOverAttachments(false); }}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
@@ -2808,14 +2821,27 @@
                         </div>
                       </div>
                       {modalMode === 'schedule' && (
-                        <p className="text-[10px] text-indigo-600 font-bold flex items-start gap-1">
-                          <Video size={12} className="shrink-0 mt-0.5"/>
-                          {editFormData.method === 'Zoom'
-                            ? '保存後、自動的にZoom会議URLが発行されカレンダーに登録されます。'
-                            : editFormData.method === 'GoogleMeet'
-                            ? '保存後、自動的にMeet URLが発行されカレンダーに登録されます。'
-                            : '保存後、カレンダーに予定を登録します。'}
-                        </p>
+                        <div className="space-y-2">
+                          <label className="flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={useCalendar}
+                              onChange={e => setUseCalendar(e.target.checked)}
+                              className="w-4 h-4 accent-indigo-600"
+                            />
+                            <span className="text-[10px] font-black text-indigo-600">Googleカレンダーに登録する</span>
+                          </label>
+                          {useCalendar && (
+                            <p className="text-[10px] text-indigo-500 font-bold flex items-start gap-1 pl-6">
+                              <Video size={12} className="shrink-0 mt-0.5"/>
+                              {editFormData.method === 'Zoom'
+                                ? 'Zoom会議URLが自動発行されカレンダーに登録されます。'
+                                : editFormData.method === 'GoogleMeet'
+                                ? 'Meet URLが自動発行されカレンダーに登録されます。'
+                                : 'カレンダーに予定を登録します。'}
+                            </p>
+                          )}
+                        </div>
                       )}
                     </div>
                   )}

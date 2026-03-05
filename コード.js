@@ -1212,7 +1212,13 @@ function updateSupportRecord(recordData) {
       break;
     }
   }
-  if (rowIndex === -1) throw new Error('レコードが見つかりません ID: ' + recordData.timestamp);
+  if (rowIndex === -1) {
+    // 管理者が unhandled 案件の日時を設定する場合など、レコード行が未作成のケースに対応
+    if (!actor.isAdmin) throw new Error('レコードが見つかりません ID: ' + recordData.timestamp);
+    rowIndex = ensureRecordRowForCase_(sheet, recordData.timestamp);
+    // 行を新規作成したので data を再取得
+    data = sheet.getDataRange().getValues();
+  }
 
   var before = {
     status: data[rowIndex - 1][IDX.RECORDS.STATUS],
@@ -1225,7 +1231,8 @@ function updateSupportRecord(recordData) {
   var currentAttachments = parseJsonArray_(data[rowIndex - 1][IDX.RECORDS.ATTACHMENTS]);
   var eventTitle = '【タダサポ】' + recordData.officeName + ' 様';
 
-  if (recordData.scheduledDateTime && !currentMeetUrl) {
+  // skipCalendar=true の場合はカレンダー・Meet・Zoom登録をスキップ
+  if (recordData.scheduledDateTime && !currentMeetUrl && !recordData.skipCalendar) {
     if (recordData.method === 'GoogleMeet') {
       try {
         var meetResult = createGoogleMeetEvent(eventTitle, recordData.scheduledDateTime, recordData.details);
