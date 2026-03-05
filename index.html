@@ -772,8 +772,8 @@
           if (searchStaffEmail && isDashboardMode && c.staffEmail !== searchStaffEmail) return false;
           return true;
         }).sort((a, b) => searchSortOrder === 'oldest'
-          ? a.timestamp.localeCompare(b.timestamp)
-          : b.timestamp.localeCompare(a.timestamp));
+          ? new Date(a.timestamp) - new Date(b.timestamp)
+          : new Date(b.timestamp) - new Date(a.timestamp));
       }, [
         cases,
         activeTab,

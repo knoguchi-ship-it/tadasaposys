@@ -425,7 +425,7 @@ function getAllCasesJoined() {
     });
   }
 
-  return joinedCases.sort(function(a, b) { return b.timestamp.localeCompare(a.timestamp); });
+  return joinedCases.sort(function(a, b) { return new Date(b.timestamp) - new Date(a.timestamp); });
 }
 
 // ======================================================================
