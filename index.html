@@ -2217,7 +2217,8 @@
                       )}
                       {selectedCase.content && (
                         <div className="bg-slate-50 p-4 rounded-2xl text-xs text-slate-600">
-                          <span className="font-bold block mb-1">記録:</span>{linkifyText(selectedCase.content)}
+                          <span className="font-bold block mb-1">記録:</span>
+                          <p className="whitespace-pre-wrap leading-relaxed">{linkifyText(selectedCase.content)}</p>
                         </div>
                       )}
                       {selectedCase.attachments && selectedCase.attachments.length > 0 && (
