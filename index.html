@@ -706,6 +706,8 @@
       const [adminCaseEditDraft, setAdminCaseEditDraft] = useState({});
       const [inlineEditField, setInlineEditField] = useState(null); // 'status' | 'staff' | 'caseLimit' | 'annualLimit' | null
       const [staffDropdownSearch, setStaffDropdownSearch] = useState('');
+      const [filterStaffWord, setFilterStaffWord] = useState('');
+      const [filterStaffOpen, setFilterStaffOpen] = useState(false);
       const [inlineLimitDraft, setInlineLimitDraft] = useState('');
 
       // Dialog state
@@ -1775,18 +1777,37 @@
                         </select>
                       </div>
                       {isDashboardMode && (
-                        <div>
+                        <div className="relative">
                           <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">担当者</label>
-                          <select
-                            value={searchStaffEmail}
-                            onChange={e => setSearchStaffEmail(e.target.value)}
+                          <input
+                            type="text"
+                            value={filterStaffOpen ? filterStaffWord : (activeStaffMembers.find(s => s.email === searchStaffEmail)?.name || '')}
+                            placeholder="すべて"
+                            onFocus={() => { setFilterStaffOpen(true); setFilterStaffWord(''); }}
+                            onBlur={() => setTimeout(() => setFilterStaffOpen(false), 150)}
+                            onChange={e => setFilterStaffWord(e.target.value)}
                             className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all bg-white"
-                          >
-                            <option value="">すべて</option>
-                            {activeStaffMembers.map(s => (
-                              <option key={s.email} value={s.email}>{s.name}</option>
-                            ))}
-                          </select>
+                          />
+                          {filterStaffOpen && (
+                            <div className="absolute z-10 top-full mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                              <button
+                                type="button"
+                                onMouseDown={() => { setSearchStaffEmail(''); setFilterStaffOpen(false); }}
+                                className="w-full text-left px-3 py-2 text-xs text-slate-400 font-bold hover:bg-slate-50"
+                              >すべて</button>
+                              {activeStaffMembers
+                                .filter(s => !filterStaffWord.trim() || s.name.toLowerCase().includes(filterStaffWord.trim().toLowerCase()) || s.email.toLowerCase().includes(filterStaffWord.trim().toLowerCase()))
+                                .map(s => (
+                                  <button
+                                    key={s.email}
+                                    type="button"
+                                    onMouseDown={() => { setSearchStaffEmail(s.email); setFilterStaffOpen(false); }}
+                                    className={`w-full text-left px-3 py-2 text-xs font-bold hover:bg-teal-50 hover:text-teal-700 ${searchStaffEmail === s.email ? 'bg-teal-50 text-teal-700' : 'text-slate-700'}`}
+                                  >{s.name}</button>
+                                ))
+                              }
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
