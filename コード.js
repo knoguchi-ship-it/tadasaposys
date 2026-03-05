@@ -388,10 +388,13 @@ function getAllCasesJoined() {
   }
 
   var joinedCases = [];
+  var seenPks = {};
   for (var j = 1; j < caseData.length; j++) {
     var c = caseData[j];
     var ts = String(c[IDX.CASES.PK]);
     if (!ts) continue;
+    if (seenPks[ts]) continue; // 重複PKをスキップ
+    seenPks[ts] = true;
     var record = recordMap[ts] || { status: 'unhandled', supportCount: 1 };
     // 案件補正マップを適用（補正値が存在する場合は上書き、null は補正なし）
     var ovr = overrideMap[ts] || {};
