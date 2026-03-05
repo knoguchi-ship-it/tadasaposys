@@ -2543,11 +2543,6 @@
                 )}
                 {selectedCase.status === 'completed' && (
                   <>
-                    {isAdminMode && user?.isAdmin && (
-                      <button onClick={() => openModal('schedule')} disabled={submitting} className="px-5 py-3 bg-indigo-500 text-white rounded-xl text-sm font-black flex items-center gap-2 hover:bg-indigo-600 transition-all active:scale-95 cursor-pointer disabled:opacity-60">
-                        <Calendar size={18} /> 日時変更
-                      </button>
-                    )}
                     {(selectedCase.supportCount || 1) < 3 && selectedCase.currentFiscalYearCount < 10 && (
                       <button onClick={handleReopen} disabled={submitting} className="relative px-5 py-3 bg-violet-500 text-white rounded-xl text-sm font-black flex items-center gap-2 hover:bg-violet-600 transition-all active:scale-95 cursor-pointer disabled:opacity-60">
                         <span className={`flex items-center gap-2 ${submitting ? 'invisible' : ''}`}><RotateCcw size={18}/> {(selectedCase.supportCount || 1) + 1}回目を開始</span>
