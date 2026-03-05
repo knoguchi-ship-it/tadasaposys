@@ -1181,7 +1181,7 @@
             payload.newAttachments = encodedFiles;
             payload.user = user ? { name: user.name, email: user.email } : null;
           }
-          if (modalMode === 'schedule') payload.skipCalendar = !useCalendar;
+          if (modalMode === 'schedule' || modalMode === 'report') payload.skipCalendar = !useCalendar;
           await Api.updateSupportRecord(payload);
           const updatedCases = await Api.getAllCases();
           setCases(updatedCases);
@@ -2535,8 +2535,8 @@
                       <Mail size={18} /> メール送信
                     </button>
                     <button onClick={() => openModal('report')} className={`px-5 py-3 rounded-xl text-sm font-black flex items-center gap-2 transition-all active:scale-95 cursor-pointer ${
-                      !selectedCase.scheduledDateTime || submitting ? 'bg-slate-700 text-slate-400 opacity-50 cursor-not-allowed' : 'bg-emerald-500 text-white hover:bg-emerald-600'
-                    }`} disabled={!selectedCase.scheduledDateTime || submitting}>
+                      submitting ? 'bg-emerald-500 text-white opacity-60' : 'bg-emerald-500 text-white hover:bg-emerald-600'
+                    }`} disabled={submitting}>
                       <CheckCircle size={18} /> 完了報告
                     </button>
                   </>
@@ -2808,7 +2808,7 @@
                   <button onClick={() => { setModalMode(null); setPendingFiles([]); setExistingAttachments([]); setDragOverAttachments(false); }}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
                 </div>
                 <form onSubmit={handleEditSave} className="space-y-6">
-                  {(modalMode === 'schedule' || modalMode === 'edit') && (
+                  {(modalMode === 'schedule' || modalMode === 'edit' || modalMode === 'report') && (
                     <div className="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100 space-y-4">
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
