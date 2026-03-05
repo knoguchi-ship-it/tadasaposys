@@ -2173,7 +2173,7 @@
                       )}
                       {selectedCase.content && (
                         <div className="bg-slate-50 p-4 rounded-2xl text-xs text-slate-600">
-                          <span className="font-bold block mb-1">記録:</span>{selectedCase.content}
+                          <span className="font-bold block mb-1">記録:</span>{linkifyText(selectedCase.content)}
                         </div>
                       )}
                       {selectedCase.attachments && selectedCase.attachments.length > 0 && (
@@ -2241,7 +2241,7 @@
                               {hist.content && (
                                 <div className="p-3 bg-slate-50 rounded-xl">
                                   <span className="text-[9px] font-black text-slate-400 uppercase block mb-1">実施記録</span>
-                                  <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-wrap">{hist.content}</p>
+                                  <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-wrap">{linkifyText(hist.content)}</p>
                                 </div>
                               )}
                               {hist.attachments && hist.attachments.length > 0 && (
@@ -2264,7 +2264,7 @@
                               {hist.remarks && (
                                 <div className="p-3 bg-amber-50 rounded-xl">
                                   <span className="text-[9px] font-black text-amber-500 uppercase block mb-1">備考</span>
-                                  <p className="text-xs text-amber-700 leading-relaxed whitespace-pre-wrap">{hist.remarks}</p>
+                                  <p className="text-xs text-amber-700 leading-relaxed whitespace-pre-wrap">{linkifyText(hist.remarks)}</p>
                                 </div>
                               )}
                               {hist.staffName && (
@@ -2872,6 +2872,19 @@
             </div>
           )}
         </div>
+      );
+    }
+
+    // ======================================================================
+    // テキスト内URLをリンクに変換するヘルパー
+    // ======================================================================
+    function linkifyText(text) {
+      if (!text) return null;
+      const parts = text.split(/(https?:\/\/[^\s]+)/g);
+      return parts.map((part, i) =>
+        part.match(/^https?:\/\//)
+          ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-sky-600 hover:underline break-all">{part}</a>
+          : part
       );
     }
 
