@@ -24,7 +24,7 @@
     "access": "ANYONE"
   },
   "webapp": {
-    "executeAs": "USER_DEPLOYING",
-    "access": "ANYONE"
+    "executeAs": "USER_ACCESSING",
+    "access": "DOMAIN"
   }
 }
