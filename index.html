@@ -2519,8 +2519,9 @@
                       <button onClick={handleAssign} disabled={submitting} className="px-6 py-3 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-sm font-black flex items-center gap-2 transition-all active:scale-95 cursor-pointer disabled:opacity-60">
                         <Mail size={18} /> メール送信して担当
                       </button>
-                      <button onClick={handleAssignOnly} disabled={submitting} className="px-6 py-3 bg-slate-600 hover:bg-slate-700 text-white rounded-xl text-sm font-black flex items-center gap-2 transition-all active:scale-95 cursor-pointer disabled:opacity-60">
-                        {submitting ? <Loader2 size={18} className="animate-spin"/> : <UserIcon size={18}/>} 担当する（メールなし）
+                      <button onClick={handleAssignOnly} disabled={submitting} className="relative px-6 py-3 bg-slate-600 hover:bg-slate-700 text-white rounded-xl text-sm font-black flex items-center gap-2 transition-all active:scale-95 cursor-pointer disabled:opacity-60">
+                        <span className={`flex items-center gap-2 ${submitting ? 'invisible' : ''}`}><UserIcon size={18}/> 担当する（メールなし）</span>
+                        {submitting && <Loader2 size={18} className="animate-spin absolute inset-0 m-auto"/>}
                       </button>
                     </>
                   )
@@ -2548,8 +2549,9 @@
                       </button>
                     )}
                     {(selectedCase.supportCount || 1) < 3 && selectedCase.currentFiscalYearCount < 10 && (
-                      <button onClick={handleReopen} disabled={submitting} className="px-5 py-3 bg-violet-500 text-white rounded-xl text-sm font-black flex items-center gap-2 hover:bg-violet-600 transition-all active:scale-95 cursor-pointer disabled:opacity-60">
-                        {submitting ? <Loader2 size={18} className="animate-spin"/> : <RotateCcw size={18}/>} {(selectedCase.supportCount || 1) + 1}回目を開始
+                      <button onClick={handleReopen} disabled={submitting} className="relative px-5 py-3 bg-violet-500 text-white rounded-xl text-sm font-black flex items-center gap-2 hover:bg-violet-600 transition-all active:scale-95 cursor-pointer disabled:opacity-60">
+                        <span className={`flex items-center gap-2 ${submitting ? 'invisible' : ''}`}><RotateCcw size={18}/> {(selectedCase.supportCount || 1) + 1}回目を開始</span>
+                        {submitting && <Loader2 size={18} className="animate-spin absolute inset-0 m-auto"/>}
                       </button>
                     )}
                     <button onClick={handleComposeNewEmail} disabled={submitting} className="px-5 py-3 bg-sky-500 text-white rounded-xl text-sm font-black flex items-center gap-2 hover:bg-sky-600 transition-all active:scale-95 cursor-pointer disabled:opacity-60">
@@ -2933,10 +2935,11 @@
                       </div>
                     </div>
                   )}
-                  <button disabled={submitting} className={`w-full py-4 text-white rounded-xl font-black text-sm transition-all shadow-lg shadow-slate-200 ${
+                  <button disabled={submitting} className={`relative w-full py-4 text-white rounded-xl font-black text-sm transition-all shadow-lg shadow-slate-200 ${
                     modalMode === 'schedule' ? 'bg-indigo-600 hover:bg-indigo-700' : modalMode === 'report' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-900 hover:bg-slate-800'
                   }`}>
-                    {submitting ? <><Loader2 size={16} className="animate-spin"/> 処理中...</> : modalMode === 'schedule' ? '日時を確定してカレンダー作成' : modalMode === 'report' ? '記録を保存して完了にする' : '変更を保存'}
+                    <span className={submitting ? 'invisible' : ''}>{modalMode === 'schedule' ? '日時を確定してカレンダー作成' : modalMode === 'report' ? '記録を保存して完了にする' : '変更を保存'}</span>
+                    {submitting && <Loader2 size={18} className="animate-spin absolute inset-0 m-auto"/>}
                   </button>
                 </form>
               </div>
@@ -3056,8 +3059,9 @@
                 <label className={labelCls}>困りごと詳細 <span className="text-rose-500">*</span></label>
                 <textarea className={inputCls + ' resize-none'} rows={4} value={form.details} onChange={e => set('details', e.target.value)} placeholder="相談内容を入力してください。" />
               </div>
-              <button type="submit" disabled={submitting} className="w-full py-3.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-black text-sm transition-all">
-                {submitting ? <><Loader2 size={16} className="animate-spin inline mr-1"/>追加中...</> : '案件を追加する'}
+              <button type="submit" disabled={submitting} className="relative w-full py-3.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-black text-sm transition-all">
+                <span className={submitting ? 'invisible' : ''}>案件を追加する</span>
+                {submitting && <Loader2 size={18} className="animate-spin absolute inset-0 m-auto"/>}
               </button>
             </form>
           </div>
