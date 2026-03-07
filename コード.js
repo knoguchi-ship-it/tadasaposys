@@ -560,9 +560,56 @@ function ensureAttachmentSchema_() {
     addAttachmentFolderSetting();
     addAttachmentsColumnToRecords();
     addCaseLimitOverrideColumnsToRecords();
+    addMissingEmailSettings_();
   } catch (e) {
     throw new Error('添付機能の初期化に失敗しました。管理者に連絡してください。詳細: ' + e.message);
   }
+}
+
+/**
+ * 設定シートに不足しているメール設定行を追加する。
+ * MAIL_DECLINED_SUBJECT / MAIL_DECLINED_BODY / MAIL_INITIAL_INCLUDE_DETAILS / MAIL_NEW_BODY
+ * が存在しない場合のみ追加する。
+ */
+function addMissingEmailSettings_() {
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
+  if (!sheet) return;
+
+  var data = sheet.getDataRange().getValues();
+  var existingKeys = {};
+  for (var i = 0; i < data.length; i++) {
+    existingKeys[String(data[i][0]).trim()] = true;
+  }
+
+  var toAdd = [];
+  if (!existingKeys['MAIL_INITIAL_INCLUDE_DETAILS']) {
+    toAdd.push(['MAIL_INITIAL_INCLUDE_DETAILS', '初回メールに相談内容を含める', 'true', 'true / false', '初回メール本文に相談内容ブロックを含めるか（true=含める）']);
+  }
+  if (!existingKeys['MAIL_DECLINED_SUBJECT']) {
+    toAdd.push(['MAIL_DECLINED_SUBJECT', '回数超過メール件名', 'タダサポ｜ご利用回数上限のお知らせ', '', '回数超過時に送信するメールの件名']);
+  }
+  if (!existingKeys['MAIL_DECLINED_BODY']) {
+    toAdd.push(['MAIL_DECLINED_BODY', '回数超過メール本文', '{{名前}} 様\n\nいつもタダサポをご利用いただきありがとうございます。\n\n誠に恐れ入りますが、{{事業所名}} 様の今年度のご利用回数が上限（10回）に達しております。\nそのため、今回のご相談につきましては対応を見送らせていただくこととなりました。\n\n大変申し訳ございませんが、何卒ご理解くださいますようお願い申し上げます。\n次年度のご利用をお待ちしております。', '', '回数超過時のメール本文テンプレート。使用可能タグ: {{名前}} {{事業所名}} {{担当者名}}']);
+  }
+  if (!existingKeys['MAIL_NEW_BODY']) {
+    toAdd.push(['MAIL_NEW_BODY', '新規メール本文テンプレート', '{{名前}} 様\n\n\n\n{{担当者名}}', '', '「新規メール送信」時の初期本文。使用可能タグ: {{名前}} {{事業所名}} {{担当者名}}']);
+  }
+
+  if (!toAdd.length) return;
+
+  var lastRow = sheet.getLastRow();
+  sheet.getRange(lastRow + 1, 1, toAdd.length, 5).setValues(toAdd);
+  // 値列（C列）を編集可能な黄色スタイルに
+  for (var j = 0; j < toAdd.length; j++) {
+    var r = lastRow + 1 + j;
+    sheet.getRange(r, 3).setBackground('#fffbeb').setBorder(true, true, true, true, null, null, '#f59e0b', SpreadsheetApp.BorderStyle.SOLID).setFontWeight('bold');
+    sheet.getRange(r, 1).setFontColor('#9ca3af').setFontSize(8);
+    sheet.getRange(r, 2).setFontWeight('bold').setFontColor('#1e293b');
+    sheet.getRange(r, 5).setFontColor('#64748b').setFontSize(9);
+    sheet.setRowHeight(r, 40);
+  }
+  Logger.log('不足していたメール設定行を追加しました: ' + toAdd.map(function(r) { return r[0]; }).join(', '));
 }
 
 // ======================================================================
@@ -1625,7 +1672,13 @@ function updateSettingsAdmin(patch) {
           break;
         }
       }
-      if (!found) throw new Error('設定キーが見つかりません: ' + key);
+      if (!found) {
+        // シートに行がない場合は末尾に追加して保存
+        var newVal = String(patch[key] || '');
+        sheet.appendRow([key, key, newVal, '', '']);
+        before[key] = '';
+        after[key] = newVal;
+      }
     });
     _settingsCache = null;
     appendAuditLog_(actor, 'update_settings', 'settings', 'settings', before, after);
