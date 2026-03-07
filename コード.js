@@ -414,8 +414,11 @@ function getAllCasesJoined() {
     var serviceType = ovr.serviceType   !== null && ovr.serviceType   !== undefined ? ovr.serviceType   : c[IDX.CASES.SERVICE];
     var fy = getFiscalYear(ts);
     var count = fiscalYearCounts[email + '_' + fy] || 0;
-    // タイムスタンプをJST日付文字列に変換（ブラウザのタイムゾーン依存を避けるため）
-    var pkDate = new Date(ts);
+    // タイムスタンプをJST日付文字列に変換
+    // c[IDX.CASES.PK] は GAS が Sheet から読んだ Date オブジェクトのため、
+    // String() → new Date() の往復変換を避けて直接 formatDate に渡す
+    var pkRaw = c[IDX.CASES.PK];
+    var pkDate = (pkRaw instanceof Date) ? pkRaw : new Date(ts);
     var dateLabel = isNaN(pkDate.getTime()) ? '' : Utilities.formatDate(pkDate, 'Asia/Tokyo', 'yyyy/MM/dd');
 
     joinedCases.push({
