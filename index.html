@@ -1113,7 +1113,7 @@
         if (!selectedCase || !user) return;
         var origSubject = replyToMessage.subject || '';
         var reSubject = origSubject.startsWith('Re:') ? origSubject : 'Re: ' + origSubject;
-        var quotedDate = replyToMessage.sendDate ? new Date(replyToMessage.sendDate).toLocaleString() : '';
+        var quotedDate = replyToMessage.sendDate ? new Date(replyToMessage.sendDate).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : '';
         var quotedFrom = replyToMessage.senderName || replyToMessage.fromEmail || '';
         var quotedBody = (replyToMessage.body || '').split('\n').map(l => '> ' + l).join('\n');
 
@@ -1874,7 +1874,7 @@
                 {filteredCases.map(c => (
                   <button key={c.id} onClick={() => setSelectedCaseId(c.id)}
                     aria-current={selectedCaseId === c.id ? 'true' : undefined}
-                    aria-label={`${c.officeName} ${c.requesterName}様 ${new Date(c.timestamp).toLocaleDateString()}`}
+                    aria-label={`${c.officeName} ${c.requesterName}様 ${new Date(c.timestamp).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })}`}
                     className={`w-full text-left p-4 rounded-xl border transition-all flex items-start gap-3 focus:outline-none focus:ring-2 focus:ring-teal-500/40 ${selectedCaseId === c.id ? 'bg-teal-50 border-teal-200 shadow-sm' : 'bg-white border-slate-100 hover:bg-slate-50'}`}>
                     <div className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center font-black text-[10px] shrink-0 ${c.status === 'completed' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}
                       aria-hidden="true">
@@ -1882,7 +1882,7 @@
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex justify-between items-center mb-1">
-                        <span className="text-[9px] font-black text-slate-400">{new Date(c.timestamp).toLocaleDateString()}</span>
+                        <span className="text-[9px] font-black text-slate-400">{new Date(c.timestamp).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })}</span>
                         {c.staffName && <span className="text-[9px] font-bold text-indigo-500 flex items-center gap-0.5"><UserIcon size={8} aria-hidden="true"/> {c.staffName}</span>}
                       </div>
                       <h4 className="text-sm font-black text-slate-800 truncate">{c.officeName}</h4>
@@ -2206,7 +2206,7 @@
                       <div className="grid grid-cols-2 gap-4">
                         <div className="p-4 bg-slate-50 rounded-2xl">
                           <span className="text-xs font-bold text-slate-500 block mb-1">日時</span>
-                          <span className="text-sm font-black">{selectedCase.scheduledDateTime ? new Date(selectedCase.scheduledDateTime).toLocaleString() : <span className="text-slate-400">未定</span>}</span>
+                          <span className="text-sm font-black">{selectedCase.scheduledDateTime ? new Date(selectedCase.scheduledDateTime).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : <span className="text-slate-400">未定</span>}</span>
                         </div>
                         <div className="p-4 bg-slate-50 rounded-2xl">
                           <span className="text-xs font-bold text-slate-500 block mb-1">方法</span>
@@ -2270,7 +2270,7 @@
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="text-xs font-black text-slate-700">{hist.round}回目</span>
                                   {hist.method && <span className="text-[9px] font-black px-2 py-0.5 rounded bg-indigo-50 text-indigo-600">{hist.method}</span>}
-                                  {hist.scheduledDateTime && <span className="text-[9px] font-bold text-slate-400">{new Date(hist.scheduledDateTime).toLocaleDateString()}</span>}
+                                  {hist.scheduledDateTime && <span className="text-[9px] font-bold text-slate-400">{new Date(hist.scheduledDateTime).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })}</span>}
                                   {hist.staffName && <span className="text-[9px] font-bold text-indigo-500 flex items-center gap-0.5"><UserIcon size={8}/> {hist.staffName}</span>}
                                 </div>
                                 {hist.content && <p className="text-[10px] text-slate-500 mt-0.5 truncate">{hist.content}</p>}
@@ -2281,7 +2281,7 @@
                               <div className="grid grid-cols-2 gap-3 mt-3">
                                 <div className="p-3 bg-slate-50 rounded-xl">
                                   <span className="text-[9px] font-black text-slate-400 uppercase block mb-1">実施日時</span>
-                                  <span className="text-xs font-black text-slate-700">{hist.scheduledDateTime ? new Date(hist.scheduledDateTime).toLocaleString() : '—'}</span>
+                                  <span className="text-xs font-black text-slate-700">{hist.scheduledDateTime ? new Date(hist.scheduledDateTime).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : '—'}</span>
                                 </div>
                                 <div className="p-3 bg-slate-50 rounded-xl">
                                   <span className="text-[9px] font-black text-slate-400 uppercase block mb-1">方法</span>
@@ -2371,7 +2371,7 @@
                                       latest.isStaff ? 'bg-teal-50 text-teal-600' : 'bg-amber-50 text-amber-600'
                                     }`}>{latest.isStaff ? '最新: 送信' : '最新: 受信'}</span>
                                     <span className="text-[9px] font-black text-slate-400">
-                                      {latest.sendDate ? new Date(latest.sendDate).toLocaleString() : ''}
+                                      {latest.sendDate ? new Date(latest.sendDate).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : ''}
                                     </span>
                                   </div>
                                   <p className="text-xs font-black text-slate-700 truncate">{tg.subject || 'メールスレッド'}</p>
@@ -2407,7 +2407,7 @@
                                                 em.isStaff ? 'bg-teal-50 text-teal-600' : 'bg-amber-50 text-amber-600'
                                               }`}>{em.isStaff ? '送信' : '受信'}</span>
                                               <span className="text-[9px] font-black text-slate-400">
-                                                {em.sendDate ? new Date(em.sendDate).toLocaleString() : ''}
+                                                {em.sendDate ? new Date(em.sendDate).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : ''}
                                               </span>
                                               <span className="text-[9px] font-bold text-slate-500">{em.senderName}</span>
                                             </div>
