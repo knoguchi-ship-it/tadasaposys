@@ -256,7 +256,8 @@
             });
             var cases = mockCases.map(function(c) {
               var key = c.email + '_' + getFY(c.timestamp);
-              return { ...c, currentFiscalYearCount: fyCounts[key] || 0 };
+              var dateLabel = (c.timestamp || '').slice(0, 10).replace(/-/g, '/');
+              return { ...c, dateLabel: dateLabel, currentFiscalYearCount: fyCounts[key] || 0 };
             });
             resolve({ user: MOCK_USER, cases: cases, masters: MOCK_MASTERS });
           }, 300));
@@ -279,7 +280,8 @@
             });
             var result = mockCases.map(function(c) {
               var key = c.email + '_' + getFY(c.timestamp);
-              return { ...c, currentFiscalYearCount: fyCounts[key] || 0 };
+              var dateLabel = (c.timestamp || '').slice(0, 10).replace(/-/g, '/');
+              return { ...c, dateLabel: dateLabel, currentFiscalYearCount: fyCounts[key] || 0 };
             });
             resolve(result);
           }, 200));
@@ -1874,7 +1876,7 @@
                 {filteredCases.map(c => (
                   <button key={c.id} onClick={() => setSelectedCaseId(c.id)}
                     aria-current={selectedCaseId === c.id ? 'true' : undefined}
-                    aria-label={`${c.officeName} ${c.requesterName}様 ${new Date(c.timestamp).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })}`}
+                    aria-label={`${c.officeName} ${c.requesterName}様 ${c.dateLabel || new Date(c.timestamp).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })}`}
                     className={`w-full text-left p-4 rounded-xl border transition-all flex items-start gap-3 focus:outline-none focus:ring-2 focus:ring-teal-500/40 ${selectedCaseId === c.id ? 'bg-teal-50 border-teal-200 shadow-sm' : 'bg-white border-slate-100 hover:bg-slate-50'}`}>
                     <div className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center font-black text-[10px] shrink-0 ${c.status === 'completed' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}
                       aria-hidden="true">
@@ -1882,7 +1884,7 @@
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex justify-between items-center mb-1">
-                        <span className="text-[9px] font-black text-slate-400">{new Date(c.timestamp).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })}</span>
+                        <span className="text-[9px] font-black text-slate-400">{c.dateLabel || new Date(c.timestamp).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })}</span>
                         {c.staffName && <span className="text-[9px] font-bold text-indigo-500 flex items-center gap-0.5"><UserIcon size={8} aria-hidden="true"/> {c.staffName}</span>}
                       </div>
                       <h4 className="text-sm font-black text-slate-800 truncate">{c.officeName}</h4>

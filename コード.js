@@ -414,9 +414,12 @@ function getAllCasesJoined() {
     var serviceType = ovr.serviceType   !== null && ovr.serviceType   !== undefined ? ovr.serviceType   : c[IDX.CASES.SERVICE];
     var fy = getFiscalYear(ts);
     var count = fiscalYearCounts[email + '_' + fy] || 0;
+    // タイムスタンプをJST日付文字列に変換（ブラウザのタイムゾーン依存を避けるため）
+    var pkDate = new Date(ts);
+    var dateLabel = isNaN(pkDate.getTime()) ? '' : Utilities.formatDate(pkDate, 'Asia/Tokyo', 'yyyy/MM/dd');
 
     joinedCases.push({
-      id: ts, timestamp: ts, email: email,
+      id: ts, timestamp: ts, dateLabel: dateLabel, email: email,
       officeName: officeName, requesterName: reqName,
       details: details, serviceType: serviceType,
       prefecture: prefecture,
