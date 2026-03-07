@@ -310,6 +310,8 @@ function getFiscalYear(dateObj) {
 // ======================================================================
 function getAllCasesJoined() {
   var ss = getSpreadsheet_();
+  // スプレッドシートのタイムゾーンを取得（dateLabel の整形に使用）
+  var ssTimeZone = ss.getSpreadsheetTimeZone();
   var caseSheet = ss.getSheetByName(SHEET_NAMES.CASES);
   var recordSheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
 
@@ -418,8 +420,8 @@ function getAllCasesJoined() {
     // c[IDX.CASES.PK] は GAS が Sheet から読んだ Date オブジェクトのため、
     // String() → new Date() の往復変換を避けて直接 formatDate に渡す
     var pkRaw = c[IDX.CASES.PK];
-    var pkDate = (pkRaw instanceof Date) ? pkRaw : new Date(ts);
-    var dateLabel = isNaN(pkDate.getTime()) ? '' : Utilities.formatDate(pkDate, 'Asia/Tokyo', 'yyyy/MM/dd');
+    var pkDate = (pkRaw && typeof pkRaw.getTime === 'function') ? pkRaw : new Date(pkRaw);
+    var dateLabel = isNaN(pkDate.getTime()) ? '' : Utilities.formatDate(pkDate, ssTimeZone, 'yyyy/MM/dd');
 
     joinedCases.push({
       id: ts, timestamp: ts, dateLabel: dateLabel, email: email,

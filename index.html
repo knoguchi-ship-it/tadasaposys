@@ -770,10 +770,6 @@
       useEffect(() => {
         Api.getInitialData()
           .then(data => {
-            // デバッグ: タイムスタンプ確認（確認後削除予定）
-            (data.cases || []).slice(0, 5).forEach(c => {
-              console.log('[dateDebug]', c.officeName, '| timestamp:', c.timestamp, '| dateLabel:', c.dateLabel);
-            });
             setUser(data.user);
             setCases(data.cases);
             setMasters(data.masters);
