@@ -81,9 +81,10 @@
       unhandled: '未対応',
       inProgress: '対応中',
       completed: '完了',
-      rejected: '対応不可'
+      rejected: '対応不可',
+      cancelled: 'キャンセル'
     };
-    const STATUS_KEYS = ['all', 'unhandled', 'inProgress', 'completed', 'rejected'];
+    const STATUS_KEYS = ['all', 'unhandled', 'inProgress', 'completed', 'rejected', 'cancelled'];
     const ADMIN_ROLE_LABELS = { admin: '管理者', staff: 'タダメン', disabled: '無効' };
     const MAX_ATTACHMENTS_PER_REPORT = 5;
     const SUPPORT_TOOLS = [
@@ -824,9 +825,11 @@
         if (!user) return [];
         return cases.filter(c => {
           if (activeTab !== 'all' && c.status !== activeTab) return false;
+          // 全てタブ: キャンセル済みは除外（キャンセルタブでのみ表示）
+          if (activeTab === 'all' && c.status === 'cancelled') return false;
           // 全てタブ: unhandled は全員共有、それ以外は自分の案件のみ（ダッシュボードは全件）
           if (activeTab === 'all' && c.status !== 'unhandled' && !isDashboardMode && c.staffEmail !== user.email) return false;
-          if (activeTab !== 'all' && activeTab !== 'unhandled' && !isDashboardMode && c.staffEmail !== user.email) return false;
+          if (activeTab !== 'all' && activeTab !== 'unhandled' && activeTab !== 'cancelled' && !isDashboardMode && c.staffEmail !== user.email) return false;
           // キーワード検索
           if (searchWord.trim()) {
             var kw = searchWord.trim().toLowerCase();
@@ -894,8 +897,10 @@
       const getTabCases = useCallback((tabKey) => {
         return cases.filter(c => {
           if (tabKey !== 'all' && c.status !== tabKey) return false;
+          if (tabKey === 'all' && c.status === 'cancelled') return false; // 全てタブ: キャンセル除外
           if (tabKey === 'unhandled') return true; // 未対応は全員共有
           if (tabKey === 'all' && c.status === 'unhandled') return true; // 全てタブ: unhandledは全員共有
+          if (tabKey === 'cancelled') return true; // キャンセルは全員共有（管理者が確認できるよう）
           if (isDashboardMode) return true; // 閲覧・管理モードは全件
           return c.staffEmail === user?.email; // 通常モードは自分の案件のみ
         });
@@ -1925,9 +1930,9 @@
                     aria-current={selectedCaseId === c.id ? 'true' : undefined}
                     aria-label={`${c.officeName} ${c.requesterName}様 ${c.dateLabel || new Date(c.timestamp).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })}`}
                     className={`w-full text-left p-4 rounded-xl border transition-all flex items-start gap-3 focus:outline-none focus:ring-2 focus:ring-teal-500/40 ${selectedCaseId === c.id ? 'bg-teal-50 border-teal-200 shadow-sm' : 'bg-white border-slate-100 hover:bg-slate-50'}`}>
-                    <div className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center font-black text-[10px] shrink-0 ${c.status === 'completed' ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'}`}
+                    <div className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center font-black text-[10px] shrink-0 ${c.status === 'completed' ? 'bg-emerald-100 text-emerald-600' : c.status === 'cancelled' ? 'bg-amber-100 text-amber-500' : 'bg-slate-100 text-slate-500'}`}
                       aria-hidden="true">
-                      {c.status === 'completed' ? <CheckCircle size={12} /> : (c.supportCount || 1)}
+                      {c.status === 'completed' ? <CheckCircle size={12} /> : c.status === 'cancelled' ? <X size={12} /> : (c.supportCount || 1)}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex justify-between items-center mb-1">
@@ -1978,6 +1983,7 @@
                                 selectedCase.status === 'unhandled' ? 'bg-rose-50 text-rose-600 border-rose-100 hover:bg-rose-100' :
                                 selectedCase.status === 'inProgress' ? 'bg-sky-50 text-sky-600 border-sky-100 hover:bg-sky-100' :
                                 selectedCase.status === 'completed' ? 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100' :
+                                selectedCase.status === 'cancelled' ? 'bg-amber-50 text-amber-600 border-amber-100 hover:bg-amber-100' :
                                 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
                               } ${inlineEditField === 'status' ? 'ring-2 ring-amber-400' : ''}`}>
                               {STATUS_LABELS[selectedCase.status]}
@@ -2004,6 +2010,7 @@
                             selectedCase.status === 'unhandled' ? 'bg-rose-50 text-rose-600 border-rose-100' :
                             selectedCase.status === 'inProgress' ? 'bg-sky-50 text-sky-600 border-sky-100' :
                             selectedCase.status === 'completed' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                            selectedCase.status === 'cancelled' ? 'bg-amber-50 text-amber-600 border-amber-100' :
                             'bg-slate-100 text-slate-500 border-slate-200'
                           }`}>{STATUS_LABELS[selectedCase.status]}</span>
                         )}
@@ -2659,6 +2666,28 @@
                       </button>
                     )}
                   </>
+                )}
+                {/* キャンセルボタン（管理モード・管理者のみ・非キャンセル案件） */}
+                {isAdminMode && user?.isAdmin && selectedCase.status !== 'cancelled' && (
+                  <button
+                    onClick={() => showConfirm('この案件をキャンセルしますか？\n元に戻すには管理者がステータスを変更してください。', async () => {
+                      setSubmitting(true);
+                      try {
+                        await Api.setCaseStatusAdmin(selectedCase.timestamp, 'cancelled');
+                        const updatedCases = await Api.getAllCases();
+                        setCases(updatedCases);
+                        setSelectedCaseId(null);
+                        showToast('案件をキャンセルしました。', { type: 'success', title: 'キャンセル完了' });
+                      } catch (e) {
+                        showToast(e.message || String(e), { type: 'error', title: 'エラー' });
+                      } finally {
+                        setSubmitting(false);
+                      }
+                    }, { title: '案件キャンセル', confirmLabel: 'キャンセルする', variant: 'danger' })}
+                    disabled={submitting}
+                    className="px-5 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-black flex items-center gap-2 transition-all active:scale-95 cursor-pointer disabled:opacity-60">
+                    <X size={18} /> キャンセル
+                  </button>
                 )}
               </div>
             </div>

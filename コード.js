@@ -1873,10 +1873,10 @@ function fixSettingsSheet() {
  */
 function normalizeAdminCaseStatus_(status) {
   var normalized = String(status || '').trim();
-  if (normalized === 'unhandled' || normalized === 'inProgress' || normalized === 'completed' || normalized === 'rejected') {
+  if (normalized === 'unhandled' || normalized === 'inProgress' || normalized === 'completed' || normalized === 'rejected' || normalized === 'cancelled') {
     return normalized;
   }
-  throw new Error('status は unhandled / inProgress / completed / rejected を指定してください。');
+  throw new Error('status は unhandled / inProgress / completed / rejected / cancelled を指定してください。');
 }
 
 function getCaseRowIndex_(sheet, caseId) {
