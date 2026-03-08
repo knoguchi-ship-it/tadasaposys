@@ -2282,8 +2282,8 @@
                         </div>
                       )}
                       {selectedCase.content && (
-                        <div className="bg-slate-50 p-4 rounded-2xl text-xs text-slate-600">
-                          <span className="font-bold block mb-1">記録:</span>
+                        <div className="bg-teal-50 border border-teal-200 p-4 rounded-2xl text-xs text-teal-800">
+                          <span className="font-black block mb-1 text-teal-600">記録:</span>
                           <p className="whitespace-pre-wrap leading-relaxed">{linkifyText(selectedCase.content)}</p>
                         </div>
                       )}
@@ -2358,9 +2358,9 @@
                                 </div>
                               )}
                               {hist.content && (
-                                <div className="p-3 bg-slate-50 rounded-xl">
-                                  <span className="text-[9px] font-black text-slate-400 uppercase block mb-1">実施記録</span>
-                                  <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-wrap">{linkifyText(hist.content)}</p>
+                                <div className="p-3 bg-teal-50 border border-teal-200 rounded-xl">
+                                  <span className="text-[9px] font-black text-teal-600 uppercase block mb-1">実施記録</span>
+                                  <p className="text-xs text-teal-800 leading-relaxed whitespace-pre-wrap">{linkifyText(hist.content)}</p>
                                 </div>
                               )}
                               {hist.attachments && hist.attachments.length > 0 && (
