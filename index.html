@@ -2776,7 +2776,12 @@
                       const isBoolean = meta.type === 'boolean';
                       const isTools = meta.type === 'tools';
                       const boolVal = String(settingsDraft[key]) === 'true';
-                      const toolsArr = isTools ? (settingsDraft[key] || '').split(',').map(s => s.trim()).filter(Boolean) : [];
+                      const rawStr = settingsDraft[key] || '';
+                      const toolsArr = isTools
+                        ? rawStr.endsWith(',')
+                          ? rawStr.split(',').map(s => s.trim())
+                          : rawStr.split(',').map(s => s.trim()).filter(Boolean)
+                        : [];
                       const updateTools = (arr) => setSettingsDraft(prev => ({ ...prev, [key]: arr.join(',') }));
                       return (
                         <div key={key} className="p-4 space-y-1">
