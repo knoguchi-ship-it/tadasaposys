@@ -960,6 +960,8 @@
           supportCount: String(selectedCase.supportCount || 1),
           caseLimitOverride: selectedCase.caseLimitOverride === undefined || selectedCase.caseLimitOverride === null ? '' : String(selectedCase.caseLimitOverride),
           annualLimitOverride: selectedCase.annualLimitOverride === undefined || selectedCase.annualLimitOverride === null ? '' : String(selectedCase.annualLimitOverride),
+          scheduledDateTime: selectedCase.scheduledDateTime ? new Date(selectedCase.scheduledDateTime).toISOString().substring(0, 16) : '',
+          method: selectedCase.method || '',
           content: selectedCase.content || '',
           remarks: selectedCase.remarks || '',
           tools: Array.isArray(selectedCase.tools) ? selectedCase.tools : []
@@ -1396,6 +1398,8 @@
             serviceType: adminCaseEditDraft.serviceType
           },
           recordPatch: {
+            scheduledDateTime: adminCaseEditDraft.scheduledDateTime || null,
+            method: adminCaseEditDraft.method || null,
             supportCount: Number(adminCaseEditDraft.supportCount || 1),
             caseLimitOverride: adminCaseEditDraft.caseLimitOverride === '' ? null : Number(adminCaseEditDraft.caseLimitOverride),
             annualLimitOverride: adminCaseEditDraft.annualLimitOverride === '' ? null : Number(adminCaseEditDraft.annualLimitOverride),
@@ -2529,6 +2533,15 @@
                             <label className="text-[10px] font-black text-slate-500">年度上限（特例）: 空欄で通常
                               <input type="number" min="1" value={adminCaseEditDraft.annualLimitOverride || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, annualLimitOverride: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
                             </label>
+                            <label className="text-[10px] font-black text-slate-500">対応日時: GoogleCalendarとは連携しません
+                              <input type="datetime-local" value={adminCaseEditDraft.scheduledDateTime || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, scheduledDateTime: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
+                            </label>
+                            <label className="text-[10px] font-black text-slate-500">対応方法
+                              <select value={adminCaseEditDraft.method || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, method: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold">
+                                <option value="">未設定</option>
+                                {(masters?.methods || ['GoogleMeet', '電話等', '対面']).map(m => <option key={m} value={m}>{m}</option>)}
+                              </select>
+                            </label>
                           </div>
                           <label className="text-[10px] font-black text-slate-500 block">相談内容: 受付時の原文
                             <textarea rows={3} value={adminCaseEditDraft.details || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, details: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
@@ -2592,7 +2605,7 @@
                     <button onClick={handleDecline} disabled={submitting} className="px-6 py-3 bg-rose-500 hover:bg-rose-600 text-white rounded-xl text-sm font-black flex items-center gap-2 transition-all active:scale-95 cursor-pointer ring-2 ring-rose-400 disabled:opacity-60">
                       <AlertTriangle size={18}/> 回数超過
                     </button>
-                  ) : (
+                  ) : !isAdminMode && (
                     <>
                       <button onClick={handleAssign} disabled={submitting} className="px-6 py-3 bg-teal-500 hover:bg-teal-600 text-white rounded-xl text-sm font-black flex items-center gap-2 transition-all active:scale-95 cursor-pointer disabled:opacity-60">
                         <Mail size={18} /> メール送信して担当
@@ -2630,9 +2643,11 @@
                     <button onClick={handleComposeNewEmail} disabled={submitting} className="px-5 py-3 bg-sky-500 text-white rounded-xl text-sm font-black flex items-center gap-2 hover:bg-sky-600 transition-all active:scale-95 cursor-pointer disabled:opacity-60">
                       <Mail size={18} /> メール送信
                     </button>
-                    <button onClick={() => openModal('edit')} disabled={submitting} className="px-6 py-3 bg-white text-slate-900 rounded-xl text-sm font-black flex items-center gap-2 hover:bg-slate-100 transition-all active:scale-95 cursor-pointer disabled:opacity-60">
-                      <Edit size={18} /> 記録修正
-                    </button>
+                    {!isAdminMode && (
+                      <button onClick={() => openModal('edit')} disabled={submitting} className="px-6 py-3 bg-white text-slate-900 rounded-xl text-sm font-black flex items-center gap-2 hover:bg-slate-100 transition-all active:scale-95 cursor-pointer disabled:opacity-60">
+                        <Edit size={18} /> 記録修正
+                      </button>
+                    )}
                   </>
                 )}
               </div>
