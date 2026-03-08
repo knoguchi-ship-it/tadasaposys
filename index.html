@@ -954,7 +954,8 @@
           caseLimitOverride: selectedCase.caseLimitOverride === undefined || selectedCase.caseLimitOverride === null ? '' : String(selectedCase.caseLimitOverride),
           annualLimitOverride: selectedCase.annualLimitOverride === undefined || selectedCase.annualLimitOverride === null ? '' : String(selectedCase.annualLimitOverride),
           content: selectedCase.content || '',
-          remarks: selectedCase.remarks || ''
+          remarks: selectedCase.remarks || '',
+          tools: Array.isArray(selectedCase.tools) ? selectedCase.tools : []
         });
       }, [selectedCase]);
 
@@ -1392,7 +1393,8 @@
             caseLimitOverride: adminCaseEditDraft.caseLimitOverride === '' ? null : Number(adminCaseEditDraft.caseLimitOverride),
             annualLimitOverride: adminCaseEditDraft.annualLimitOverride === '' ? null : Number(adminCaseEditDraft.annualLimitOverride),
             content: adminCaseEditDraft.content,
-            remarks: adminCaseEditDraft.remarks
+            remarks: adminCaseEditDraft.remarks,
+            tools: adminCaseEditDraft.tools || []
           }
         };
         setSubmitting(true);
@@ -2515,6 +2517,23 @@
                           <label className="text-[10px] font-black text-slate-500 block">対応記録: 実施内容
                             <textarea rows={3} value={adminCaseEditDraft.content || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, content: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
                           </label>
+                          <div>
+                            <span className="text-[10px] font-black text-slate-500">対応ツール（複数選択可）</span>
+                            <div className="mt-1 flex flex-wrap gap-1.5">
+                              {SUPPORT_TOOLS.map(tool => {
+                                const checked = (adminCaseEditDraft.tools || []).includes(tool);
+                                return (
+                                  <label key={tool} className={`flex items-center gap-1 px-2.5 py-1 rounded-xl border-2 cursor-pointer text-[10px] font-bold transition-all select-none ${checked ? 'border-teal-500 bg-teal-50 text-teal-700' : 'border-slate-100 bg-white text-slate-500 hover:border-slate-300'}`}>
+                                    <input type="checkbox" className="hidden" checked={checked} onChange={() => {
+                                      const cur = adminCaseEditDraft.tools || [];
+                                      setAdminCaseEditDraft(prev => ({ ...prev, tools: checked ? cur.filter(t => t !== tool) : [...cur, tool] }));
+                                    }} />
+                                    {tool}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </div>
                           <label className="text-[10px] font-black text-slate-500 block">備考: 内部メモ
                             <textarea rows={2} value={adminCaseEditDraft.remarks || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, remarks: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
                           </label>

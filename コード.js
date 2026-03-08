@@ -2062,6 +2062,10 @@ function updateCaseDataAdmin(caseId, payload) {
     if (Object.prototype.hasOwnProperty.call(recordPatch, 'threadId')) {
       recordSheet.getRange(recordRowIndex, IDX.RECORDS.THREAD_ID + 1).setValue(String(recordPatch.threadId || '').trim());
     }
+    if (Object.prototype.hasOwnProperty.call(recordPatch, 'tools')) {
+      var toolsVal = Array.isArray(recordPatch.tools) ? JSON.stringify(recordPatch.tools) : '[]';
+      recordSheet.getRange(recordRowIndex, IDX.RECORDS.TOOLS + 1).setValue(toolsVal);
+    }
 
     appendAuditLog_(actor, 'admin_update_case_data', 'case', caseId, {
       caseRow: {
