@@ -32,7 +32,7 @@ var IDX = {
   CASES: { PK: 0, EMAIL: 1, OFFICE: 2, NAME: 3, DETAILS: 4, PREFECTURE: 5, SERVICE: 6 },
   // 案件補正シートは案件リストと同じ列構造（PK=A列、値が空の列は「補正なし」を意味する）
   CASES_OVERRIDE: { PK: 0, EMAIL: 1, OFFICE: 2, NAME: 3, DETAILS: 4, PREFECTURE: 5, SERVICE: 6 },
-  RECORDS: { FK: 0, STATUS: 1, STAFF_EMAIL: 2, STAFF_NAME: 3, DATE: 4, COUNT: 5, METHOD: 6, BUSINESS: 7, CONTENT: 8, REMARKS: 9, HISTORY: 10, EVENT_ID: 11, MEET_URL: 12, THREAD_ID: 13, ATTACHMENTS: 14, CASE_LIMIT_OVERRIDE: 15, ANNUAL_LIMIT_OVERRIDE: 16 },
+  RECORDS: { FK: 0, STATUS: 1, STAFF_EMAIL: 2, STAFF_NAME: 3, DATE: 4, COUNT: 5, METHOD: 6, BUSINESS: 7, CONTENT: 8, REMARKS: 9, HISTORY: 10, EVENT_ID: 11, MEET_URL: 12, THREAD_ID: 13, ATTACHMENTS: 14, CASE_LIMIT_OVERRIDE: 15, ANNUAL_LIMIT_OVERRIDE: 16, TOOLS: 17 },
   STAFF: { NAME: 1, EMAIL: 2, ROLE: 3, IS_ACTIVE: 4 },
   EMAIL: { CASE_ID: 0, SEND_DATE: 1, SENDER_EMAIL: 2, SENDER_NAME: 3, RECIPIENT_EMAIL: 4, SUBJECT: 5, BODY: 6 }
 };
@@ -356,6 +356,9 @@ function getAllCasesJoined() {
     var attachmentsStr = r[IDX.RECORDS.ATTACHMENTS] ? String(r[IDX.RECORDS.ATTACHMENTS]) : '[]';
     var parsedAttachments = [];
     try { parsedAttachments = JSON.parse(attachmentsStr); } catch(e) { parsedAttachments = []; }
+    var toolsStr = r[IDX.RECORDS.TOOLS] ? String(r[IDX.RECORDS.TOOLS]) : '[]';
+    var parsedTools = [];
+    try { parsedTools = JSON.parse(toolsStr); } catch(e) { parsedTools = []; }
     recordMap[String(r[IDX.RECORDS.FK])] = {
       status: r[IDX.RECORDS.STATUS],
       staffEmail: r[IDX.RECORDS.STAFF_EMAIL],
@@ -378,7 +381,8 @@ function getAllCasesJoined() {
         return isFinite(n) && n > 0 ? Math.floor(n) : null;
       })(r[IDX.RECORDS.ANNUAL_LIMIT_OVERRIDE]),
       supportHistory: parsedHistory,
-      attachments: parsedAttachments
+      attachments: parsedAttachments,
+      tools: parsedTools
     };
   }
 
@@ -439,6 +443,7 @@ function getAllCasesJoined() {
       annualLimitOverride: record.annualLimitOverride || null,
       supportHistory: record.supportHistory || [],
       attachments: record.attachments || [],
+      tools: record.tools || [],
       currentFiscalYearCount: count,
       emails: emailMap[ts] || []
     });
@@ -534,6 +539,10 @@ function reopenCase(caseId, user) {
       var a = row[IDX.RECORDS.ATTACHMENTS] ? String(row[IDX.RECORDS.ATTACHMENTS]) : '[]';
       try { return JSON.parse(a); } catch(e) { return []; }
     })(),
+    tools: (function() {
+      var t = row[IDX.RECORDS.TOOLS] ? String(row[IDX.RECORDS.TOOLS]) : '[]';
+      try { return JSON.parse(t); } catch(e) { return []; }
+    })(),
     staffName: row[IDX.RECORDS.STAFF_NAME] || null,
     staffEmail: row[IDX.RECORDS.STAFF_EMAIL] || null
   });
@@ -560,6 +569,7 @@ function ensureAttachmentSchema_() {
     addAttachmentFolderSetting();
     addAttachmentsColumnToRecords();
     addCaseLimitOverrideColumnsToRecords();
+    addToolsColumnToRecords();
     addMissingEmailSettings_();
   } catch (e) {
     throw new Error('添付機能の初期化に失敗しました。管理者に連絡してください。詳細: ' + e.message);
@@ -1313,6 +1323,10 @@ function updateSupportRecord(recordData) {
   sheet.getRange(rowIndex, IDX.RECORDS.DATE + 1).setValue(recordData.scheduledDateTime ? new Date(recordData.scheduledDateTime) : null);
   sheet.getRange(rowIndex, IDX.RECORDS.METHOD + 1).setValue(recordData.method);
   sheet.getRange(rowIndex, IDX.RECORDS.CONTENT + 1).setValue(recordData.content);
+  if (recordData.tools !== undefined) {
+    var toolsVal = Array.isArray(recordData.tools) ? JSON.stringify(recordData.tools) : '[]';
+    sheet.getRange(rowIndex, IDX.RECORDS.TOOLS + 1).setValue(toolsVal);
+  }
 
   var hasAttachmentUpdate = recordData.keepAttachmentIds !== undefined || recordData.newAttachments !== undefined;
   if (hasAttachmentUpdate) {
@@ -2565,6 +2579,26 @@ function addCaseLimitOverrideColumnsToRecords() {
   }
   if (String(sheet.getRange(1, IDX.RECORDS.ANNUAL_LIMIT_OVERRIDE + 1).getValue() || '').trim() !== expectedAnnualHeader) {
     sheet.getRange(1, IDX.RECORDS.ANNUAL_LIMIT_OVERRIDE + 1).setValue(expectedAnnualHeader);
+  }
+}
+
+/**
+ * サポート記録シートに TOOLS 列（R列 = 18列目）を追加する。
+ * 既に存在する場合はスキップする。
+ */
+function addToolsColumnToRecords() {
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  if (!sheet) throw new Error('「サポート記録」シートが見つかりません。');
+
+  var requiredColumns = IDX.RECORDS.TOOLS + 1; // 18
+  if (sheet.getLastColumn() < requiredColumns) {
+    sheet.insertColumnsAfter(sheet.getLastColumn(), requiredColumns - sheet.getLastColumn());
+  }
+  var header = String(sheet.getRange(1, IDX.RECORDS.TOOLS + 1).getValue() || '').trim();
+  if (!header) {
+    sheet.getRange(1, IDX.RECORDS.TOOLS + 1).setValue('対応ツール');
+    Logger.log('サポート記録シートに 対応ツール 列を追加しました。');
   }
 }
 
