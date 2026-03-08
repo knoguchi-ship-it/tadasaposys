@@ -137,6 +137,7 @@
         'その他'
       ],
       attachmentFolderConfigured: true,
+      supportTools: SUPPORT_TOOLS,
       spreadsheetUrl: 'https://docs.google.com/spreadsheets/d/1hllLdETiK0sk0xW_y0V6vOmnlK7kIkHBjntYiCTom4w/edit',
       allStaff: [
         { email: 'test@tadakayo.jp', name: 'テスト太郎' },
@@ -247,7 +248,8 @@
       ATTACHMENT_FOLDER_ID: '',
       ZOOM_ACCOUNT_ID: '',
       ZOOM_CLIENT_ID: '',
-      ZOOM_CLIENT_SECRET: ''
+      ZOOM_CLIENT_SECRET: '',
+      SUPPORT_TOOLS: SUPPORT_TOOLS.join(',')
     };
 
     // ======================================================================
@@ -507,6 +509,9 @@
             }
             if (Object.prototype.hasOwnProperty.call(patch, 'CASE_USAGE_LIMIT')) {
               MOCK_MASTERS.limits.caseSupport = Number(patch.CASE_USAGE_LIMIT) || MOCK_MASTERS.limits.caseSupport;
+            }
+            if (Object.prototype.hasOwnProperty.call(patch, 'SUPPORT_TOOLS')) {
+              MOCK_MASTERS.supportTools = (patch.SUPPORT_TOOLS || '').split(',').map(s => s.trim()).filter(Boolean);
             }
             resolve({ ...mockAdminSettings });
           }, 300));
@@ -1496,7 +1501,8 @@
         ATTACHMENT_FOLDER_ID: { label: '添付保存先フォルダID', category: 'integration', desc: '添付ファイル保存先' },
         ZOOM_ACCOUNT_ID: { label: 'Zoom Account ID', category: 'integration', desc: 'Zoom連携情報' },
         ZOOM_CLIENT_ID: { label: 'Zoom Client ID', category: 'integration', desc: 'Zoom連携情報' },
-        ZOOM_CLIENT_SECRET: { label: 'Zoom Client Secret', category: 'integration', desc: 'Zoom連携情報' }
+        ZOOM_CLIENT_SECRET: { label: 'Zoom Client Secret', category: 'integration', desc: 'Zoom連携情報' },
+        SUPPORT_TOOLS: { label: '対応ツール一覧', category: 'tools', type: 'tools', desc: 'フォームの「対応ツール」選択肢を管理します。追加・編集・削除・並び替えができます。' }
       }), []);
 
       const visibleSettingCategories = useMemo(() => {
@@ -1881,7 +1887,7 @@
                         className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all bg-white"
                       >
                         <option value="">すべて</option>
-                        {SUPPORT_TOOLS.map(t => <option key={t} value={t}>{t}</option>)}
+                        {(masters?.supportTools || SUPPORT_TOOLS).map(t => <option key={t} value={t}>{t}</option>)}
                       </select>
                     </div>
                     {/* 並び順 */}
@@ -2552,7 +2558,7 @@
                           <div>
                             <span className="text-[10px] font-black text-slate-500">対応ツール（複数選択可）</span>
                             <div className="mt-1 flex flex-wrap gap-1.5">
-                              {SUPPORT_TOOLS.map(tool => {
+                              {(masters?.supportTools || SUPPORT_TOOLS).map(tool => {
                                 const checked = (adminCaseEditDraft.tools || []).includes(tool);
                                 return (
                                   <label key={tool} className={`flex items-center gap-1 px-2.5 py-1 rounded-xl border-2 cursor-pointer text-[10px] font-bold transition-all select-none ${checked ? 'border-teal-500 bg-teal-50 text-teal-700' : 'border-slate-100 bg-white text-slate-500 hover:border-slate-300'}`}>
@@ -2759,7 +2765,7 @@
                         onClick={() => setSettingsTab(cat)}
                         className={`px-3 py-1.5 rounded-lg text-[11px] font-black ${settingsTab === cat ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-600'}`}
                       >
-                        {cat === 'limits' ? '上限' : cat === 'mail' ? 'メール' : cat === 'integration' ? '連携' : 'その他'}
+                        {cat === 'limits' ? '上限' : cat === 'mail' ? 'メール' : cat === 'integration' ? '連携' : cat === 'tools' ? '対応ツール' : 'その他'}
                       </button>
                     ))}
                   </div>
@@ -2768,12 +2774,53 @@
                       const meta = settingsMeta[key] || { label: key, desc: '' };
                       const isTextArea = key.endsWith('_BODY');
                       const isBoolean = meta.type === 'boolean';
+                      const isTools = meta.type === 'tools';
                       const boolVal = String(settingsDraft[key]) === 'true';
+                      const toolsArr = isTools ? (settingsDraft[key] || '').split(',').map(s => s.trim()).filter(Boolean) : [];
+                      const updateTools = (arr) => setSettingsDraft(prev => ({ ...prev, [key]: arr.join(',') }));
                       return (
                         <div key={key} className="p-4 space-y-1">
                           <p className="text-xs font-black text-slate-700">{meta.label}</p>
                           <p className="text-[10px] text-slate-400">{meta.desc}</p>
-                          {isBoolean ? (
+                          {isTools ? (
+                            <div className="space-y-1.5 mt-2">
+                              {toolsArr.map((tool, idx) => (
+                                <div key={idx} className="flex items-center gap-2">
+                                  <span className="text-[10px] text-slate-400 w-5 text-right shrink-0">{idx + 1}</span>
+                                  <input
+                                    value={tool}
+                                    onChange={e => { const arr = [...toolsArr]; arr[idx] = e.target.value; updateTools(arr); }}
+                                    className="flex-1 py-1.5 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-sky-500"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => { const arr = [...toolsArr]; arr[idx] = toolsArr[idx - 1]; arr[idx - 1] = tool; updateTools(arr); }}
+                                    disabled={idx === 0}
+                                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-20"
+                                    title="上へ"
+                                  >↑</button>
+                                  <button
+                                    type="button"
+                                    onClick={() => { const arr = [...toolsArr]; arr[idx] = toolsArr[idx + 1]; arr[idx + 1] = tool; updateTools(arr); }}
+                                    disabled={idx === toolsArr.length - 1}
+                                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-20"
+                                    title="下へ"
+                                  >↓</button>
+                                  <button
+                                    type="button"
+                                    onClick={() => updateTools(toolsArr.filter((_, i) => i !== idx))}
+                                    className="p-1.5 rounded-lg text-rose-400 hover:text-rose-600 hover:bg-rose-50"
+                                    title="削除"
+                                  ><X size={12}/></button>
+                                </div>
+                              ))}
+                              <button
+                                type="button"
+                                onClick={() => updateTools([...toolsArr, ''])}
+                                className="mt-1 px-3 py-1.5 rounded-xl text-xs font-black bg-slate-100 text-slate-600 hover:bg-slate-200 flex items-center gap-1"
+                              >+ ツールを追加</button>
+                            </div>
+                          ) : isBoolean ? (
                             <button
                               type="button"
                               onClick={() => setSettingsDraft(prev => ({ ...prev, [key]: boolVal ? 'false' : 'true' }))}
@@ -2939,7 +2986,7 @@
                     <div className="space-y-2">
                       <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><CheckCircle2 size={10}/> 対応ツール（複数選択可）</label>
                       <div className="flex flex-wrap gap-2">
-                        {SUPPORT_TOOLS.map(tool => {
+                        {(masters?.supportTools || SUPPORT_TOOLS).map(tool => {
                           const checked = (editFormData.tools || []).includes(tool);
                           return (
                             <label key={tool} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-2 cursor-pointer text-xs font-bold transition-all select-none ${checked ? 'border-teal-500 bg-teal-50 text-teal-700' : 'border-slate-100 bg-white text-slate-500 hover:border-slate-300'}`}>

@@ -605,6 +605,9 @@ function addMissingEmailSettings_() {
   if (!existingKeys['MAIL_NEW_BODY']) {
     toAdd.push(['MAIL_NEW_BODY', '新規メール本文テンプレート', '{{名前}} 様\n\n\n\n{{担当者名}}', '', '「新規メール送信」時の初期本文。使用可能タグ: {{名前}} {{事業所名}} {{担当者名}}']);
   }
+  if (!existingKeys['SUPPORT_TOOLS']) {
+    toAdd.push(['SUPPORT_TOOLS', '対応ツール一覧', 'Word・Excel,Windows（基本操作）,LINEWORKS,Google（基本操作）,Google Workspace,AI（ChatGPT、Gemini 他）,ケアプランデータ連携システム,介護ソフト,その他', '', 'カンマ区切りで管理。フォームの対応ツール選択肢に使用']);
+  }
 
   if (!toAdd.length) return;
 
@@ -1422,6 +1425,11 @@ function getMasters() {
       caseSupport: getCaseUsageLimit_()
     },
     attachmentFolderConfigured: attachmentFolderConfigured,
+    supportTools: (function() {
+      var raw = getSetting_('SUPPORT_TOOLS', '');
+      if (!raw) return null; // nullのときフロントエンドでデフォルトにフォールバック
+      return raw.split(',').map(function(s) { return s.trim(); }).filter(function(s) { return s; });
+    })(),
     emailTemplates: {
       initialSubject: getSetting_('MAIL_INITIAL_SUBJECT', 'タダサポ｜ご相談を承りました'),
       initialBody: getSetting_('MAIL_INITIAL_BODY', '{{名前}} 様\n\nこの度はタダサポへご相談いただきありがとうございます。\n担当させていただきます{{担当者名}}と申します。\n\n以下の内容で受付いたしました。\n\n----------------\n【ご相談内容】\n{{相談内容}}\n----------------\n\n追ってサポート日時のご連絡をさせていただきます。\n\n何かご不明な点がございましたら、お気軽にお問い合わせください。\n\n今後ともよろしくお願いいたします。'),
@@ -1448,7 +1456,8 @@ function getEditableSettingsKeys_() {
     'ATTACHMENT_FOLDER_ID',
     'ZOOM_ACCOUNT_ID',
     'ZOOM_CLIENT_ID',
-    'ZOOM_CLIENT_SECRET'
+    'ZOOM_CLIENT_SECRET',
+    'SUPPORT_TOOLS'
   ];
 }
 
