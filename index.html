@@ -691,6 +691,7 @@
       const [searchServiceType, setSearchServiceType] = useState('');
       const [searchAssigned, setSearchAssigned] = useState('all');
       const [searchStaffEmail, setSearchStaffEmail] = useState('');
+      const [searchTool, setSearchTool] = useState('');
       const [searchSortOrder, setSearchSortOrder] = useState('newest');
       const searchInputRef = useRef(null);
 
@@ -799,6 +800,7 @@
         || searchServiceType !== ''
         || searchAssigned !== 'all'
         || searchStaffEmail !== ''
+        || searchTool !== ''
         || searchSortOrder !== 'newest';
       const clearSearch = useCallback(() => {
         setSearchWord('');
@@ -808,6 +810,7 @@
         setSearchServiceType('');
         setSearchAssigned('all');
         setSearchStaffEmail('');
+        setSearchTool('');
         setSearchSortOrder('newest');
       }, []);
 
@@ -836,6 +839,7 @@
           if (searchAssigned === 'assigned' && !c.staffEmail) return false;
           if (searchAssigned === 'unassigned' && c.staffEmail) return false;
           if (searchStaffEmail && isDashboardMode && c.staffEmail !== searchStaffEmail) return false;
+          if (searchTool && !(Array.isArray(c.tools) && c.tools.includes(searchTool))) return false;
           return true;
         }).sort((a, b) => searchSortOrder === 'oldest'
           ? new Date(a.timestamp) - new Date(b.timestamp)
@@ -852,7 +856,8 @@
         searchServiceType,
         searchAssigned,
         searchStaffEmail,
-        searchSortOrder
+        searchSortOrder,
+        searchTool
       ]);
 
       const selectedCase = useMemo(() => cases.find(c => c.id === selectedCaseId) || null, [cases, selectedCaseId]);
@@ -870,7 +875,8 @@
         searchAssigned !== 'all',
         searchStaffEmail,
         searchSortOrder !== 'newest',
-      ].filter(Boolean).length, [searchDateFrom, searchDateTo, searchPrefecture, searchServiceType, searchAssigned, searchStaffEmail, searchSortOrder]);
+        searchTool,
+      ].filter(Boolean).length, [searchDateFrom, searchDateTo, searchPrefecture, searchServiceType, searchAssigned, searchStaffEmail, searchSortOrder, searchTool]);
 
       // 有効な上限値（案件特例 → 全体設定 → ハードコードデフォルト の優先順）
       const effectiveCaseLimit = selectedCase?.caseLimitOverride || masters?.limits?.caseSupport || 3;
@@ -915,8 +921,9 @@
         searchServiceType ? { id: 'service', label: searchServiceType, clear: () => setSearchServiceType('') } : null,
         searchAssigned !== 'all' ? { id: 'assigned', label: searchAssigned === 'assigned' ? '担当あり' : '未割当', clear: () => setSearchAssigned('all') } : null,
         searchStaffEmail ? { id: 'staff', label: activeStaffMembers.find(s => s.email === searchStaffEmail)?.name || searchStaffEmail, clear: () => setSearchStaffEmail('') } : null,
+        searchTool ? { id: 'tool', label: `ツール: ${searchTool}`, clear: () => setSearchTool('') } : null,
         searchSortOrder !== 'newest' ? { id: 'sort', label: '古い順', clear: () => setSearchSortOrder('newest') } : null,
-      ].filter(Boolean), [searchWord, searchDateFrom, searchDateTo, searchPrefecture, searchServiceType, searchAssigned, searchStaffEmail, searchSortOrder, activeStaffMembers]);
+      ].filter(Boolean), [searchWord, searchDateFrom, searchDateTo, searchPrefecture, searchServiceType, searchAssigned, searchStaffEmail, searchSortOrder, searchTool, activeStaffMembers]);
 
       useEffect(() => {
         setInlineEditField(null); // 案件切替でポップオーバーを閉じる
@@ -1860,6 +1867,18 @@
                           )}
                         </div>
                       )}
+                    </div>
+                    {/* 対応ツール */}
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1">対応ツール</label>
+                      <select
+                        value={searchTool}
+                        onChange={e => setSearchTool(e.target.value)}
+                        className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all bg-white"
+                      >
+                        <option value="">すべて</option>
+                        {SUPPORT_TOOLS.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
                     </div>
                     {/* 並び順 */}
                     <div className="flex items-center justify-between">
