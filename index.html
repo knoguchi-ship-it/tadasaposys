@@ -77,12 +77,13 @@
     // 1. Constants
     // ======================================================================
     const STATUS_LABELS = {
+      all: '全て',
       unhandled: '未対応',
       inProgress: '対応中',
       completed: '完了',
       rejected: '対応不可'
     };
-    const STATUS_KEYS = ['unhandled', 'inProgress', 'completed', 'rejected'];
+    const STATUS_KEYS = ['all', 'unhandled', 'inProgress', 'completed', 'rejected'];
     const ADMIN_ROLE_LABELS = { admin: '管理者', staff: 'タダメン', disabled: '無効' };
     const MAX_ATTACHMENTS_PER_REPORT = 5;
     const SUPPORT_TOOLS = [
@@ -822,8 +823,10 @@
       const filteredCases = useMemo(() => {
         if (!user) return [];
         return cases.filter(c => {
-          if (c.status !== activeTab) return false;
-          if (activeTab !== 'unhandled' && !isDashboardMode && c.staffEmail !== user.email) return false;
+          if (activeTab !== 'all' && c.status !== activeTab) return false;
+          // 全てタブ: unhandled は全員共有、それ以外は自分の案件のみ（ダッシュボードは全件）
+          if (activeTab === 'all' && c.status !== 'unhandled' && !isDashboardMode && c.staffEmail !== user.email) return false;
+          if (activeTab !== 'all' && activeTab !== 'unhandled' && !isDashboardMode && c.staffEmail !== user.email) return false;
           // キーワード検索
           if (searchWord.trim()) {
             var kw = searchWord.trim().toLowerCase();
@@ -890,8 +893,9 @@
       // タブごとのケース一覧（新着バッジ計算・seenIds更新用。検索フィルタ非適用）
       const getTabCases = useCallback((tabKey) => {
         return cases.filter(c => {
-          if (c.status !== tabKey) return false;
+          if (tabKey !== 'all' && c.status !== tabKey) return false;
           if (tabKey === 'unhandled') return true; // 未対応は全員共有
+          if (tabKey === 'all' && c.status === 'unhandled') return true; // 全てタブ: unhandledは全員共有
           if (isDashboardMode) return true; // 閲覧・管理モードは全件
           return c.staffEmail === user?.email; // 通常モードは自分の案件のみ
         });
@@ -1944,7 +1948,7 @@
                   <div className="py-20 text-center text-slate-300" role="status">
                     <p className="text-xs font-bold">{hasActiveSearch ? '検索条件に一致する案件がありません' : '案件はありません'}</p>
                     {hasActiveSearch && <p className="text-[10px] mt-2">条件を変更してお試しください</p>}
-                    {!hasActiveSearch && !isDashboardMode && activeTab !== 'unhandled' && <p className="text-[10px] mt-2">※自分の担当分のみ表示中</p>}
+                    {!hasActiveSearch && !isDashboardMode && activeTab !== 'unhandled' && activeTab !== 'all' && <p className="text-[10px] mt-2">※自分の担当分のみ表示中</p>}
                   </div>
                 )}
               </div>
@@ -1981,7 +1985,7 @@
                             </button>
                             {inlineEditField === 'status' && (
                               <div className="absolute top-full left-0 mt-1 bg-white shadow-xl rounded-xl border border-slate-200 z-50 overflow-hidden min-w-[120px] py-1">
-                                {STATUS_KEYS.map(k => (
+                                {STATUS_KEYS.filter(k => k !== 'all').map(k => (
                                   <button key={k}
                                     onClick={() => handleAdminStatusChangeInline(k)}
                                     className={`w-full px-4 py-2.5 text-xs font-bold text-left flex items-center gap-2 transition-colors hover:bg-slate-50 ${
