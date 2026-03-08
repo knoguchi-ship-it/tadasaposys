@@ -1665,6 +1665,25 @@ function deactivateStaffMember(email) {
   return listStaffMembers_();
 }
 
+// 設定キーの日本語項目名マップ（appendRow フォールバック時に使用）
+var SETTINGS_LABEL_MAP_ = {
+  ANNUAL_USAGE_LIMIT:          '年度利用回数上限',
+  CASE_USAGE_LIMIT:            '案件ごとの対応上限',
+  MAIL_FORCE_CC:               '通常CCメールアドレス',
+  MAIL_INITIAL_SUBJECT:        '初回メール件名',
+  MAIL_INITIAL_BODY:           '初回メール本文',
+  MAIL_INITIAL_INCLUDE_DETAILS:'初回メールに相談内容を含める',
+  MAIL_NEW_BODY:               '新規メール本文テンプレート',
+  MAIL_DECLINED_SUBJECT:       '回数超過メール件名',
+  MAIL_DECLINED_BODY:          '回数超過メール本文',
+  SHARED_CALENDAR_ID:          '共有カレンダーID',
+  ATTACHMENT_FOLDER_ID:        '添付保存先フォルダID',
+  ZOOM_ACCOUNT_ID:             'Zoom Account ID',
+  ZOOM_CLIENT_ID:              'Zoom Client ID',
+  ZOOM_CLIENT_SECRET:          'Zoom Client Secret',
+  SUPPORT_TOOLS:               '対応ツール一覧'
+};
+
 function updateSettingsAdmin(patch) {
   var actor = requireAdmin_();
   ensureAdminSchema_();
@@ -1698,7 +1717,14 @@ function updateSettingsAdmin(patch) {
       if (!found) {
         // シートに行がない場合は末尾に追加して保存
         var newVal = String(patch[key] || '');
-        sheet.appendRow([key, key, newVal, '', '']);
+        var label = SETTINGS_LABEL_MAP_[key] || key;
+        var newRow = sheet.getLastRow() + 1;
+        sheet.appendRow([key, label, newVal, '', '']);
+        // 他の設定行と同じ書式を適用
+        sheet.getRange(newRow, 1).setFontColor('#9ca3af').setFontSize(8);
+        sheet.getRange(newRow, 2).setFontWeight('bold').setFontColor('#1e293b');
+        sheet.getRange(newRow, 3).setBackground('#fffbeb').setBorder(true, true, true, true, null, null, '#f59e0b', SpreadsheetApp.BorderStyle.SOLID).setFontWeight('bold');
+        sheet.setRowHeight(newRow, 40);
         before[key] = '';
         after[key] = newVal;
       }
@@ -1783,6 +1809,51 @@ function reassignCaseAdmin(caseId, staffEmail) {
     staffEmail: targetEmail,
     staffName: targetStaff.name
   });
+}
+
+// ======================================================================
+// 設定シート修復ヘルパー（手動実行用）
+// ======================================================================
+
+/**
+ * 設定シートのB列（項目名）がキー名のままになっている行を修正し、
+ * 書式も他の行に合わせて整える。
+ * GASエディタからこの関数を手動実行してください。
+ */
+function fixSettingsSheet() {
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
+  if (!sheet) { Logger.log('設定シートが見つかりません。'); return; }
+
+  var data = sheet.getDataRange().getValues();
+  var fixed = [];
+
+  for (var i = 1; i < data.length; i++) {
+    var key   = String(data[i][0]).trim();
+    var label = String(data[i][1]).trim();
+    var row   = i + 1;
+
+    // B列がキー名と同じ（壊れた状態）なら正しい日本語名に修正
+    if (key && label === key && SETTINGS_LABEL_MAP_[key]) {
+      sheet.getRange(row, 2).setValue(SETTINGS_LABEL_MAP_[key]);
+      fixed.push(key + ' → ' + SETTINGS_LABEL_MAP_[key]);
+    }
+
+    // 書式が未設定の行（背景色なし）にも書式を適用
+    var bg = sheet.getRange(row, 3).getBackground();
+    if (bg === '#ffffff' || bg === null) {
+      sheet.getRange(row, 1).setFontColor('#9ca3af').setFontSize(8);
+      sheet.getRange(row, 2).setFontWeight('bold').setFontColor('#1e293b');
+      sheet.getRange(row, 3).setBackground('#fffbeb').setBorder(true, true, true, true, null, null, '#f59e0b', SpreadsheetApp.BorderStyle.SOLID).setFontWeight('bold');
+      sheet.setRowHeight(row, 40);
+    }
+  }
+
+  if (fixed.length) {
+    Logger.log('修正した項目名: ' + fixed.join(', '));
+  } else {
+    Logger.log('修正が必要な行はありませんでした。');
+  }
 }
 
 // ======================================================================
