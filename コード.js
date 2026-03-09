@@ -747,6 +747,7 @@ function getRecipientEmail_(caseId) {
   var ovr = overrideMap[String(caseId)];
   if (ovr && ovr.email !== null) return ovr.email;
 
+  // 案件リストをチェック
   var caseSheet = ss.getSheetByName(SHEET_NAMES.CASES);
   var caseData = caseSheet.getDataRange().getValues();
   for (var i = 1; i < caseData.length; i++) {
@@ -754,6 +755,18 @@ function getRecipientEmail_(caseId) {
       return String(caseData[i][IDX.CASES.EMAIL]);
     }
   }
+
+  // 手動追加案件シートもチェック（案件リストに存在しない manual_xxx 案件に対応）
+  var manualSheet = ss.getSheetByName(SHEET_NAMES.CASES_MANUAL);
+  if (manualSheet && manualSheet.getLastRow() > 1) {
+    var manualData = manualSheet.getDataRange().getValues();
+    for (var j = 1; j < manualData.length; j++) {
+      if (String(manualData[j][IDX.CASES.PK]) === String(caseId)) {
+        return String(manualData[j][IDX.CASES.EMAIL]);
+      }
+    }
+  }
+
   return null;
 }
 
