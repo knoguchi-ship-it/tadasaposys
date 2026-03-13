@@ -1393,7 +1393,7 @@ function getStaffByEmail(email) {
 function getMasters() {
   var zoomEnabled = !!getSetting_('ZOOM_ACCOUNT_ID');
   var attachmentFolderConfigured = !!getSetting_('ATTACHMENT_FOLDER_ID');
-  var methods = ['GoogleMeet', '電話等', '対面'];
+  var methods = ['GoogleMeet', 'メール等', '電話等', '対面'];
   if (zoomEnabled) methods.splice(1, 0, 'Zoom');
   var allStaff = [];
   try {
