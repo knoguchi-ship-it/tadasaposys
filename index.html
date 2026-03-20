@@ -305,19 +305,19 @@
           google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).getAllCasesJoined();
         });
       },
-      declineCase: (caseId, user, subject, body) => {
+      declineCase: (caseId, user, subject, body, cc, bcc) => {
         if (IS_LOCAL) {
           return new Promise(resolve => setTimeout(() => {
             mockCases = mockCases.map(c => {
               if (c.id !== caseId) return c;
               return { ...c, status: 'rejected', staffEmail: user.email, staffName: user.name };
             });
-            console.log('=== 回数超過メール送信（モック） ===\n件名:', subject);
+            console.log('=== 回数超過メール送信（モック） ===\n件名:', subject, cc ? '\nCC: ' + cc : '', bcc ? '\nBCC: ' + bcc : '');
             resolve();
           }, 500));
         }
         return new Promise((resolve, reject) => {
-          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).declineCase(caseId, user, subject, body);
+          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).declineCase(caseId, user, subject, body, cc, bcc);
         });
       },
       assignCase: (caseId, user) => {
@@ -359,7 +359,7 @@
           google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).reopenCase(caseId, user);
         });
       },
-      assignAndSendEmail: (caseId, user, subject, body) => {
+      assignAndSendEmail: (caseId, user, subject, body, cc, bcc) => {
         if (IS_LOCAL) {
           return new Promise(resolve => setTimeout(() => {
             var newThreadId = 'mock-thread-' + Date.now();
@@ -370,15 +370,15 @@
                 threadIds: [newThreadId], threads: [newThread]
               };
             });
-            console.log('=== 初回メール送信（モック） ===\n件名:', subject);
+            console.log('=== 初回メール送信（モック） ===\n件名:', subject, cc ? '\nCC: ' + cc : '', bcc ? '\nBCC: ' + bcc : '');
             resolve();
           }, 500));
         }
         return new Promise((resolve, reject) => {
-          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).assignAndSendEmail(caseId, user, subject, body);
+          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).assignAndSendEmail(caseId, user, subject, body, cc, bcc);
         });
       },
-      sendNewCaseEmail: (caseId, user, subject, body) => {
+      sendNewCaseEmail: (caseId, user, subject, body, cc, bcc) => {
         if (IS_LOCAL) {
           return new Promise(resolve => setTimeout(() => {
             var newThreadId = 'mock-thread-' + Date.now();
@@ -387,15 +387,15 @@
               var newThread = { threadId: newThreadId, subject, messages: [{ sendDate: new Date().toISOString(), senderName: user.name, subject, body, isStaff: true }] };
               return { ...c, threadIds: [...(c.threadIds || []), newThreadId], threads: [newThread, ...(c.threads || [])] };
             });
-            console.log('=== 新規メール送信（モック） ===\n件名:', subject);
+            console.log('=== 新規メール送信（モック） ===\n件名:', subject, cc ? '\nCC: ' + cc : '', bcc ? '\nBCC: ' + bcc : '');
             resolve();
           }, 500));
         }
         return new Promise((resolve, reject) => {
-          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).sendNewCaseEmail(caseId, user, subject, body);
+          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).sendNewCaseEmail(caseId, user, subject, body, cc, bcc);
         });
       },
-      sendCaseEmail: (caseId, user, subject, body, threadId) => {
+      sendCaseEmail: (caseId, user, subject, body, threadId, cc, bcc) => {
         if (IS_LOCAL) {
           return new Promise(resolve => setTimeout(() => {
             mockCases = mockCases.map(c => {
@@ -406,12 +406,12 @@
                   : th)
               };
             });
-            console.log('=== スレッド返信（モック） ===\nスレッド:', threadId, '\n件名:', subject);
+            console.log('=== スレッド返信（モック） ===\nスレッド:', threadId, '\n件名:', subject, cc ? '\nCC: ' + cc : '', bcc ? '\nBCC: ' + bcc : '');
             resolve();
           }, 500));
         }
         return new Promise((resolve, reject) => {
-          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).sendCaseEmail(caseId, user, subject, body, threadId);
+          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).sendCaseEmail(caseId, user, subject, body, threadId, cc, bcc);
         });
       },
       getThreadMessages: (caseId) => {
@@ -1063,6 +1063,7 @@
           mode: 'decline',
           caseId: selectedCase.timestamp,
           to: selectedCase.email,
+          cc: '', bcc: '',
           subject: replaceCaseTags(tpl.declinedSubject || 'タダサポ｜ご利用回数上限のお知らせ'),
           body: replaceCaseTags(tpl.declinedBody || '')
         });
@@ -1117,6 +1118,7 @@
           mode: 'initial',
           caseId: selectedCase.timestamp,
           to: selectedCase.email,
+          cc: '', bcc: '',
           subject: replaceTags(tpl.initialSubject || 'タダサポ｜ご相談を承りました'),
           body: replaceTags(bodyTemplate)
         });
@@ -1140,6 +1142,7 @@
           mode: 'new',
           caseId: selectedCase.timestamp,
           to: selectedCase.email,
+          cc: '', bcc: '',
           subject: '',
           body: replaceNewTags(tpl.newBody || '{{名前}} 様\n\n\n\n{{担当者名}}')
         });
@@ -1158,6 +1161,7 @@
           mode: 'reply',
           caseId: selectedCase.timestamp,
           to: selectedCase.email,
+          cc: '', bcc: '',
           threadId: threadId,
           subject: reSubject,
           body: selectedCase.requesterName + ' 様\n\n\n\n' + user.name
@@ -1169,14 +1173,16 @@
         if (!emailModal || !user) return;
         setSubmitting(true);
         try {
+          var trimmedCc = (emailModal.cc || '').trim() || null;
+          var trimmedBcc = (emailModal.bcc || '').trim() || null;
           if (emailModal.mode === 'initial') {
-            await Api.assignAndSendEmail(emailModal.caseId, user, emailModal.subject, emailModal.body);
+            await Api.assignAndSendEmail(emailModal.caseId, user, emailModal.subject, emailModal.body, trimmedCc, trimmedBcc);
           } else if (emailModal.mode === 'decline') {
-            await Api.declineCase(emailModal.caseId, user, emailModal.subject, emailModal.body);
+            await Api.declineCase(emailModal.caseId, user, emailModal.subject, emailModal.body, trimmedCc, trimmedBcc);
           } else if (emailModal.mode === 'new') {
-            await Api.sendNewCaseEmail(emailModal.caseId, user, emailModal.subject, emailModal.body);
+            await Api.sendNewCaseEmail(emailModal.caseId, user, emailModal.subject, emailModal.body, trimmedCc, trimmedBcc);
           } else {
-            await Api.sendCaseEmail(emailModal.caseId, user, emailModal.subject, emailModal.body, emailModal.threadId);
+            await Api.sendCaseEmail(emailModal.caseId, user, emailModal.subject, emailModal.body, emailModal.threadId, trimmedCc, trimmedBcc);
           }
           const updatedCases = await Api.getAllCases();
           setCases(updatedCases);
@@ -2921,6 +2927,28 @@
                     <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><Mail size={10}/> 送信先</label>
                     <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 text-xs font-bold text-slate-600">
                       {emailModal.to}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><Mail size={10}/> CC（任意）</label>
+                      <input
+                        type="text"
+                        value={emailModal.cc}
+                        onChange={e => setEmailModal({...emailModal, cc: e.target.value})}
+                        placeholder="カンマ区切りで複数指定可"
+                        className="w-full border-2 border-slate-100 rounded-xl p-3 text-xs font-bold outline-none focus:border-teal-500 placeholder:text-slate-300"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><Mail size={10}/> BCC（任意）</label>
+                      <input
+                        type="text"
+                        value={emailModal.bcc}
+                        onChange={e => setEmailModal({...emailModal, bcc: e.target.value})}
+                        placeholder="カンマ区切りで複数指定可"
+                        className="w-full border-2 border-slate-100 rounded-xl p-3 text-xs font-bold outline-none focus:border-teal-500 placeholder:text-slate-300"
+                      />
                     </div>
                   </div>
                   <div className="space-y-1">

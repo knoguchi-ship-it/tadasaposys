@@ -633,7 +633,7 @@ function addMissingEmailSettings_() {
  * 年間利用回数超過のため案件を対応不可にする。
  * 回数超過メールを送信し、ステータスを rejected に変更する。
  */
-function declineCase(caseId, user, subject, body) {
+function declineCase(caseId, user, subject, body, cc, bcc) {
   var actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, true);
 
@@ -680,7 +680,7 @@ function declineCase(caseId, user, subject, body) {
   }
 
   // メール送信
-  var result = sendInThread_(recipientEmail, subject, body, null, null);
+  var result = sendInThread_(recipientEmail, subject, body, null, null, cc || null, bcc || null);
   storeThreadId_(caseId, result.threadId);
   recordEmail_(caseId, actor, recipientEmail, subject, body);
 }
@@ -784,9 +784,15 @@ function getRecipientEmail_(caseId) {
  * @param {string|null} inReplyTo - In-Reply-To ヘッダ用 Message-ID
  * @returns {{ messageId: string, threadId: string }}
  */
-function sendInThread_(to, subject, body, threadId, inReplyTo) {
+function sendInThread_(to, subject, body, threadId, inReplyTo, optionalCc, optionalBcc) {
   var encodedSubject = '=?UTF-8?B?' + Utilities.base64Encode(subject, Utilities.Charset.UTF_8) + '?=';
   var forceCc = getForcedCc_();
+
+  // 設定の必須CCと任意CCをマージ
+  var ccParts = [];
+  if (forceCc) ccParts.push(forceCc);
+  if (optionalCc) ccParts.push(optionalCc);
+  var mergedCc = ccParts.length > 0 ? ccParts.join(', ') : null;
 
   var headers = [
     'MIME-Version: 1.0',
@@ -794,7 +800,8 @@ function sendInThread_(to, subject, body, threadId, inReplyTo) {
     'Subject: ' + encodedSubject,
     'Content-Type: text/plain; charset=UTF-8'
   ];
-  if (forceCc) headers.push('Cc: ' + forceCc);
+  if (mergedCc) headers.push('Cc: ' + mergedCc);
+  if (optionalBcc) headers.push('Bcc: ' + optionalBcc);
 
   if (inReplyTo) {
     headers.push('In-Reply-To: ' + inReplyTo);
@@ -809,18 +816,19 @@ function sendInThread_(to, subject, body, threadId, inReplyTo) {
 
   if (isMailDryRun_()) {
     var stamp = String(new Date().getTime());
-    Logger.log('[MAIL_DRY_RUN] send skipped. to=%s cc=%s subject=%s threadId=%s', to, forceCc || '', subject, threadId || '');
+    Logger.log('[MAIL_DRY_RUN] send skipped. to=%s cc=%s bcc=%s subject=%s threadId=%s', to, mergedCc || '', optionalBcc || '', subject, threadId || '');
     return {
       messageId: 'dryrun-msg-' + stamp,
       threadId: threadId || ('dryrun-thread-' + stamp),
       dryRun: true,
       to: to,
-      cc: forceCc || null
+      cc: mergedCc || null,
+      bcc: optionalBcc || null
     };
   }
 
   var result = Gmail.Users.Messages.send(request, 'me');
-  return { messageId: result.id, threadId: result.threadId, dryRun: false, to: to, cc: forceCc || null };
+  return { messageId: result.id, threadId: result.threadId, dryRun: false, to: to, cc: mergedCc || null, bcc: optionalBcc || null };
 }
 
 /**
@@ -976,7 +984,7 @@ function getAllStaffEmails_() {
  * 案件を担当し、初回メールを送信する。
  * Gmail API でスレッドIDを取得し、サポート記録に保存する。
  */
-function assignAndSendEmail(caseId, user, subject, body) {
+function assignAndSendEmail(caseId, user, subject, body, cc, bcc) {
   var actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, true);
 
@@ -986,7 +994,7 @@ function assignAndSendEmail(caseId, user, subject, body) {
   assignCase(caseId, actor);
 
   // Gmail API で送信（新規スレッド開始）
-  var result = sendInThread_(recipientEmail, subject, body, null, null);
+  var result = sendInThread_(recipientEmail, subject, body, null, null, cc || null, bcc || null);
 
   // スレッドIDを保存
   storeThreadId_(caseId, result.threadId);
@@ -1003,14 +1011,14 @@ function assignAndSendEmail(caseId, user, subject, body) {
  * 案件に対して新規メールを送信する（新しいスレッドを作成）。
  * 「メール送信」ボタンから呼ばれる。
  */
-function sendNewCaseEmail(caseId, user, subject, body) {
+function sendNewCaseEmail(caseId, user, subject, body, cc, bcc) {
   var actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, false);
 
   var recipientEmail = getRecipientEmail_(caseId);
   if (!recipientEmail) throw new Error('案件が見つかりません: ' + caseId);
 
-  var result = sendInThread_(recipientEmail, subject, body, null, null);
+  var result = sendInThread_(recipientEmail, subject, body, null, null, cc || null, bcc || null);
   storeThreadId_(caseId, result.threadId);
   recordEmail_(caseId, actor, recipientEmail, subject, body);
 }
@@ -1023,7 +1031,7 @@ function sendNewCaseEmail(caseId, user, subject, body) {
  * 案件の既存スレッドに返信する。
  * threadIdを指定して呼ばれる。
  */
-function sendCaseEmail(caseId, user, subject, body, threadId) {
+function sendCaseEmail(caseId, user, subject, body, threadId, cc, bcc) {
   var actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, false);
 
@@ -1035,7 +1043,7 @@ function sendCaseEmail(caseId, user, subject, body, threadId) {
     inReplyTo = getLastMessageId_(threadId);
   }
 
-  var result = sendInThread_(recipientEmail, subject, body, threadId || null, inReplyTo);
+  var result = sendInThread_(recipientEmail, subject, body, threadId || null, inReplyTo, cc || null, bcc || null);
 
   // threadId未指定の場合は新規スレッドとして保存
   if (!threadId && result.threadId) {
