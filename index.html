@@ -1014,7 +1014,16 @@
           supportCount: String(selectedCase.supportCount || 1),
           caseLimitOverride: selectedCase.caseLimitOverride === undefined || selectedCase.caseLimitOverride === null ? '' : String(selectedCase.caseLimitOverride),
           annualLimitOverride: selectedCase.annualLimitOverride === undefined || selectedCase.annualLimitOverride === null ? '' : String(selectedCase.annualLimitOverride),
-          scheduledDateTime: selectedCase.scheduledDateTime ? new Date(selectedCase.scheduledDateTime).toISOString().substring(0, 16) : '',
+          scheduledDate: (() => {
+            if (!selectedCase.scheduledDateTime) return '';
+            var d = new Date(selectedCase.scheduledDateTime);
+            return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+          })(),
+          scheduledTime: (() => {
+            if (!selectedCase.scheduledDateTime) return '';
+            var d = new Date(selectedCase.scheduledDateTime);
+            return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+          })(),
           method: selectedCase.method || '',
           content: selectedCase.content || '',
           remarks: selectedCase.remarks || '',
@@ -1526,7 +1535,7 @@
             serviceType: adminCaseEditDraft.serviceType
           },
           recordPatch: {
-            scheduledDateTime: adminCaseEditDraft.scheduledDateTime || null,
+            scheduledDateTime: adminCaseEditDraft.scheduledDate ? (adminCaseEditDraft.scheduledDate + (adminCaseEditDraft.scheduledTime ? 'T' + adminCaseEditDraft.scheduledTime : '')) : null,
             method: adminCaseEditDraft.method || null,
             supportCount: Number(adminCaseEditDraft.supportCount || 1),
             caseLimitOverride: adminCaseEditDraft.caseLimitOverride === '' ? null : Number(adminCaseEditDraft.caseLimitOverride),
@@ -2682,9 +2691,15 @@
                             <label className="text-[10px] font-black text-slate-500">年度上限（特例）: 空欄で通常
                               <input type="number" min="1" value={adminCaseEditDraft.annualLimitOverride || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, annualLimitOverride: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
                             </label>
-                            <label className="text-[10px] font-black text-slate-500">対応日時: GoogleCalendarとは連携しません
-                              <input type="datetime-local" value={adminCaseEditDraft.scheduledDateTime || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, scheduledDateTime: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
-                            </label>
+                            <div className="text-[10px] font-black text-slate-500">対応日時: GoogleCalendarとは連携しません
+                              <div className="flex gap-2 mt-1">
+                                <input type="date" value={adminCaseEditDraft.scheduledDate || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, scheduledDate: e.target.value }))} className="flex-1 py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
+                                <input type="time" value={adminCaseEditDraft.scheduledTime || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, scheduledTime: e.target.value }))} placeholder="時間（任意）" className="w-28 py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
+                              </div>
+                              {adminCaseEditDraft.scheduledDate && !adminCaseEditDraft.scheduledTime && (
+                                <p className="text-[9px] text-slate-400 mt-1">時間未入力の場合、日付のみ保存されます</p>
+                              )}
+                            </div>
                             <label className="text-[10px] font-black text-slate-500">対応方法
                               <select value={adminCaseEditDraft.method || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, method: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold">
                                 <option value="">未設定</option>
