@@ -791,6 +791,8 @@
       const [dragOverAttachments, setDragOverAttachments] = useState(false);
       const fileInputRef = useRef(null);
       const [submitting, setSubmitting] = useState(false);
+      const [submittingLabel, setSubmittingLabel] = useState('');
+      const startSubmit = (label) => { setSubmittingLabel(label || '処理中...'); setSubmitting(true); };
       const [assignToolsSelection, setAssignToolsSelection] = useState([]);
       const [emailModal, setEmailModal] = useState(null);
       const [expandedEmailIdx, setExpandedEmailIdx] = useState(null);
@@ -1292,7 +1294,7 @@
 
       const handleAssignOnlySubmit = async () => {
         if (!selectedCase || !user) return;
-        setSubmitting(true);
+        startSubmit('担当設定中...');
         try {
           await Api.assignCase(selectedCase.timestamp, user, assignToolsSelection.length > 0 ? assignToolsSelection : undefined);
           var assignCaseId = selectedCase.id;
@@ -1394,7 +1396,7 @@
 
       const handleSendEmail = async () => {
         if (!emailModal || !user) return;
-        setSubmitting(true);
+        startSubmit('メール送信中...');
         try {
           var trimmedCc = (emailModal.cc || '').trim() || null;
           var trimmedBcc = (emailModal.bcc || '').trim() || null;
@@ -1451,7 +1453,7 @@
       const handleEditSave = async (ev) => {
         ev.preventDefault();
         if (!selectedCase) return;
-        setSubmitting(true);
+        startSubmit('保存中...');
 
         try {
           let payload = Object.assign({}, selectedCase, editFormData);
@@ -1518,7 +1520,7 @@
           showToast('今年度の利用回数が上限（10回）に達しているため再開できません。', { type: 'error', title: '再開不可' });
           return;
         }
-        setSubmitting(true);
+        startSubmit('再開中...');
         try {
           await Api.reopenCase(selectedCase.timestamp, user);
           var reopenCaseId = selectedCase.id;
@@ -1559,7 +1561,7 @@
 
       const handleAdminReassign = async () => {
         if (!selectedCase || !adminReassignEmail || adminReassignEmail === (selectedCase.staffEmail || '')) return;
-        setSubmitting(true);
+        startSubmit('担当者変更中...');
         try {
           await Api.reassignCaseAdmin(selectedCase.timestamp, adminReassignEmail);
           var reassignId = selectedCase.id;
@@ -1579,7 +1581,7 @@
 
       const handleAdminStatusChange = async () => {
         if (!selectedCase || !adminStatusValue || adminStatusValue === selectedCase.status) return;
-        setSubmitting(true);
+        startSubmit('ステータス変更中...');
         try {
           await Api.setCaseStatusAdmin(selectedCase.timestamp, adminStatusValue);
           var statusCaseId = selectedCase.id;
@@ -1610,7 +1612,7 @@
       const handleAdminStatusChangeInline = async (newStatus) => {
         setInlineEditField(null);
         if (!selectedCase || newStatus === selectedCase.status) return;
-        setSubmitting(true);
+        startSubmit('ステータス変更中...');
         try {
           await Api.setCaseStatusAdmin(selectedCase.timestamp, newStatus);
           var inlineCaseId = selectedCase.id;
@@ -1628,7 +1630,7 @@
         const newLimit = inlineLimitDraft.trim() === '' ? null : Number(inlineLimitDraft);
         setInlineEditField(null);
         if (!selectedCase) return;
-        setSubmitting(true);
+        startSubmit('上限変更中...');
         try {
           await Api.updateCaseDataAdmin(selectedCase.timestamp, { casePatch: {}, recordPatch: { caseLimitOverride: newLimit } });
           var limitCaseId = selectedCase.id;
@@ -1645,7 +1647,7 @@
         const newLimit = inlineLimitDraft.trim() === '' ? null : Number(inlineLimitDraft);
         setInlineEditField(null);
         if (!selectedCase) return;
-        setSubmitting(true);
+        startSubmit('上限変更中...');
         try {
           await Api.updateCaseDataAdmin(selectedCase.timestamp, { casePatch: {}, recordPatch: { annualLimitOverride: newLimit } });
           var annualCaseId = selectedCase.id;
@@ -1661,7 +1663,7 @@
       const handleAdminReassignInline = async (staffEmail) => {
         setInlineEditField(null);
         if (!selectedCase || staffEmail === (selectedCase.staffEmail || '')) return;
-        setSubmitting(true);
+        startSubmit('担当者変更中...');
         try {
           await Api.reassignCaseAdmin(selectedCase.timestamp, staffEmail);
           var inlineReassignId = selectedCase.id;
@@ -1706,7 +1708,7 @@
             tools: adminCaseEditDraft.tools || []
           }
         };
-        setSubmitting(true);
+        startSubmit('案件データ保存中...');
         try {
           await Api.updateCaseDataAdmin(selectedCase.timestamp, payload);
           var editAdminCaseId = selectedCase.id;
@@ -1740,7 +1742,7 @@
         if (staff.email === user?.email) return;
         const current = getRoleStatusValue(staff);
         if (current === nextStatus) return;
-        setSubmitting(true);
+        startSubmit('スタッフ更新中...');
         try {
           if (nextStatus === 'disabled') {
             await Api.deactivateStaffMember(staff.email);
@@ -1766,7 +1768,7 @@
           showToast('変更はありません。', { type: 'info', title: '設定管理' });
           return;
         }
-        setSubmitting(true);
+        startSubmit('設定保存中...');
         try {
           await Api.updateSettingsAdmin(patch);
           await refreshAdminPanelData();
@@ -1965,7 +1967,7 @@
 
           <main className="flex-1 flex overflow-hidden">
             {/* Sidebar */}
-            <div className={`flex-none w-full md:w-[320px] lg:w-[380px] bg-white border-r border-slate-200 flex flex-col z-10 ${selectedCaseId ? 'hidden md:flex' : 'flex'}`}
+            <div className={`flex-none w-full md:w-[320px] lg:w-[380px] bg-white border-r border-slate-200 flex flex-col z-10 transition-opacity duration-200 ${selectedCaseId ? 'hidden md:flex' : 'flex'} ${submitting ? 'pointer-events-none opacity-50' : ''}`}
               role="region" aria-label="案件一覧">
               {/* ステータスタブ + 詳細フィルタトグル + キーワード検索（常時表示） */}
               <div className="p-3 border-b border-slate-100 bg-slate-50/50 space-y-2">
@@ -2289,7 +2291,7 @@
             </div>
 
             {/* Main Content */}
-            <div className={`flex-1 overflow-y-auto bg-slate-50 p-4 lg:p-10 ${!selectedCaseId ? 'hidden md:block' : ''}`}>
+            <div className={`flex-1 overflow-y-auto bg-slate-50 p-4 lg:p-10 transition-opacity duration-200 ${!selectedCaseId ? 'hidden md:block' : ''} ${submitting ? 'pointer-events-none opacity-50' : ''}`}>
               {selectedCase ? (
                 <div className="max-w-3xl mx-auto space-y-6 pb-28 animate-in fade-in slide-in-from-bottom-4 duration-300">
                   <button onClick={() => setSelectedCaseId(null)} className="md:hidden flex items-center gap-2 text-slate-500 text-xs font-bold mb-2">
@@ -3020,6 +3022,12 @@
           {selectedCase && !isReadOnlyMode && (
             <div className="fixed bottom-6 left-0 right-0 px-6 flex justify-center pointer-events-none z-[100]">
               <div className="bg-slate-900/90 backdrop-blur-md p-2 rounded-2xl shadow-2xl flex flex-wrap justify-center gap-2 pointer-events-auto ring-4 ring-white/50 max-w-[90vw]">
+                {submitting ? (
+                  <div className="px-8 py-3 flex items-center gap-3 text-white text-sm font-black">
+                    <Loader2 size={20} className="animate-spin"/>
+                    <span>{submittingLabel}</span>
+                  </div>
+                ) : (<React.Fragment>
                 {selectedCase.status === 'unhandled' && isAdminMode && user?.isAdmin && (
                   <button onClick={() => openModal('schedule')} disabled={submitting} className="px-5 py-3 bg-indigo-500 text-white rounded-xl text-sm font-black flex items-center gap-2 hover:bg-indigo-600 transition-all active:scale-95 cursor-pointer disabled:opacity-60">
                     <Calendar size={18} /> 日時設定
@@ -3081,7 +3089,7 @@
                 {isAdminMode && user?.isAdmin && selectedCase.status !== 'cancelled' && (
                   <button
                     onClick={() => showConfirm('この案件をキャンセルしますか？\n元に戻すには管理者がステータスを変更してください。', async () => {
-                      setSubmitting(true);
+                      startSubmit('キャンセル中...');
                       try {
                         await Api.setCaseStatusAdmin(selectedCase.timestamp, 'cancelled');
                         var cancelCaseId = selectedCase.id;
@@ -3105,7 +3113,7 @@
                     onClick={() => showConfirm(
                       '「' + selectedCase.officeName + '」の案件を完全に削除しますか？\nこの操作は取り消せません。関連するサポート記録・メール履歴・添付ファイルも削除されます。',
                       async () => {
-                        setSubmitting(true);
+                        startSubmit('削除中...');
                         try {
                           await Api.deleteCaseAdmin(selectedCase.timestamp);
                           var deleteCaseId = selectedCase.id;
@@ -3125,6 +3133,7 @@
                     <Trash2 size={18} /> 削除
                   </button>
                 )}
+                </React.Fragment>)}
               </div>
             </div>
           )}
@@ -3732,7 +3741,7 @@
         if (!form.officeName.trim())    return showToast('介護事業所名を入力してください。', { type: 'error' });
         if (!form.requesterName.trim()) return showToast('お名前を入力してください。', { type: 'error' });
         if (!form.details.trim())       return showToast('困りごと詳細を入力してください。', { type: 'error' });
-        setSubmitting(true);
+        startSubmit('案件追加中...');
         try {
           var addPayload = {
             email: form.email.trim(),
