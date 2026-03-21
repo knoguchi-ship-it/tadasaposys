@@ -742,6 +742,8 @@
       const [adminRoleDialogOpen, setAdminRoleDialogOpen] = useState(false);
       const [adminSettingsDialogOpen, setAdminSettingsDialogOpen] = useState(false);
       const [addCaseDialogOpen, setAddCaseDialogOpen] = useState(false);
+      const [extractDialogOpen, setExtractDialogOpen] = useState(false);
+      const [extractFields, setExtractFields] = useState(['prefecture', 'officeName']);
       const [roleSearchWord, setRoleSearchWord] = useState('');
       const [roleStatusFilter, setRoleStatusFilter] = useState('all');
       const [settingsDraft, setSettingsDraft] = useState({});
@@ -1763,21 +1765,7 @@
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      const rows = filteredCases.map(c => [c.prefecture || '', c.officeName || '']);
-                      const unique = [];
-                      const seen = new Set();
-                      rows.forEach(r => {
-                        const key = r.join('\t');
-                        if (!seen.has(key)) { seen.add(key); unique.push(r); }
-                      });
-                      const tsv = '都道府県\t事業所名\n' + unique.map(r => r.join('\t')).join('\n');
-                      navigator.clipboard.writeText(tsv).then(() => {
-                        showToast(`${unique.length}件の事業所データをコピーしました（重複除外済）。スプレッドシートに貼り付けできます。`, { type: 'success', title: 'データ抽出' });
-                      }).catch(() => {
-                        showToast('クリップボードへのコピーに失敗しました。', { type: 'error', title: 'データ抽出' });
-                      });
-                    }}
+                    onClick={() => setExtractDialogOpen(true)}
                     className="px-3 py-1.5 rounded-lg text-[10px] font-black bg-violet-50 text-violet-700 hover:bg-violet-100 border border-violet-200 flex items-center gap-1.5"
                   >
                     <ClipboardList size={12} /> データ抽出
@@ -2903,6 +2891,83 @@
               showToast={showToast}
             />
           )}
+
+          {extractDialogOpen && (() => {
+            const EXTRACT_FIELD_DEFS = [
+              { key: 'prefecture', label: '都道府県' },
+              { key: 'officeName', label: '事業所名' },
+              { key: 'requesterName', label: '担当窓口名' },
+              { key: 'email', label: 'メールアドレス' },
+              { key: 'serviceType', label: 'サービス種別' },
+              { key: 'status', label: 'ステータス', format: v => STATUS_LABELS[v] || v },
+              { key: 'staffName', label: '担当者' },
+              { key: 'scheduledDateTime', label: '実施日', format: v => v ? new Date(v).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' }) : '' },
+              { key: 'timestamp', label: '受付日', format: v => v ? v.slice(0, 10).replace(/-/g, '/') : '' },
+              { key: 'supportCount', label: '対応回数' },
+              { key: 'method', label: '対応方法' },
+              { key: 'tools', label: '対応ツール', format: v => Array.isArray(v) ? v.join(', ') : '' },
+              { key: 'content', label: '対応記録' },
+              { key: 'details', label: '相談内容' },
+              { key: 'remarks', label: '備考' },
+            ];
+            const toggleField = (key) => {
+              setExtractFields(prev => prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]);
+            };
+            const doExtract = () => {
+              const selectedDefs = EXTRACT_FIELD_DEFS.filter(d => extractFields.includes(d.key));
+              if (!selectedDefs.length) { showToast('抽出する項目を選択してください。', { type: 'error', title: 'データ抽出' }); return; }
+              const headers = selectedDefs.map(d => d.label);
+              const rows = filteredCases.map(c => selectedDefs.map(d => {
+                const val = c[d.key];
+                return d.format ? d.format(val) : (val == null ? '' : String(val));
+              }));
+              const tsv = headers.join('\t') + '\n' + rows.map(r => r.join('\t')).join('\n');
+              navigator.clipboard.writeText(tsv).then(() => {
+                showToast(`${rows.length}件 × ${selectedDefs.length}項目をコピーしました。スプレッドシートに貼り付けできます。`, { type: 'success', title: 'データ抽出' });
+                setExtractDialogOpen(false);
+              }).catch(() => {
+                showToast('クリップボードへのコピーに失敗しました。', { type: 'error', title: 'データ抽出' });
+              });
+            };
+            return (
+              <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-sm p-4 flex items-center justify-center">
+                <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden">
+                  <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-black text-slate-800 flex items-center gap-2"><ClipboardList size={14}/> データ抽出</h3>
+                      <p className="text-[10px] text-slate-500 mt-1">現在のフィルタ条件: {filteredCases.length}件が対象</p>
+                    </div>
+                    <button onClick={() => setExtractDialogOpen(false)} className="p-1 hover:bg-slate-100 rounded-lg"><X size={16}/></button>
+                  </div>
+                  <div className="p-6 space-y-4">
+                    <p className="text-[10px] font-black text-slate-500 uppercase">抽出する項目を選択</p>
+                    <div className="flex flex-wrap gap-2">
+                      {EXTRACT_FIELD_DEFS.map(d => {
+                        const checked = extractFields.includes(d.key);
+                        return (
+                          <label key={d.key} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-2 text-[11px] font-bold transition-all select-none cursor-pointer ${
+                            checked ? 'border-violet-500 bg-violet-50 text-violet-700' : 'border-slate-100 bg-white text-slate-500 hover:border-slate-300'
+                          }`}>
+                            <input type="checkbox" className="hidden" checked={checked} onChange={() => toggleField(d.key)} />
+                            {d.label}
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => setExtractFields(EXTRACT_FIELD_DEFS.map(d => d.key))} className="text-[10px] font-bold text-violet-600 hover:underline">全選択</button>
+                      <button onClick={() => setExtractFields([])} className="text-[10px] font-bold text-slate-400 hover:underline">全解除</button>
+                    </div>
+                  </div>
+                  <div className="px-6 py-4 border-t border-slate-100 flex justify-end">
+                    <button onClick={doExtract} disabled={!extractFields.length} className="px-6 py-2.5 rounded-xl text-xs font-black bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-30 disabled:cursor-not-allowed flex items-center gap-2">
+                      <ClipboardList size={14}/> {filteredCases.length}件をコピー
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {adminRoleDialogOpen && (
             <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-sm p-4 flex items-center justify-center">
