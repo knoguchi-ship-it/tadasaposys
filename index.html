@@ -867,9 +867,14 @@
           if (searchStaffEmail && isDashboardMode && c.staffEmail !== searchStaffEmail) return false;
           if (searchTool && !(Array.isArray(c.tools) && c.tools.includes(searchTool))) return false;
           return true;
-        }).sort((a, b) => searchSortOrder === 'oldest'
-          ? new Date(a.timestamp) - new Date(b.timestamp)
-          : new Date(b.timestamp) - new Date(a.timestamp));
+        }).sort((a, b) => {
+          // 完了案件は実施日（scheduledDateTime）優先、なければ受付日（timestamp）
+          var da = (a.status === 'completed' && a.scheduledDateTime) ? a.scheduledDateTime : a.timestamp;
+          var db = (b.status === 'completed' && b.scheduledDateTime) ? b.scheduledDateTime : b.timestamp;
+          return searchSortOrder === 'oldest'
+            ? new Date(da) - new Date(db)
+            : new Date(db) - new Date(da);
+        });
       }, [
         cases,
         activeTab,
