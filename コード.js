@@ -2087,46 +2087,80 @@ function updateCaseDataAdmin(caseId, payload) {
   var recordSheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
   if (!caseSheet || !recordSheet) throw new Error('必要なシートが見つかりません。');
 
-  // 案件リストの存在確認（読み取りのみ。書き込みはIMPORTRANGE保護のため行わない）
+  // 案件の存在確認: まずCASESシート、なければCASES_MANUALシートを検索
   var caseRowIndex = getCaseRowIndex_(caseSheet, caseId);
-  if (caseRowIndex === -1) throw new Error('案件が見つかりません: ' + caseId);
+  var isManualCase = false;
+  var manualSheet = null;
+  var manualRowIndex = -1;
+  if (caseRowIndex === -1) {
+    manualSheet = ss.getSheetByName(SHEET_NAMES.CASES_MANUAL);
+    if (manualSheet) manualRowIndex = getCaseRowIndex_(manualSheet, caseId);
+    if (manualRowIndex === -1) throw new Error('案件が見つかりません: ' + caseId);
+    isManualCase = true;
+  }
 
-  // 案件補正シートを取得（casePatch はここに書き込む）
+  // 案件補正シートを取得（通常案件のcasePatch書き込み先）
   var overrideSheet = ensureCasesOverrideSheet_(ss);
 
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    var beforeCaseRow = caseSheet.getRange(caseRowIndex, 1, 1, caseSheet.getLastColumn()).getValues()[0];
+    var actualCaseSheet = isManualCase ? manualSheet : caseSheet;
+    var actualCaseRowIndex = isManualCase ? manualRowIndex : caseRowIndex;
+    var beforeCaseRow = actualCaseSheet.getRange(actualCaseRowIndex, 1, 1, actualCaseSheet.getLastColumn()).getValues()[0];
     var recordRowIndex = ensureRecordRowForCase_(recordSheet, caseId);
     var beforeRecordRow = recordSheet.getRange(recordRowIndex, 1, 1, recordSheet.getLastColumn()).getValues()[0];
 
-    // ─── casePatch: 案件情報の補正は「案件リスト」ではなく「案件補正」シートに書き込む ───
-    // 「案件リスト」はIMPORTRANGEで保護されているため直接書き込み禁止。
+    // ─── casePatch: 案件情報の書き込み ───
+    // 手動案件 → CASES_MANUAL シートに直接書き込み
+    // 通常案件 → IMPORTRANGE保護のため「案件補正」シートに書き込み
     if (Object.prototype.hasOwnProperty.call(casePatch, 'email') ||
         Object.prototype.hasOwnProperty.call(casePatch, 'officeName') ||
         Object.prototype.hasOwnProperty.call(casePatch, 'requesterName') ||
         Object.prototype.hasOwnProperty.call(casePatch, 'details') ||
         Object.prototype.hasOwnProperty.call(casePatch, 'prefecture') ||
         Object.prototype.hasOwnProperty.call(casePatch, 'serviceType')) {
-      var overrideRowIndex = getOrCreateOverrideRowIndex_(overrideSheet, caseId);
-      if (Object.prototype.hasOwnProperty.call(casePatch, 'email')) {
-        overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.EMAIL + 1).setValue(String(casePatch.email || '').trim());
-      }
-      if (Object.prototype.hasOwnProperty.call(casePatch, 'officeName')) {
-        overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.OFFICE + 1).setValue(String(casePatch.officeName || '').trim());
-      }
-      if (Object.prototype.hasOwnProperty.call(casePatch, 'requesterName')) {
-        overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.NAME + 1).setValue(String(casePatch.requesterName || '').trim());
-      }
-      if (Object.prototype.hasOwnProperty.call(casePatch, 'details')) {
-        overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.DETAILS + 1).setValue(String(casePatch.details || '').trim());
-      }
-      if (Object.prototype.hasOwnProperty.call(casePatch, 'prefecture')) {
-        overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.PREFECTURE + 1).setValue(String(casePatch.prefecture || '').trim());
-      }
-      if (Object.prototype.hasOwnProperty.call(casePatch, 'serviceType')) {
-        overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.SERVICE + 1).setValue(String(casePatch.serviceType || '').trim());
+      if (isManualCase) {
+        // 手動案件: CASES_MANUAL シートに直接書き込み
+        if (Object.prototype.hasOwnProperty.call(casePatch, 'email')) {
+          manualSheet.getRange(manualRowIndex, IDX.CASES.EMAIL + 1).setValue(String(casePatch.email || '').trim());
+        }
+        if (Object.prototype.hasOwnProperty.call(casePatch, 'officeName')) {
+          manualSheet.getRange(manualRowIndex, IDX.CASES.OFFICE + 1).setValue(String(casePatch.officeName || '').trim());
+        }
+        if (Object.prototype.hasOwnProperty.call(casePatch, 'requesterName')) {
+          manualSheet.getRange(manualRowIndex, IDX.CASES.NAME + 1).setValue(String(casePatch.requesterName || '').trim());
+        }
+        if (Object.prototype.hasOwnProperty.call(casePatch, 'details')) {
+          manualSheet.getRange(manualRowIndex, IDX.CASES.DETAILS + 1).setValue(String(casePatch.details || '').trim());
+        }
+        if (Object.prototype.hasOwnProperty.call(casePatch, 'prefecture')) {
+          manualSheet.getRange(manualRowIndex, IDX.CASES.PREFECTURE + 1).setValue(String(casePatch.prefecture || '').trim());
+        }
+        if (Object.prototype.hasOwnProperty.call(casePatch, 'serviceType')) {
+          manualSheet.getRange(manualRowIndex, IDX.CASES.SERVICE + 1).setValue(String(casePatch.serviceType || '').trim());
+        }
+      } else {
+        // 通常案件: 案件補正シートに書き込み
+        var overrideRowIndex = getOrCreateOverrideRowIndex_(overrideSheet, caseId);
+        if (Object.prototype.hasOwnProperty.call(casePatch, 'email')) {
+          overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.EMAIL + 1).setValue(String(casePatch.email || '').trim());
+        }
+        if (Object.prototype.hasOwnProperty.call(casePatch, 'officeName')) {
+          overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.OFFICE + 1).setValue(String(casePatch.officeName || '').trim());
+        }
+        if (Object.prototype.hasOwnProperty.call(casePatch, 'requesterName')) {
+          overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.NAME + 1).setValue(String(casePatch.requesterName || '').trim());
+        }
+        if (Object.prototype.hasOwnProperty.call(casePatch, 'details')) {
+          overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.DETAILS + 1).setValue(String(casePatch.details || '').trim());
+        }
+        if (Object.prototype.hasOwnProperty.call(casePatch, 'prefecture')) {
+          overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.PREFECTURE + 1).setValue(String(casePatch.prefecture || '').trim());
+        }
+        if (Object.prototype.hasOwnProperty.call(casePatch, 'serviceType')) {
+          overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.SERVICE + 1).setValue(String(casePatch.serviceType || '').trim());
+        }
       }
     }
 
