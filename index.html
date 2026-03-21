@@ -1010,6 +1010,8 @@
         setAdminReassignEmail(selectedCase.staffEmail || '');
         setAdminStatusValue(selectedCase.status || 'unhandled');
         setAdminCaseEditDraft({
+          status: selectedCase.status || 'unhandled',
+          staffEmail: selectedCase.staffEmail || '',
           officeName: selectedCase.officeName || '',
           requesterName: selectedCase.requesterName || '',
           email: selectedCase.email || '',
@@ -1540,6 +1542,8 @@
             serviceType: adminCaseEditDraft.serviceType
           },
           recordPatch: {
+            status: adminCaseEditDraft.status,
+            staffEmail: adminCaseEditDraft.staffEmail,
             scheduledDateTime: adminCaseEditDraft.scheduledDate ? (adminCaseEditDraft.scheduledDate + (adminCaseEditDraft.scheduledTime ? 'T' + adminCaseEditDraft.scheduledTime : '')) : null,
             method: adminCaseEditDraft.method || null,
             supportCount: Number(adminCaseEditDraft.supportCount || 1),
@@ -2675,11 +2679,26 @@
                         <h3 className="text-[10px] font-black text-amber-700 uppercase tracking-widest flex items-center gap-2">
                           <Shield size={12} /> 管理者専用操作
                         </h3>
-                        <p className="text-[10px] text-amber-600">ステータス・担当者はカード上部のバッジをクリックして直接変更できます。</p>
+                        <p className="text-[10px] text-amber-600">カード上部のバッジクリックでもステータス・担当者を変更できます。</p>
                         <div className="bg-white rounded-2xl border border-amber-100 p-4 space-y-3">
                           <p className="text-xs font-black text-slate-700">3. 案件データ直接編集（管理者）</p>
                           <p className="text-[10px] text-slate-500">各項目に説明を付けています。必要な値だけ更新してください。</p>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <label className="text-[10px] font-black text-slate-500">ステータス
+                              <select value={adminCaseEditDraft.status || 'unhandled'} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, status: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold">
+                                {STATUS_KEYS.filter(k => k !== 'all').map(k => (
+                                  <option key={k} value={k}>{STATUS_LABELS[k]}</option>
+                                ))}
+                              </select>
+                            </label>
+                            <label className="text-[10px] font-black text-slate-500">担当者
+                              <select value={adminCaseEditDraft.staffEmail || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, staffEmail: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold">
+                                <option value="">未割当</option>
+                                {activeStaffMembers.map(s => (
+                                  <option key={s.email} value={s.email}>{s.name}（{s.email}）</option>
+                                ))}
+                              </select>
+                            </label>
                             <label className="text-[10px] font-black text-slate-500">事業所名: 案件の対象事業所
                               <input value={adminCaseEditDraft.officeName || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, officeName: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
                             </label>
