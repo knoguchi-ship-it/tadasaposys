@@ -1191,6 +1191,17 @@
         });
       }, []);
 
+      // サブ担当⇔メイン担当のCC自動設定
+      const getSubStaffAutoCc = (caseData) => {
+        if (!caseData || !user) return '';
+        const subs = caseData.subStaff || [];
+        if (subs.length === 0) return '';
+        const isSub = subs.some(s => s.email === user.email);
+        if (isSub) return caseData.staffEmail || ''; // サブ→メインをCC
+        if (caseData.staffEmail === user.email) return subs.map(s => s.email).join(', '); // メイン→サブをCC
+        return '';
+      };
+
       const handleDecline = () => {
         if (!selectedCase || !user) return;
         const tpl = masters?.emailTemplates || {};
@@ -1198,7 +1209,7 @@
           mode: 'decline',
           caseId: selectedCase.timestamp,
           to: selectedCase.email,
-          cc: '', bcc: '',
+          cc: getSubStaffAutoCc(selectedCase), bcc: '',
           subject: replaceCaseTags(tpl.declinedSubject || 'タダサポ｜ご利用回数上限のお知らせ'),
           body: replaceCaseTags(tpl.declinedBody || '')
         });
@@ -1258,7 +1269,7 @@
           mode: 'initial',
           caseId: selectedCase.timestamp,
           to: selectedCase.email,
-          cc: '', bcc: '',
+          cc: getSubStaffAutoCc(selectedCase), bcc: '',
           subject: replaceTags(tpl.initialSubject || 'タダサポ｜ご相談を承りました'),
           body: replaceTags(bodyTemplate),
           tools: []
@@ -1283,7 +1294,7 @@
           mode: 'new',
           caseId: selectedCase.timestamp,
           to: selectedCase.email,
-          cc: '', bcc: '',
+          cc: getSubStaffAutoCc(selectedCase), bcc: '',
           subject: '',
           body: replaceNewTags(tpl.newBody || '{{名前}} 様\n\n\n\n{{担当者名}}')
         });
@@ -1302,7 +1313,7 @@
           mode: 'reply',
           caseId: selectedCase.timestamp,
           to: selectedCase.email,
-          cc: '', bcc: '',
+          cc: getSubStaffAutoCc(selectedCase), bcc: '',
           threadId: threadId,
           subject: reSubject,
           body: selectedCase.requesterName + ' 様\n\n\n\n' + user.name
