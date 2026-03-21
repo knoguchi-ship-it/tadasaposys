@@ -2039,6 +2039,23 @@
                   {isAdminMode ? '管理モード: 全案件を表示中' : '閲覧モード: 全案件を表示中'}
                 </div>
               )}
+              {Object.keys(toolMonthlyLimits).length > 0 && (
+                <div className="px-3 py-2 border-b border-slate-100 bg-slate-50/30">
+                  <div className="flex flex-wrap gap-1.5">
+                    {Object.entries(toolMonthlyLimits).map(([tool, limit]) => {
+                      const used = toolMonthlyUsage[tool] || 0;
+                      const reached = used >= limit;
+                      return (
+                        <div key={tool} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black ${reached ? 'bg-rose-50 text-rose-600 ring-1 ring-rose-200' : 'bg-teal-50 text-teal-700 ring-1 ring-teal-200'}`}>
+                          {reached ? <AlertTriangle size={10}/> : <CheckCircle2 size={10}/>}
+                          <span className="truncate max-w-[140px]">{tool}</span>
+                          <span className={`font-black ${reached ? 'text-rose-500' : 'text-teal-500'}`}>{used}/{limit}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               <div id="case-list-panel" role="tabpanel" aria-label={STATUS_LABELS[activeTab] + 'の案件一覧'} className="flex-1 overflow-y-auto p-3 space-y-2">
                 {filteredCases.map(c => (
                   <button key={c.id} onClick={() => setSelectedCaseId(c.id)}
