@@ -2077,7 +2077,15 @@
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex justify-between items-center mb-1">
-                        <span className="text-[9px] font-black text-slate-400">{c.dateLabel || new Date(c.timestamp).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })}</span>
+                        <span className="text-[9px] font-black text-slate-400">{(() => {
+                          const base = c.dateLabel || new Date(c.timestamp).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' });
+                          if (c.status === 'completed' && c.scheduledDateTime) {
+                            const sd = new Date(c.scheduledDateTime);
+                            const impl = sd.getFullYear() + '/' + String(sd.getMonth() + 1).padStart(2, '0') + '/' + String(sd.getDate()).padStart(2, '0');
+                            return '【' + impl + '】' + base;
+                          }
+                          return base;
+                        })()}</span>
                         {c.staffName && <span className="text-[9px] font-bold text-indigo-500 flex items-center gap-0.5"><UserIcon size={8} aria-hidden="true"/> {c.staffName}</span>}
                       </div>
                       <h4 className="text-sm font-black text-slate-800 truncate">{c.officeName}</h4>
