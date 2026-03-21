@@ -92,6 +92,23 @@ function getSetting_(key, defaultValue) {
   return (val !== undefined && val !== '') ? val : (defaultValue || '');
 }
 
+function saveSetting_(key, value) {
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
+  if (!sheet) return;
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0]).trim() === key) {
+      sheet.getRange(i + 1, 3).setValue(value);
+      _settingsCache = null;
+      return;
+    }
+  }
+  // キーが無ければ新規追加
+  sheet.appendRow([key, '', value]);
+  _settingsCache = null;
+}
+
 /**
  * ADMIN_EMAILS をカンマ区切りで配列として取得
  */
@@ -361,6 +378,14 @@ function getAllCasesJoined() {
     ? manualSheet.getDataRange().getValues().slice(1)
     : [];
   var allCaseRows = caseData.slice(1).concat(manualRows);
+
+  // 削除済み案件を除外
+  var deletedRaw = getSetting_('DELETED_CASE_IDS', '');
+  if (deletedRaw) {
+    var deletedSet = {};
+    deletedRaw.split(',').forEach(function(id) { if (id) deletedSet[id.trim()] = true; });
+    allCaseRows = allCaseRows.filter(function(r) { return !deletedSet[String(r[IDX.CASES.PK])]; });
+  }
 
   // 案件補正マップを読み込む（管理者が修正した値を案件リストに上書き表示するため）
   var overrideMap = getCasesOverrideMap_(ss);
@@ -2209,6 +2234,85 @@ function setCaseStatusAdmin(caseId, status) {
 
   recordSheet.getRange(rowIndex, IDX.RECORDS.STATUS + 1).setValue(normalizedStatus);
   appendAuditLog_(actor, 'admin_set_case_status', 'case', caseId, before, { status: normalizedStatus });
+  return;
+}
+
+function deleteCaseAdmin(caseId) {
+  var actor = requireAdmin_();
+  var ss = getSpreadsheet_();
+
+  // 案件情報を記録（監査ログ用）
+  var before = { caseId: String(caseId) };
+
+  // 1. RECORDS シートから行を削除 + 添付ファイルをゴミ箱に移動
+  var recordSheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  if (recordSheet && recordSheet.getLastRow() > 1) {
+    var recData = recordSheet.getDataRange().getValues();
+    for (var i = recData.length - 1; i >= 1; i--) {
+      if (String(recData[i][IDX.RECORDS.FK]) === String(caseId)) {
+        // 添付ファイルをゴミ箱へ
+        var attachments = parseJsonArray_(recData[i][IDX.RECORDS.ATTACHMENTS]);
+        attachments.forEach(function(att) {
+          try { if (att && att.fileId) DriveApp.getFileById(att.fileId).setTrashed(true); } catch(e) {}
+        });
+        before.status = String(recData[i][IDX.RECORDS.STATUS] || '');
+        before.staffEmail = String(recData[i][IDX.RECORDS.STAFF_EMAIL] || '');
+        recordSheet.deleteRow(i + 1);
+        break;
+      }
+    }
+  }
+
+  // 2. CASES_MANUAL シートから行を削除（手動追加案件の場合）
+  var manualSheet = ss.getSheetByName(SHEET_NAMES.CASES_MANUAL);
+  var isManualCase = false;
+  if (manualSheet && manualSheet.getLastRow() > 1) {
+    var manualData = manualSheet.getDataRange().getValues();
+    for (var j = manualData.length - 1; j >= 1; j--) {
+      if (String(manualData[j][0]) === String(caseId)) {
+        before.officeName = String(manualData[j][IDX.CASES.OFFICE] || '');
+        before.email = String(manualData[j][IDX.CASES.EMAIL] || '');
+        manualSheet.deleteRow(j + 1);
+        isManualCase = true;
+        break;
+      }
+    }
+  }
+
+  // 3. CASES_OVERRIDE シートから補正行を削除
+  var overrideSheet = ss.getSheetByName(SHEET_NAMES.CASES_OVERRIDE);
+  if (overrideSheet && overrideSheet.getLastRow() > 1) {
+    var ovrData = overrideSheet.getDataRange().getValues();
+    for (var k = ovrData.length - 1; k >= 1; k--) {
+      if (String(ovrData[k][0]) === String(caseId)) {
+        overrideSheet.deleteRow(k + 1);
+        break;
+      }
+    }
+  }
+
+  // 4. EMAIL_HISTORY シートから関連行を削除（下から上へ）
+  var emailSheet = ss.getSheetByName(SHEET_NAMES.EMAIL_HISTORY);
+  if (emailSheet && emailSheet.getLastRow() > 1) {
+    var emailData = emailSheet.getDataRange().getValues();
+    for (var m = emailData.length - 1; m >= 1; m--) {
+      if (String(emailData[m][IDX.EMAIL.CASE_ID]) === String(caseId)) {
+        emailSheet.deleteRow(m + 1);
+      }
+    }
+  }
+
+  // 5. 通常案件（IMPORTRANGE）の場合は削除済みリストに追加
+  if (!isManualCase) {
+    var deletedRaw = getSetting_('DELETED_CASE_IDS', '');
+    var deletedList = deletedRaw ? deletedRaw.split(',') : [];
+    if (deletedList.indexOf(String(caseId)) === -1) {
+      deletedList.push(String(caseId));
+      saveSetting_('DELETED_CASE_IDS', deletedList.join(','));
+    }
+  }
+
+  appendAuditLog_(actor, 'admin_delete_case', 'case', caseId, before, { deleted: true });
   return;
 }
 

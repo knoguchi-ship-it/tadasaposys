@@ -596,6 +596,17 @@
           google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).reassignCaseAdmin(caseId, staffEmail);
         });
       },
+      deleteCaseAdmin: (caseId) => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            mockCases = mockCases.filter(c => c.id !== caseId);
+            resolve();
+          }, 250));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).deleteCaseAdmin(caseId);
+        });
+      },
       setCaseStatusAdmin: (caseId, status) => {
         if (IS_LOCAL) {
           return new Promise(resolve => setTimeout(() => {
@@ -3086,6 +3097,32 @@
                     disabled={submitting}
                     className="px-5 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-black flex items-center gap-2 transition-all active:scale-95 cursor-pointer disabled:opacity-60">
                     <X size={18} /> キャンセル
+                  </button>
+                )}
+                {/* 削除ボタン（管理モード・管理者のみ） */}
+                {isAdminMode && user?.isAdmin && (
+                  <button
+                    onClick={() => showConfirm(
+                      '「' + selectedCase.officeName + '」の案件を完全に削除しますか？\nこの操作は取り消せません。関連するサポート記録・メール履歴・添付ファイルも削除されます。',
+                      async () => {
+                        setSubmitting(true);
+                        try {
+                          await Api.deleteCaseAdmin(selectedCase.timestamp);
+                          var deleteCaseId = selectedCase.id;
+                          setCases(prev => prev.filter(c => c.id !== deleteCaseId));
+                          setSelectedCaseId(null);
+                          showToast('案件を削除しました。', { type: 'success', title: '削除完了' });
+                        } catch (e) {
+                          showToast(e.message || String(e), { type: 'error', title: '削除エラー' });
+                        } finally {
+                          setSubmitting(false);
+                        }
+                      },
+                      { title: '案件を完全に削除', confirmLabel: '削除する', variant: 'danger' }
+                    )}
+                    disabled={submitting}
+                    className="px-5 py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-sm font-black flex items-center gap-2 transition-all active:scale-95 cursor-pointer disabled:opacity-60">
+                    <Trash2 size={18} /> 削除
                   </button>
                 )}
               </div>
