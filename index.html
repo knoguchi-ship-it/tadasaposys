@@ -143,7 +143,8 @@
       spreadsheetUrl: 'https://docs.google.com/spreadsheets/d/1hllLdETiK0sk0xW_y0V6vOmnlK7kIkHBjntYiCTom4w/edit',
       allStaff: [
         { email: 'test@tadakayo.jp', name: 'テスト太郎' },
-        { email: 'tanaka@tadakayo.jp', name: '田中花子' }
+        { email: 'tanaka@tadakayo.jp', name: '田中花子' },
+        { email: 'suzuki@tadakayo.jp', name: '鈴木次郎' }
       ],
       limits: {
         annual: 10,
@@ -161,20 +162,20 @@
     };
     let mockCases = [
       // ── パターン1: 未対応（通常） ──
-      { id: '2026-01-15T10:30:00', timestamp: '2026-01-15T10:30:00', email: 'yamada@kaigo.jp', officeName: 'やまだ訪問介護ステーション', requesterName: '山田一郎', prefecture: '東京都', details: 'パソコンの操作方法について教えてほしい。利用者記録の入力方法がわからず困っている。', serviceType: '訪問介護', status: 'unhandled', staffEmail: null, staffName: null, scheduledDateTime: null, supportCount: 1, method: null, businessType: '訪問介護', content: null, remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 3, supportHistory: [], emails: [] },
+      { id: '2026-01-15T10:30:00', timestamp: '2026-01-15T10:30:00', email: 'yamada@kaigo.jp', officeName: 'やまだ訪問介護ステーション', requesterName: '山田一郎', prefecture: '東京都', details: 'パソコンの操作方法について教えてほしい。利用者記録の入力方法がわからず困っている。', serviceType: '訪問介護', status: 'unhandled', staffEmail: null, staffName: null, scheduledDateTime: null, supportCount: 1, method: null, businessType: '訪問介護', content: null, remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 3, subStaff: [], supportHistory: [], emails: [] },
       // ── パターン2: 未対応（新規） ──
-      { id: '2026-01-10T09:00:00', timestamp: '2026-01-10T09:00:00', email: 'suzuki@daycare.jp', officeName: 'すずきデイサービスセンター', requesterName: '鈴木美咲', prefecture: '神奈川県', details: 'Wi-Fiの設定と、タブレットでのオンライン研修の受け方を教えてほしい。', serviceType: '通所介護', status: 'unhandled', staffEmail: null, staffName: null, scheduledDateTime: null, supportCount: 1, method: null, businessType: '通所介護', content: null, remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 1, supportHistory: [], emails: [] },
+      { id: '2026-01-10T09:00:00', timestamp: '2026-01-10T09:00:00', email: 'suzuki@daycare.jp', officeName: 'すずきデイサービスセンター', requesterName: '鈴木美咲', prefecture: '神奈川県', details: 'Wi-Fiの設定と、タブレットでのオンライン研修の受け方を教えてほしい。', serviceType: '通所介護', status: 'unhandled', staffEmail: null, staffName: null, scheduledDateTime: null, supportCount: 1, method: null, businessType: '通所介護', content: null, remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 1, subStaff: [], supportHistory: [], emails: [] },
       // ── パターン3: 未対応（年間上限超過 → 回数超過ボタン表示） ──
-      { id: '2025-10-01T09:30:00', timestamp: '2025-10-01T09:30:00', email: 'limit@kaigo.jp', officeName: 'リミット介護サービス', requesterName: '制限太郎', prefecture: '愛知県', details: '請求ソフトの使い方を教えてほしい。', serviceType: '居宅介護支援', status: 'unhandled', staffEmail: null, staffName: null, scheduledDateTime: null, supportCount: 1, method: null, businessType: '居宅介護支援', content: null, remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 10, supportHistory: [], emails: [] },
+      { id: '2025-10-01T09:30:00', timestamp: '2025-10-01T09:30:00', email: 'limit@kaigo.jp', officeName: 'リミット介護サービス', requesterName: '制限太郎', prefecture: '愛知県', details: '請求ソフトの使い方を教えてほしい。', serviceType: '居宅介護支援', status: 'unhandled', staffEmail: null, staffName: null, scheduledDateTime: null, supportCount: 1, method: null, businessType: '居宅介護支援', content: null, remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 10, subStaff: [], supportHistory: [], emails: [] },
       // ── パターン4: 対応中（1回目・日程決定済み） ──
-      { id: '2025-12-20T14:00:00', timestamp: '2025-12-20T14:00:00', email: 'tanaka@helper.jp', officeName: 'たなかヘルパーセンター', requesterName: '田中次郎', prefecture: '東京都', details: 'Excelでのシフト表作成を手伝ってほしい。マクロの使い方も知りたい。', serviceType: '訪問介護', status: 'inProgress', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: '2026-01-20T13:00:00', supportCount: 1, method: 'GoogleMeet', businessType: '訪問介護', content: null, remarks: null, eventId: 'evt001', meetUrl: 'https://meet.google.com/abc-defg-hij', currentFiscalYearCount: 5, supportHistory: [], threadIds: ['mock-thread-1'], threads: [
+      { id: '2025-12-20T14:00:00', timestamp: '2025-12-20T14:00:00', email: 'tanaka@helper.jp', officeName: 'たなかヘルパーセンター', requesterName: '田中次郎', prefecture: '東京都', details: 'Excelでのシフト表作成を手伝ってほしい。マクロの使い方も知りたい。', serviceType: '訪問介護', status: 'inProgress', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: '2026-01-20T13:00:00', supportCount: 1, method: 'GoogleMeet', businessType: '訪問介護', content: null, remarks: null, eventId: 'evt001', meetUrl: 'https://meet.google.com/abc-defg-hij', currentFiscalYearCount: 5, subStaff: [{email:'tanaka@tadakayo.jp', name:'田中花子'}], supportHistory: [], threadIds: ['mock-thread-1'], threads: [
         { threadId: 'mock-thread-1', subject: 'タダサポ｜ご相談を承りました', messages: [
           { sendDate: '2025-12-21T10:00:00', senderName: 'テスト太郎', subject: 'タダサポ｜ご相談を承りました', body: '田中次郎 様\n\nこの度はタダサポへご相談いただきありがとうございます。\n担当させていただきますテスト太郎と申します。', isStaff: true },
           { sendDate: '2025-12-22T14:30:00', senderName: '田中次郎', subject: 'Re: タダサポ｜ご相談を承りました', body: 'テスト太郎 様\n\nご連絡ありがとうございます。\n平日の午後であれば対応可能です。\n\n田中次郎', isStaff: false }
         ]}
       ] },
       // ── パターン5: 対応中（2回目・過去履歴あり） ──
-      { id: '2025-12-01T11:00:00', timestamp: '2025-12-01T11:00:00', email: 'sato@welfare.jp', officeName: 'さとう福祉用具', requesterName: '佐藤健一', prefecture: '大阪府', details: 'ホームページの更新作業と、Googleマイビジネスの登録方法について相談したい。', serviceType: '福祉用具貸与', status: 'inProgress', staffEmail: 'tanaka@tadakayo.jp', staffName: '田中花子', scheduledDateTime: '2026-01-18T10:00:00', supportCount: 2, method: 'GoogleMeet', businessType: '福祉用具貸与', content: null, remarks: null, eventId: 'evt002', meetUrl: 'https://meet.google.com/def-ghij-klm', currentFiscalYearCount: 8, supportHistory: [
+      { id: '2025-12-01T11:00:00', timestamp: '2025-12-01T11:00:00', email: 'sato@welfare.jp', officeName: 'さとう福祉用具', requesterName: '佐藤健一', prefecture: '大阪府', details: 'ホームページの更新作業と、Googleマイビジネスの登録方法について相談したい。', serviceType: '福祉用具貸与', status: 'inProgress', staffEmail: 'tanaka@tadakayo.jp', staffName: '田中花子', scheduledDateTime: '2026-01-18T10:00:00', supportCount: 2, method: 'GoogleMeet', businessType: '福祉用具貸与', content: null, remarks: null, eventId: 'evt002', meetUrl: 'https://meet.google.com/def-ghij-klm', currentFiscalYearCount: 8, subStaff: [], supportHistory: [
         { round: 1, scheduledDateTime: '2025-12-10T14:00:00', method: '対面', content: 'Googleマイビジネスの初期登録とホームページの更新手順をレクチャー。写真のアップロード方法も説明。', remarks: null, meetUrl: null, staffName: '田中花子', staffEmail: 'tanaka@tadakayo.jp' }
       ], threadIds: ['mock-thread-2'], threads: [
         { threadId: 'mock-thread-2', subject: 'タダサポ｜ご相談を承りました', messages: [
@@ -182,12 +183,12 @@
         ]}
       ] },
       // ── パターン6: 対応中（3回目・上限到達中・過去2回分履歴あり） ──
-      { id: '2025-09-01T10:00:00', timestamp: '2025-09-01T10:00:00', email: 'mori@smallmulti.jp', officeName: 'もり小規模多機能ホーム', requesterName: '森田和也', prefecture: '福岡県', details: 'オンライン面談ツールの導入と、スタッフ向けマニュアル作成を手伝ってほしい。', serviceType: '小規模多機能', status: 'inProgress', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: '2026-02-01T10:00:00', supportCount: 3, method: '電話等', businessType: '小規模多機能', content: null, remarks: null, eventId: 'evt005', meetUrl: null, currentFiscalYearCount: 6, supportHistory: [
+      { id: '2025-09-01T10:00:00', timestamp: '2025-09-01T10:00:00', email: 'mori@smallmulti.jp', officeName: 'もり小規模多機能ホーム', requesterName: '森田和也', prefecture: '福岡県', details: 'オンライン面談ツールの導入と、スタッフ向けマニュアル作成を手伝ってほしい。', serviceType: '小規模多機能', status: 'inProgress', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: '2026-02-01T10:00:00', supportCount: 3, method: '電話等', businessType: '小規模多機能', content: null, remarks: null, eventId: 'evt005', meetUrl: null, currentFiscalYearCount: 6, subStaff: [], supportHistory: [
         { round: 1, scheduledDateTime: '2025-10-05T13:00:00', method: 'GoogleMeet', content: 'Zoomの基本操作とアカウント作成を支援。テスト通話で動作確認完了。', remarks: null, meetUrl: 'https://meet.google.com/old-meet-001', staffName: 'テスト太郎', staffEmail: 'test@tadakayo.jp' },
         { round: 2, scheduledDateTime: '2025-11-20T15:00:00', method: '対面', content: 'スタッフ向けのZoom操作マニュアルを作成。画面共有やチャット機能の使い方を説明。印刷して配布。', remarks: '次回は応用編の研修も検討', meetUrl: null, staffName: 'テスト太郎', staffEmail: 'test@tadakayo.jp' }
       ], threadIds: [], threads: [] },
       // ── パターン7: 完了（2回目で完了・まだ再開可能・過去履歴あり） ──
-      { id: '2025-11-15T16:00:00', timestamp: '2025-11-15T16:00:00', email: 'yamada@kaigo.jp', officeName: 'やまだ訪問介護ステーション', requesterName: '山田一郎', prefecture: '東京都', details: 'メールの設定と、Googleカレンダーの共有設定を教えてほしい。', serviceType: '訪問介護', status: 'completed', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: '2025-12-05T14:00:00', supportCount: 2, method: 'GoogleMeet', businessType: '訪問介護', content: 'Gmailの設定とGoogleカレンダーの共有設定を実施。操作手順書を作成して渡した。', remarks: null, eventId: 'evt003', meetUrl: 'https://meet.google.com/xyz-uvwx-yz', currentFiscalYearCount: 3, supportHistory: [
+      { id: '2025-11-15T16:00:00', timestamp: '2025-11-15T16:00:00', email: 'yamada@kaigo.jp', officeName: 'やまだ訪問介護ステーション', requesterName: '山田一郎', prefecture: '東京都', details: 'メールの設定と、Googleカレンダーの共有設定を教えてほしい。', serviceType: '訪問介護', status: 'completed', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: '2025-12-05T14:00:00', supportCount: 2, method: 'GoogleMeet', businessType: '訪問介護', content: 'Gmailの設定とGoogleカレンダーの共有設定を実施。操作手順書を作成して渡した。', remarks: null, eventId: 'evt003', meetUrl: 'https://meet.google.com/xyz-uvwx-yz', currentFiscalYearCount: 3, subStaff: [], supportHistory: [
         { round: 1, scheduledDateTime: '2025-11-25T10:00:00', method: 'GoogleMeet', content: 'Gmailの初期設定（署名・フィルタ設定）を実施。基本操作をレクチャー。', remarks: null, meetUrl: 'https://meet.google.com/first-meet-001', staffName: 'テスト太郎', staffEmail: 'test@tadakayo.jp' }
       ], threadIds: ['mock-thread-3', 'mock-thread-3b'], threads: [
         { threadId: 'mock-thread-3b', subject: '操作手順書の追加送付', messages: [
@@ -200,7 +201,7 @@
         ]}
       ] },
       // ── パターン8: 完了（3回目で完了・上限到達・再開不可） ──
-      { id: '2025-08-01T09:00:00', timestamp: '2025-08-01T09:00:00', email: 'ito@homecare.jp', officeName: 'いとう在宅ケアセンター', requesterName: '伊藤美和', prefecture: '大阪府', details: 'LINEWORKSの導入支援と、スタッフ間の情報共有の仕組みを作りたい。', serviceType: '居宅介護支援', status: 'completed', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: '2025-12-15T11:00:00', supportCount: 3, method: '対面', businessType: '居宅介護支援', content: 'LINEWORKSの管理者設定とグループ作成、掲示板活用法を指導。全スタッフのアカウント作成完了。', remarks: '3回の対応ですべて完了', eventId: 'evt006', meetUrl: null, currentFiscalYearCount: 5, supportHistory: [
+      { id: '2025-08-01T09:00:00', timestamp: '2025-08-01T09:00:00', email: 'ito@homecare.jp', officeName: 'いとう在宅ケアセンター', requesterName: '伊藤美和', prefecture: '大阪府', details: 'LINEWORKSの導入支援と、スタッフ間の情報共有の仕組みを作りたい。', serviceType: '居宅介護支援', status: 'completed', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: '2025-12-15T11:00:00', supportCount: 3, method: '対面', businessType: '居宅介護支援', content: 'LINEWORKSの管理者設定とグループ作成、掲示板活用法を指導。全スタッフのアカウント作成完了。', remarks: '3回の対応ですべて完了', eventId: 'evt006', meetUrl: null, currentFiscalYearCount: 5, subStaff: [], supportHistory: [
         { round: 1, scheduledDateTime: '2025-09-10T13:00:00', method: 'GoogleMeet', content: 'LINEWORKSの概要説明とアカウント開設支援。管理者アカウントの設定を実施。', remarks: null, meetUrl: 'https://meet.google.com/hist-meet-001', staffName: 'テスト太郎', staffEmail: 'test@tadakayo.jp' },
         { round: 2, scheduledDateTime: '2025-10-25T14:00:00', method: 'GoogleMeet', content: 'グループチャットの運用ルール策定と、カレンダー共有機能の設定を実施。テスト運用開始。', remarks: '次回は対面で全スタッフ向け研修を実施予定', meetUrl: 'https://meet.google.com/hist-meet-002', staffName: 'テスト太郎', staffEmail: 'test@tadakayo.jp' }
       ], threadIds: ['mock-thread-6'], threads: [
@@ -209,27 +210,27 @@
         ]}
       ] },
       // ── パターン9: 対応不可（年間上限で拒否済み） ──
-      { id: '2025-11-01T08:00:00', timestamp: '2025-11-01T08:00:00', email: 'limit@kaigo.jp', officeName: 'リミット介護サービス', requesterName: '制限太郎', prefecture: '愛知県', details: '新しいプリンターの設定をお願いしたい。', serviceType: '居宅介護支援', status: 'rejected', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: null, supportCount: 1, method: null, businessType: '居宅介護支援', content: null, remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 10, supportHistory: [], threadIds: ['mock-thread-7'], threads: [
+      { id: '2025-11-01T08:00:00', timestamp: '2025-11-01T08:00:00', email: 'limit@kaigo.jp', officeName: 'リミット介護サービス', requesterName: '制限太郎', prefecture: '愛知県', details: '新しいプリンターの設定をお願いしたい。', serviceType: '居宅介護支援', status: 'rejected', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: null, supportCount: 1, method: null, businessType: '居宅介護支援', content: null, remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 10, subStaff: [], supportHistory: [], threadIds: ['mock-thread-7'], threads: [
         { threadId: 'mock-thread-7', subject: 'タダサポ｜ご利用回数上限のお知らせ', messages: [
           { sendDate: '2025-11-02T10:00:00', senderName: 'テスト太郎', subject: 'タダサポ｜ご利用回数上限のお知らせ', body: '制限太郎 様\n\nいつもタダサポをご利用いただきありがとうございます。\n\n誠に恐れ入りますが、リミット介護サービス 様の今年度のご利用回数が上限（10回）に達しております。\nそのため、今回のご相談につきましては対応を見送らせていただくこととなりました。\n\n次年度のご利用をお待ちしております。', isStaff: true }
         ]}
       ] },
       // ── パターン10〜13: limit@kaigo.jp の完了案件（年間計11回分を構成） ──
-      { id: '2025-04-10T10:00:00', timestamp: '2025-04-10T10:00:00', email: 'limit@kaigo.jp', officeName: 'リミット介護サービス', requesterName: '制限太郎', prefecture: '愛知県', details: 'パソコンの買い替え相談と初期設定。', serviceType: '居宅介護支援', status: 'completed', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: '2025-05-01T10:00:00', supportCount: 3, method: 'GoogleMeet', businessType: '居宅介護支援', content: '3回にわたりPC選定・初期設定・データ移行を支援。', remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 10, supportHistory: [
+      { id: '2025-04-10T10:00:00', timestamp: '2025-04-10T10:00:00', email: 'limit@kaigo.jp', officeName: 'リミット介護サービス', requesterName: '制限太郎', prefecture: '愛知県', details: 'パソコンの買い替え相談と初期設定。', serviceType: '居宅介護支援', status: 'completed', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: '2025-05-01T10:00:00', supportCount: 3, method: 'GoogleMeet', businessType: '居宅介護支援', content: '3回にわたりPC選定・初期設定・データ移行を支援。', remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 10, subStaff: [], supportHistory: [
         { round: 1, scheduledDateTime: '2025-04-20T10:00:00', method: 'GoogleMeet', content: 'PCの要件ヒアリングと推奨機種を提案。', remarks: null, meetUrl: null, staffName: 'テスト太郎', staffEmail: 'test@tadakayo.jp' },
         { round: 2, scheduledDateTime: '2025-04-28T14:00:00', method: '対面', content: '新PCの初期設定とソフトウェアインストール。', remarks: null, meetUrl: null, staffName: 'テスト太郎', staffEmail: 'test@tadakayo.jp' }
       ], threadIds: [], threads: [] },
-      { id: '2025-06-01T09:00:00', timestamp: '2025-06-01T09:00:00', email: 'limit@kaigo.jp', officeName: 'リミット介護サービス', requesterName: '制限太郎', prefecture: '愛知県', details: 'メールソフトの設定変更。', serviceType: '居宅介護支援', status: 'completed', staffEmail: 'tanaka@tadakayo.jp', staffName: '田中花子', scheduledDateTime: '2025-06-15T11:00:00', supportCount: 3, method: '電話等', businessType: '居宅介護支援', content: 'メールアカウント設定3回対応。', remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 10, supportHistory: [
+      { id: '2025-06-01T09:00:00', timestamp: '2025-06-01T09:00:00', email: 'limit@kaigo.jp', officeName: 'リミット介護サービス', requesterName: '制限太郎', prefecture: '愛知県', details: 'メールソフトの設定変更。', serviceType: '居宅介護支援', status: 'completed', staffEmail: 'tanaka@tadakayo.jp', staffName: '田中花子', scheduledDateTime: '2025-06-15T11:00:00', supportCount: 3, method: '電話等', businessType: '居宅介護支援', content: 'メールアカウント設定3回対応。', remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 10, subStaff: [], supportHistory: [
         { round: 1, scheduledDateTime: '2025-06-05T10:00:00', method: '電話等', content: '現在の設定状況をヒアリング。', remarks: null, meetUrl: null, staffName: '田中花子', staffEmail: 'tanaka@tadakayo.jp' },
         { round: 2, scheduledDateTime: '2025-06-10T14:00:00', method: '電話等', content: '新しいメール設定を適用。', remarks: null, meetUrl: null, staffName: '田中花子', staffEmail: 'tanaka@tadakayo.jp' }
       ], threadIds: [], threads: [] },
-      { id: '2025-07-15T10:00:00', timestamp: '2025-07-15T10:00:00', email: 'limit@kaigo.jp', officeName: 'リミット介護サービス', requesterName: '制限太郎', prefecture: '愛知県', details: 'クラウドストレージの導入支援。', serviceType: '居宅介護支援', status: 'completed', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: '2025-08-01T13:00:00', supportCount: 3, method: 'GoogleMeet', businessType: '居宅介護支援', content: 'Google Drive導入3回対応。', remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 10, supportHistory: [
+      { id: '2025-07-15T10:00:00', timestamp: '2025-07-15T10:00:00', email: 'limit@kaigo.jp', officeName: 'リミット介護サービス', requesterName: '制限太郎', prefecture: '愛知県', details: 'クラウドストレージの導入支援。', serviceType: '居宅介護支援', status: 'completed', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: '2025-08-01T13:00:00', supportCount: 3, method: 'GoogleMeet', businessType: '居宅介護支援', content: 'Google Drive導入3回対応。', remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 10, subStaff: [], supportHistory: [
         { round: 1, scheduledDateTime: '2025-07-22T10:00:00', method: 'GoogleMeet', content: 'Google Driveのアカウント作成と基本操作説明。', remarks: null, meetUrl: null, staffName: 'テスト太郎', staffEmail: 'test@tadakayo.jp' },
         { round: 2, scheduledDateTime: '2025-07-28T14:00:00', method: 'GoogleMeet', content: 'フォルダ構成と共有設定を策定。', remarks: null, meetUrl: null, staffName: 'テスト太郎', staffEmail: 'test@tadakayo.jp' }
       ], threadIds: [], threads: [] },
-      { id: '2025-09-01T08:00:00', timestamp: '2025-09-01T08:00:00', email: 'limit@kaigo.jp', officeName: 'リミット介護サービス', requesterName: '制限太郎', prefecture: '愛知県', details: 'セキュリティソフト更新の相談。', serviceType: '居宅介護支援', status: 'completed', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: '2025-09-10T10:00:00', supportCount: 1, method: '対面', businessType: '居宅介護支援', content: 'セキュリティソフトの更新手順をレクチャー。', remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 10, supportHistory: [], threadIds: [], threads: [] },
+      { id: '2025-09-01T08:00:00', timestamp: '2025-09-01T08:00:00', email: 'limit@kaigo.jp', officeName: 'リミット介護サービス', requesterName: '制限太郎', prefecture: '愛知県', details: 'セキュリティソフト更新の相談。', serviceType: '居宅介護支援', status: 'completed', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: '2025-09-10T10:00:00', supportCount: 1, method: '対面', businessType: '居宅介護支援', content: 'セキュリティソフトの更新手順をレクチャー。', remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 10, subStaff: [], supportHistory: [], threadIds: [], threads: [] },
       // ── パターン14: 完了（1回目で完了・再開可能） ──
-      { id: '2025-12-10T11:00:00', timestamp: '2025-12-10T11:00:00', email: 'nakamura@group.jp', officeName: 'なかむらグループホーム', requesterName: '中村太一', prefecture: '北海道', details: 'Googleフォームでの満足度アンケート作成を手伝ってほしい。', serviceType: '有料老人ホーム', status: 'completed', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: '2025-12-20T10:00:00', supportCount: 1, method: 'GoogleMeet', businessType: '有料老人ホーム', content: 'Googleフォームで満足度アンケートを作成。回答の集計方法と共有設定を説明。', remarks: null, eventId: 'evt008', meetUrl: 'https://meet.google.com/form-meet-001', currentFiscalYearCount: 2, supportHistory: [], threadIds: [], threads: [] }
+      { id: '2025-12-10T11:00:00', timestamp: '2025-12-10T11:00:00', email: 'nakamura@group.jp', officeName: 'なかむらグループホーム', requesterName: '中村太一', prefecture: '北海道', details: 'Googleフォームでの満足度アンケート作成を手伝ってほしい。', serviceType: '有料老人ホーム', status: 'completed', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: '2025-12-20T10:00:00', supportCount: 1, method: 'GoogleMeet', businessType: '有料老人ホーム', content: 'Googleフォームで満足度アンケートを作成。回答の集計方法と共有設定を説明。', remarks: null, eventId: 'evt008', meetUrl: 'https://meet.google.com/form-meet-001', currentFiscalYearCount: 2, subStaff: [], supportHistory: [], threadIds: [], threads: [] }
     ];
     let mockStaffMembers = [
       { email: 'test@tadakayo.jp', name: 'テスト太郎', role: 'admin', isActive: true },
@@ -614,6 +615,7 @@
               content: null, remarks: null,
               eventId: null, meetUrl: null,
               currentFiscalYearCount: 0,
+              subStaff: [],
               supportHistory: [], attachments: [], emails: []
             };
             mockCases = [newCase, ...mockCases];
@@ -622,6 +624,17 @@
         }
         return new Promise((resolve, reject) => {
           google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).addManualCase(payload);
+        });
+      },
+      updateSubStaff: (caseId, subStaffArray) => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            mockCases = mockCases.map(c => c.id === caseId ? { ...c, subStaff: subStaffArray } : c);
+            resolve({ success: true, subStaff: subStaffArray });
+          }, 300));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).updateSubStaff(caseId, subStaffArray);
         });
       }
     };
@@ -845,12 +858,14 @@
           // 全てタブ: キャンセル済みは除外（キャンセルタブでのみ表示）
           if (activeTab === 'all' && c.status === 'cancelled') return false;
           // 全てタブ: unhandled は全員共有、それ以外は自分の案件のみ（ダッシュボードは全件）
-          if (activeTab === 'all' && c.status !== 'unhandled' && !isDashboardMode && c.staffEmail !== user.email) return false;
-          if (activeTab !== 'all' && activeTab !== 'unhandled' && activeTab !== 'cancelled' && !isDashboardMode && c.staffEmail !== user.email) return false;
+          var isMyCase = c.staffEmail === user.email || (Array.isArray(c.subStaff) && c.subStaff.some(function(s) { return s.email === user.email; }));
+          if (activeTab === 'all' && c.status !== 'unhandled' && !isDashboardMode && !isMyCase) return false;
+          if (activeTab !== 'all' && activeTab !== 'unhandled' && activeTab !== 'cancelled' && !isDashboardMode && !isMyCase) return false;
           // キーワード検索
           if (searchWord.trim()) {
             var kw = searchWord.trim().toLowerCase();
-            var haystack = [c.officeName, c.requesterName, c.email, c.details, c.serviceType, c.prefecture, c.staffName].filter(Boolean).join(' ').toLowerCase();
+            var subStaffNames = Array.isArray(c.subStaff) ? c.subStaff.map(function(s) { return s.name; }).join(' ') : '';
+            var haystack = [c.officeName, c.requesterName, c.email, c.details, c.serviceType, c.prefecture, c.staffName, subStaffNames].filter(Boolean).join(' ').toLowerCase();
             if (haystack.indexOf(kw) === -1) return false;
           }
           // 期間検索
@@ -2105,6 +2120,7 @@
                           return base;
                         })()}</span>
                         {c.staffName && <span className="text-[9px] font-bold text-indigo-500 flex items-center gap-0.5"><UserIcon size={8} aria-hidden="true"/> {c.staffName}</span>}
+                        {Array.isArray(c.subStaff) && c.subStaff.length > 0 && <span className="text-[9px] font-bold text-violet-400">+{c.subStaff.length} サブ</span>}
                       </div>
                       <h4 className="text-sm font-black text-slate-800 truncate">{c.officeName}</h4>
                       <p className="text-[10px] text-slate-500 font-bold mt-0.5 truncate">{c.requesterName} 様</p>
@@ -2257,6 +2273,60 @@
                             </span>
                           )
                         )}
+                        {/* サブ担当表示・編集 */}
+                        {selectedCase.status !== 'unhandled' && (() => {
+                          const canEditSub = (selectedCase.staffEmail === user?.email) || (isAdminMode && user?.isAdmin);
+                          const subs = selectedCase.subStaff || [];
+                          if (!canEditSub && subs.length === 0) return null;
+                          return (
+                            <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                              <span className="text-[9px] font-black text-slate-400 mr-0.5">サブ:</span>
+                              {subs.map(s => (
+                                <span key={s.email} className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-violet-50 text-violet-700 rounded-full text-[10px] font-bold border border-violet-100">
+                                  <UserIcon size={9}/> {s.name}
+                                  {canEditSub && (
+                                    <button onClick={async (ev) => {
+                                      ev.stopPropagation();
+                                      const next = subs.filter(x => x.email !== s.email);
+                                      try {
+                                        await Api.updateSubStaff(selectedCase.id, next);
+                                        const updated = await Api.getAllCases();
+                                        setCases(updated);
+                                        showToast('サブ担当を解除しました', { type: 'success' });
+                                      } catch(e) { showToast(e.message, { type: 'error', title: 'サブ担当エラー' }); }
+                                    }} className="ml-0.5 hover:text-rose-500"><X size={9}/></button>
+                                  )}
+                                </span>
+                              ))}
+                              {canEditSub && (
+                                <div className="relative">
+                                  <button onClick={() => setInlineEditField(inlineEditField === 'subStaff' ? null : 'subStaff')} className="px-2 py-0.5 bg-violet-50 text-violet-500 rounded-full text-[10px] font-black border border-violet-100 hover:bg-violet-100">+ 追加</button>
+                                  {inlineEditField === 'subStaff' && (
+                                    <>
+                                      <div className="fixed inset-0 z-40" onClick={() => setInlineEditField(null)} />
+                                      <div className="absolute left-0 top-full mt-1 w-56 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1 max-h-48 overflow-y-auto">
+                                        {(activeStaffMembers || []).filter(s => s.email !== selectedCase.staffEmail && !subs.some(x => x.email === s.email)).map(s => (
+                                          <button key={s.email} onClick={async () => {
+                                            const next = [...subs, { email: s.email, name: s.name }];
+                                            try {
+                                              setInlineEditField(null);
+                                              await Api.updateSubStaff(selectedCase.id, next);
+                                              const updated = await Api.getAllCases();
+                                              setCases(updated);
+                                              showToast(s.name + ' をサブ担当に追加しました', { type: 'success' });
+                                            } catch(e) { showToast(e.message, { type: 'error', title: 'サブ担当エラー' }); }
+                                          }} className="w-full text-left px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-violet-50 flex items-center gap-2">
+                                            <UserIcon size={12} className="text-violet-400"/> {s.name}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                       <div className="flex gap-3 sm:gap-6 shrink-0">
                         {/* 案件回数：管理者モードでクリックして上限を変更 */}

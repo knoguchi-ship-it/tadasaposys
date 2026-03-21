@@ -32,7 +32,7 @@ var IDX = {
   CASES: { PK: 0, EMAIL: 1, OFFICE: 2, NAME: 3, DETAILS: 4, PREFECTURE: 5, SERVICE: 6 },
   // 案件補正シートは案件リストと同じ列構造（PK=A列、値が空の列は「補正なし」を意味する）
   CASES_OVERRIDE: { PK: 0, EMAIL: 1, OFFICE: 2, NAME: 3, DETAILS: 4, PREFECTURE: 5, SERVICE: 6 },
-  RECORDS: { FK: 0, STATUS: 1, STAFF_EMAIL: 2, STAFF_NAME: 3, DATE: 4, COUNT: 5, METHOD: 6, BUSINESS: 7, CONTENT: 8, REMARKS: 9, HISTORY: 10, EVENT_ID: 11, MEET_URL: 12, THREAD_ID: 13, ATTACHMENTS: 14, CASE_LIMIT_OVERRIDE: 15, ANNUAL_LIMIT_OVERRIDE: 16, TOOLS: 17 },
+  RECORDS: { FK: 0, STATUS: 1, STAFF_EMAIL: 2, STAFF_NAME: 3, DATE: 4, COUNT: 5, METHOD: 6, BUSINESS: 7, CONTENT: 8, REMARKS: 9, HISTORY: 10, EVENT_ID: 11, MEET_URL: 12, THREAD_ID: 13, ATTACHMENTS: 14, CASE_LIMIT_OVERRIDE: 15, ANNUAL_LIMIT_OVERRIDE: 16, TOOLS: 17, SUB_STAFF: 18 },
   STAFF: { NAME: 1, EMAIL: 2, ROLE: 3, IS_ACTIVE: 4 },
   EMAIL: { CASE_ID: 0, SEND_DATE: 1, SENDER_EMAIL: 2, SENDER_NAME: 3, RECIPIENT_EMAIL: 4, SUBJECT: 5, BODY: 6 }
 };
@@ -225,6 +225,11 @@ function ensureCaseEditableByActor_(caseId, actor, allowUnassigned) {
   if (!staffEmail && allowUnassigned) return true;
   if (actor.isAdmin) return true;
   if (staffEmail && staffEmail === normalizeEmail_(actor.email)) return true;
+  // サブ担当も操作可能（OJT用）
+  var subStaffJson = row[IDX.RECORDS.SUB_STAFF] ? String(row[IDX.RECORDS.SUB_STAFF]) : '[]';
+  var subStaff = [];
+  try { subStaff = JSON.parse(subStaffJson); } catch(e) {}
+  if (subStaff.some(function(s) { return normalizeEmail_(s.email) === normalizeEmail_(actor.email); })) return true;
   throw new Error('この案件を操作する権限がありません。');
 }
 
@@ -359,6 +364,9 @@ function getAllCasesJoined() {
     var toolsStr = r[IDX.RECORDS.TOOLS] ? String(r[IDX.RECORDS.TOOLS]) : '[]';
     var parsedTools = [];
     try { parsedTools = JSON.parse(toolsStr); } catch(e) { parsedTools = []; }
+    var subStaffStr = r[IDX.RECORDS.SUB_STAFF] ? String(r[IDX.RECORDS.SUB_STAFF]) : '[]';
+    var parsedSubStaff = [];
+    try { parsedSubStaff = JSON.parse(subStaffStr); } catch(e) { parsedSubStaff = []; }
     recordMap[String(r[IDX.RECORDS.FK])] = {
       status: r[IDX.RECORDS.STATUS],
       staffEmail: r[IDX.RECORDS.STAFF_EMAIL],
@@ -382,7 +390,8 @@ function getAllCasesJoined() {
       })(r[IDX.RECORDS.ANNUAL_LIMIT_OVERRIDE]),
       supportHistory: parsedHistory,
       attachments: parsedAttachments,
-      tools: parsedTools
+      tools: parsedTools,
+      subStaff: parsedSubStaff
     };
   }
 
@@ -444,6 +453,7 @@ function getAllCasesJoined() {
       supportHistory: record.supportHistory || [],
       attachments: record.attachments || [],
       tools: record.tools || [],
+      subStaff: record.subStaff || [],
       currentFiscalYearCount: count,
       emails: emailMap[ts] || []
     });
@@ -476,7 +486,7 @@ function assignCase(caseId, user, tools) {
   if (rowIndex === -1) {
     sheet.appendRow([
       caseId, 'inProgress', actor.email, actor.name,
-      null, 1, null, null, null, null, null, null, null, null, '[]', '', '', toolsVal
+      null, 1, null, null, null, null, null, null, null, null, '[]', '', '', toolsVal, '[]'
     ]);
   } else {
     var before = {
@@ -575,6 +585,7 @@ function ensureAttachmentSchema_() {
     addAttachmentsColumnToRecords();
     addCaseLimitOverrideColumnsToRecords();
     addToolsColumnToRecords();
+    addSubStaffColumnToRecords();
     addMissingEmailSettings_();
   } catch (e) {
     throw new Error('添付機能の初期化に失敗しました。管理者に連絡してください。詳細: ' + e.message);
@@ -661,7 +672,7 @@ function declineCase(caseId, user, subject, body, cc, bcc) {
     // レコードが無い場合は新規作成
     sheet.appendRow([
       caseId, 'rejected', actor.email, actor.name,
-      null, 1, null, null, null, null, null, null, null, null, '[]', '', ''
+      null, 1, null, null, null, null, null, null, null, null, '[]', '', '', '[]', '[]'
     ]);
     appendAuditLog_(actor, 'decline_case', 'case', caseId, null, {
       status: 'rejected',
@@ -1826,7 +1837,7 @@ function reassignCaseAdmin(caseId, staffEmail) {
   if (rowIndex === -1) {
     sheet.appendRow([
       caseId, 'inProgress', targetEmail, targetStaff.name,
-      null, 1, null, null, null, null, null, null, null, null, '[]', '', ''
+      null, 1, null, null, null, null, null, null, null, null, '[]', '', '', '[]', '[]'
     ]);
     appendAuditLog_(actor, 'reassign_case', 'case', caseId, null, {
       status: 'inProgress',
@@ -2047,9 +2058,45 @@ function ensureRecordRowForCase_(sheet, caseId) {
   }
   sheet.appendRow([
     caseId, 'unhandled', '', '',
-    null, 1, null, null, null, null, '[]', null, null, null, '[]', '', ''
+    null, 1, null, null, null, null, '[]', null, null, null, '[]', '', '', '[]', '[]'
   ]);
   return sheet.getLastRow();
+}
+
+// サブ担当更新（メイン担当者 or 管理者のみ）
+function updateSubStaff(caseId, subStaffArray) {
+  var actor = getActor_();
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  var rowIndex = getCaseRecordRowIndex_(caseId);
+  if (rowIndex === -1) throw new Error('案件が見つかりません: ' + caseId);
+
+  var row = sheet.getRange(rowIndex, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var staffEmail = normalizeEmail_(row[IDX.RECORDS.STAFF_EMAIL]);
+  var isMainStaff = staffEmail && staffEmail === normalizeEmail_(actor.email);
+  if (!actor.isAdmin && !isMainStaff) throw new Error('サブ担当を設定する権限がありません。');
+
+  var validated = [];
+  if (Array.isArray(subStaffArray)) {
+    var staffSheet = ss.getSheetByName(SHEET_NAMES.STAFF);
+    var staffData = staffSheet.getDataRange().getValues();
+    var staffMap = {};
+    for (var i = 1; i < staffData.length; i++) {
+      var e = normalizeEmail_(staffData[i][IDX.STAFF.EMAIL]);
+      if (e) staffMap[e] = String(staffData[i][IDX.STAFF.NAME]);
+    }
+    for (var j = 0; j < subStaffArray.length; j++) {
+      var email = normalizeEmail_(subStaffArray[j].email);
+      if (email && staffMap[email]) {
+        validated.push({ email: email, name: staffMap[email] });
+      }
+    }
+  }
+
+  var before = row[IDX.RECORDS.SUB_STAFF] ? String(row[IDX.RECORDS.SUB_STAFF]) : '[]';
+  sheet.getRange(rowIndex, IDX.RECORDS.SUB_STAFF + 1).setValue(JSON.stringify(validated));
+  appendAuditLog_(actor, 'update_sub_staff', 'case', caseId, { subStaff: before }, { subStaff: JSON.stringify(validated) });
+  return { success: true, subStaff: validated };
 }
 
 function setCaseStatusAdmin(caseId, status) {
@@ -2220,6 +2267,10 @@ function updateCaseDataAdmin(caseId, payload) {
     if (Object.prototype.hasOwnProperty.call(recordPatch, 'tools')) {
       var toolsVal = Array.isArray(recordPatch.tools) ? JSON.stringify(recordPatch.tools) : '[]';
       recordSheet.getRange(recordRowIndex, IDX.RECORDS.TOOLS + 1).setValue(toolsVal);
+    }
+    if (Object.prototype.hasOwnProperty.call(recordPatch, 'subStaff')) {
+      var subStaffVal = Array.isArray(recordPatch.subStaff) ? JSON.stringify(recordPatch.subStaff) : '[]';
+      recordSheet.getRange(recordRowIndex, IDX.RECORDS.SUB_STAFF + 1).setValue(subStaffVal);
     }
 
     appendAuditLog_(actor, 'admin_update_case_data', 'case', caseId, {
@@ -2758,6 +2809,22 @@ function addToolsColumnToRecords() {
   if (!header) {
     sheet.getRange(1, IDX.RECORDS.TOOLS + 1).setValue('対応ツール');
     Logger.log('サポート記録シートに 対応ツール 列を追加しました。');
+  }
+}
+
+function addSubStaffColumnToRecords() {
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  if (!sheet) throw new Error('「サポート記録」シートが見つかりません。');
+
+  var requiredColumns = IDX.RECORDS.SUB_STAFF + 1; // 19
+  if (sheet.getLastColumn() < requiredColumns) {
+    sheet.insertColumnsAfter(sheet.getLastColumn(), requiredColumns - sheet.getLastColumn());
+  }
+  var header = String(sheet.getRange(1, IDX.RECORDS.SUB_STAFF + 1).getValue() || '').trim();
+  if (!header) {
+    sheet.getRange(1, IDX.RECORDS.SUB_STAFF + 1).setValue('サブ担当');
+    Logger.log('サポート記録シートに サブ担当 列を追加しました。');
   }
 }
 
