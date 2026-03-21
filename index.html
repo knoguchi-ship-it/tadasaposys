@@ -2465,6 +2465,12 @@
                           <p className="whitespace-pre-wrap leading-relaxed">{linkifyText(selectedCase.content)}</p>
                         </div>
                       )}
+                      {selectedCase.remarks && (
+                        <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl text-xs text-amber-800">
+                          <span className="font-black block mb-1 text-amber-600">備考: 内部メモ</span>
+                          <p className="whitespace-pre-wrap leading-relaxed">{linkifyText(selectedCase.remarks)}</p>
+                        </div>
+                      )}
                       {selectedCase.attachments && selectedCase.attachments.length > 0 && (
                         <div className="bg-slate-50 p-4 rounded-2xl">
                           <span className="font-bold block mb-2 text-xs text-slate-600">添付ファイル ({selectedCase.attachments.length}件)</span>
