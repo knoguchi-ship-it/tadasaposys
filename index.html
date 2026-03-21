@@ -260,24 +260,29 @@
     // ======================================================================
     // 3. API Adapter
     // ======================================================================
+
+    // モック用: mockCases から年度カウント付きのケースリストを構築
+    const buildMockCaseList = () => {
+      var getFY = function(ts) { var d = new Date(ts); return d.getMonth() < 3 ? d.getFullYear() - 1 : d.getFullYear(); };
+      var fyCounts = {};
+      mockCases.forEach(function(c) {
+        if (c.status === 'inProgress' || c.status === 'completed') {
+          var key = c.email + '_' + getFY(c.timestamp);
+          fyCounts[key] = (fyCounts[key] || 0) + (c.supportCount || 1);
+        }
+      });
+      return mockCases.map(function(c) {
+        var key = c.email + '_' + getFY(c.timestamp);
+        var dateLabel = (c.timestamp || '').slice(0, 10).replace(/-/g, '/');
+        return { ...c, dateLabel: dateLabel, currentFiscalYearCount: fyCounts[key] || 0 };
+      });
+    };
+
     const Api = {
       getInitialData: () => {
         if (IS_LOCAL) {
           return new Promise(resolve => setTimeout(() => {
-            var getFY = function(ts) { var d = new Date(ts); return d.getMonth() < 3 ? d.getFullYear() - 1 : d.getFullYear(); };
-            var fyCounts = {};
-            mockCases.forEach(function(c) {
-              if (c.status === 'inProgress' || c.status === 'completed') {
-                var key = c.email + '_' + getFY(c.timestamp);
-                fyCounts[key] = (fyCounts[key] || 0) + (c.supportCount || 1);
-              }
-            });
-            var cases = mockCases.map(function(c) {
-              var key = c.email + '_' + getFY(c.timestamp);
-              var dateLabel = (c.timestamp || '').slice(0, 10).replace(/-/g, '/');
-              return { ...c, dateLabel: dateLabel, currentFiscalYearCount: fyCounts[key] || 0 };
-            });
-            resolve({ user: MOCK_USER, cases: cases, masters: MOCK_MASTERS });
+            resolve({ user: MOCK_USER, cases: buildMockCaseList(), masters: MOCK_MASTERS });
           }, 300));
         }
         return new Promise((resolve, reject) => {
@@ -287,21 +292,7 @@
       getAllCases: () => {
         if (IS_LOCAL) {
           return new Promise(resolve => setTimeout(() => {
-            // 年度カウント再計算（バックエンドと同じロジック）
-            var getFY = function(ts) { var d = new Date(ts); return d.getMonth() < 3 ? d.getFullYear() - 1 : d.getFullYear(); };
-            var fyCounts = {};
-            mockCases.forEach(function(c) {
-              if (c.status === 'inProgress' || c.status === 'completed') {
-                var key = c.email + '_' + getFY(c.timestamp);
-                fyCounts[key] = (fyCounts[key] || 0) + (c.supportCount || 1);
-              }
-            });
-            var result = mockCases.map(function(c) {
-              var key = c.email + '_' + getFY(c.timestamp);
-              var dateLabel = (c.timestamp || '').slice(0, 10).replace(/-/g, '/');
-              return { ...c, dateLabel: dateLabel, currentFiscalYearCount: fyCounts[key] || 0 };
-            });
-            resolve(result);
+            resolve(buildMockCaseList());
           }, 200));
         }
         return new Promise((resolve, reject) => {
@@ -316,22 +307,22 @@
               return { ...c, status: 'rejected', staffEmail: user.email, staffName: user.name };
             });
             console.log('=== 回数超過メール送信（モック） ===\n件名:', subject, cc ? '\nCC: ' + cc : '', bcc ? '\nBCC: ' + bcc : '');
-            resolve();
+            resolve(buildMockCaseList());
           }, 500));
         }
         return new Promise((resolve, reject) => {
-          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).declineCase(caseId, user, subject, body, cc, bcc);
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).declineCase(caseId, user, subject, body, cc, bcc);
         });
       },
       assignCase: (caseId, user, tools) => {
         if (IS_LOCAL) {
           return new Promise(resolve => setTimeout(() => {
             mockCases = mockCases.map(c => c.id === caseId ? { ...c, status: 'inProgress', staffEmail: user.email, staffName: user.name, tools: tools || [] } : c);
-            resolve();
+            resolve(buildMockCaseList());
           }, 300));
         }
         return new Promise((resolve, reject) => {
-          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).assignCase(caseId, user, tools);
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).assignCase(caseId, user, tools);
         });
       },
       reopenCase: (caseId, user) => {
@@ -355,11 +346,11 @@
                 supportHistory: history,
                 scheduledDateTime: null, method: null, content: null, remarks: null, eventId: null, meetUrl: null, attachments: [] };
             });
-            resolve();
+            resolve(buildMockCaseList());
           }, 300));
         }
         return new Promise((resolve, reject) => {
-          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).reopenCase(caseId, user);
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).reopenCase(caseId, user);
         });
       },
       assignAndSendEmail: (caseId, user, subject, body, cc, bcc, tools) => {
@@ -374,11 +365,11 @@
               };
             });
             console.log('=== 初回メール送信（モック） ===\n件名:', subject, cc ? '\nCC: ' + cc : '', bcc ? '\nBCC: ' + bcc : '');
-            resolve();
+            resolve(buildMockCaseList());
           }, 500));
         }
         return new Promise((resolve, reject) => {
-          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).assignAndSendEmail(caseId, user, subject, body, cc, bcc, tools);
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).assignAndSendEmail(caseId, user, subject, body, cc, bcc, tools);
         });
       },
       sendNewCaseEmail: (caseId, user, subject, body, cc, bcc) => {
@@ -391,11 +382,11 @@
               return { ...c, threadIds: [...(c.threadIds || []), newThreadId], threads: [newThread, ...(c.threads || [])] };
             });
             console.log('=== 新規メール送信（モック） ===\n件名:', subject, cc ? '\nCC: ' + cc : '', bcc ? '\nBCC: ' + bcc : '');
-            resolve();
+            resolve(buildMockCaseList());
           }, 500));
         }
         return new Promise((resolve, reject) => {
-          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).sendNewCaseEmail(caseId, user, subject, body, cc, bcc);
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).sendNewCaseEmail(caseId, user, subject, body, cc, bcc);
         });
       },
       sendCaseEmail: (caseId, user, subject, body, threadId, cc, bcc) => {
@@ -410,11 +401,11 @@
               };
             });
             console.log('=== スレッド返信（モック） ===\nスレッド:', threadId, '\n件名:', subject, cc ? '\nCC: ' + cc : '', bcc ? '\nBCC: ' + bcc : '');
-            resolve();
+            resolve(buildMockCaseList());
           }, 500));
         }
         return new Promise((resolve, reject) => {
-          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).sendCaseEmail(caseId, user, subject, body, threadId, cc, bcc);
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).sendCaseEmail(caseId, user, subject, body, threadId, cc, bcc);
         });
       },
       getThreadMessages: (caseId) => {
@@ -454,11 +445,11 @@
               }));
               return { ...c, ...recordData, meetUrl: newUrl, attachments: [...kept, ...created], tools: Array.isArray(recordData.tools) ? recordData.tools : (c.tools || []) };
             });
-            resolve();
+            resolve(buildMockCaseList());
           }, 300));
         }
         return new Promise((resolve, reject) => {
-          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).updateSupportRecord(recordData);
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).updateSupportRecord(recordData);
         });
       },
       getAdminPanelData: () => {
@@ -553,22 +544,22 @@
                 : c
               );
             }
-            resolve();
+            resolve(buildMockCaseList());
           }, 250));
         }
         return new Promise((resolve, reject) => {
-          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).reassignCaseAdmin(caseId, staffEmail);
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).reassignCaseAdmin(caseId, staffEmail);
         });
       },
       setCaseStatusAdmin: (caseId, status) => {
         if (IS_LOCAL) {
           return new Promise(resolve => setTimeout(() => {
             mockCases = mockCases.map(c => c.id === caseId ? { ...c, status } : c);
-            resolve();
+            resolve(buildMockCaseList());
           }, 250));
         }
         return new Promise((resolve, reject) => {
-          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).setCaseStatusAdmin(caseId, status);
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).setCaseStatusAdmin(caseId, status);
         });
       },
       updateCaseDataAdmin: (caseId, payload) => {
@@ -589,11 +580,11 @@
                 staffName: Object.prototype.hasOwnProperty.call(recordPatch, 'staffEmail') ? (staff?.name || '') : c.staffName
               };
             });
-            resolve();
+            resolve(buildMockCaseList());
           }, 300));
         }
         return new Promise((resolve, reject) => {
-          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).updateCaseDataAdmin(caseId, payload);
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).updateCaseDataAdmin(caseId, payload);
         });
       },
       addManualCase: (payload) => {
@@ -619,7 +610,7 @@
               supportHistory: [], attachments: [], emails: []
             };
             mockCases = [newCase, ...mockCases];
-            resolve(pk);
+            resolve({ pk: pk, cases: buildMockCaseList() });
           }, 300));
         }
         return new Promise((resolve, reject) => {
@@ -630,7 +621,7 @@
         if (IS_LOCAL) {
           return new Promise(resolve => setTimeout(() => {
             mockCases = mockCases.map(c => c.id === caseId ? { ...c, subStaff: subStaffArray } : c);
-            resolve({ success: true, subStaff: subStaffArray });
+            resolve(buildMockCaseList());
           }, 300));
         }
         return new Promise((resolve, reject) => {
@@ -1225,8 +1216,7 @@
         if (!selectedCase || !user) return;
         setSubmitting(true);
         try {
-          await Api.assignCase(selectedCase.timestamp, user, assignToolsSelection.length > 0 ? assignToolsSelection : undefined);
-          const updatedCases = await Api.getAllCases();
+          const updatedCases = await Api.assignCase(selectedCase.timestamp, user, assignToolsSelection.length > 0 ? assignToolsSelection : undefined);
           setCases(updatedCases);
           setActiveTab('inProgress');
           setModalMode(null);
@@ -1327,17 +1317,17 @@
         try {
           var trimmedCc = (emailModal.cc || '').trim() || null;
           var trimmedBcc = (emailModal.bcc || '').trim() || null;
+          var updatedCases;
           if (emailModal.mode === 'initial') {
             var emailTools = (emailModal.tools && emailModal.tools.length > 0) ? emailModal.tools : undefined;
-            await Api.assignAndSendEmail(emailModal.caseId, user, emailModal.subject, emailModal.body, trimmedCc, trimmedBcc, emailTools);
+            updatedCases = await Api.assignAndSendEmail(emailModal.caseId, user, emailModal.subject, emailModal.body, trimmedCc, trimmedBcc, emailTools);
           } else if (emailModal.mode === 'decline') {
-            await Api.declineCase(emailModal.caseId, user, emailModal.subject, emailModal.body, trimmedCc, trimmedBcc);
+            updatedCases = await Api.declineCase(emailModal.caseId, user, emailModal.subject, emailModal.body, trimmedCc, trimmedBcc);
           } else if (emailModal.mode === 'new') {
-            await Api.sendNewCaseEmail(emailModal.caseId, user, emailModal.subject, emailModal.body, trimmedCc, trimmedBcc);
+            updatedCases = await Api.sendNewCaseEmail(emailModal.caseId, user, emailModal.subject, emailModal.body, trimmedCc, trimmedBcc);
           } else {
-            await Api.sendCaseEmail(emailModal.caseId, user, emailModal.subject, emailModal.body, emailModal.threadId, trimmedCc, trimmedBcc);
+            updatedCases = await Api.sendCaseEmail(emailModal.caseId, user, emailModal.subject, emailModal.body, emailModal.threadId, trimmedCc, trimmedBcc);
           }
-          const updatedCases = await Api.getAllCases();
           setCases(updatedCases);
           setEmailModal(null);
           if (emailModal.mode === 'initial') {
@@ -1386,8 +1376,7 @@
             payload.user = user ? { name: user.name, email: user.email } : null;
           }
           if (modalMode === 'schedule' || modalMode === 'report') payload.skipCalendar = !useCalendar;
-          await Api.updateSupportRecord(payload);
-          const updatedCases = await Api.getAllCases();
+          const updatedCases = await Api.updateSupportRecord(payload);
           setCases(updatedCases);
           setModalMode(null);
           setPendingFiles([]);
@@ -1419,8 +1408,7 @@
         }
         setSubmitting(true);
         try {
-          await Api.reopenCase(selectedCase.timestamp, user);
-          const updatedCases = await Api.getAllCases();
+          const updatedCases = await Api.reopenCase(selectedCase.timestamp, user);
           setCases(updatedCases);
           setActiveTab('inProgress');
           showToast((selectedCase.supportCount || 1) + 1 + '回目の対応を開始しました。', { type: 'success', title: '案件再開' });
@@ -1451,8 +1439,7 @@
         if (!selectedCase || !adminReassignEmail || adminReassignEmail === (selectedCase.staffEmail || '')) return;
         setSubmitting(true);
         try {
-          await Api.reassignCaseAdmin(selectedCase.timestamp, adminReassignEmail);
-          const updatedCases = await Api.getAllCases();
+          const updatedCases = await Api.reassignCaseAdmin(selectedCase.timestamp, adminReassignEmail);
           setCases(updatedCases);
           showToast('担当者を変更しました。', { type: 'success', title: '管理者操作' });
         } catch (e) {
@@ -1466,8 +1453,7 @@
         if (!selectedCase || !adminStatusValue || adminStatusValue === selectedCase.status) return;
         setSubmitting(true);
         try {
-          await Api.setCaseStatusAdmin(selectedCase.timestamp, adminStatusValue);
-          const updatedCases = await Api.getAllCases();
+          const updatedCases = await Api.setCaseStatusAdmin(selectedCase.timestamp, adminStatusValue);
           setCases(updatedCases);
           setActiveTab(adminStatusValue);
           showToast('案件ステータスを更新しました。', { type: 'success', title: '管理者操作' });
@@ -1497,8 +1483,7 @@
         if (!selectedCase || newStatus === selectedCase.status) return;
         setSubmitting(true);
         try {
-          await Api.setCaseStatusAdmin(selectedCase.timestamp, newStatus);
-          const updatedCases = await Api.getAllCases();
+          const updatedCases = await Api.setCaseStatusAdmin(selectedCase.timestamp, newStatus);
           setCases(updatedCases);
           setActiveTab(newStatus);
           showToast('ステータスを変更しました。', { type: 'success', title: '管理者操作' });
@@ -1515,8 +1500,7 @@
         if (!selectedCase) return;
         setSubmitting(true);
         try {
-          await Api.updateCaseDataAdmin(selectedCase.timestamp, { casePatch: {}, recordPatch: { caseLimitOverride: newLimit } });
-          const updatedCases = await Api.getAllCases();
+          const updatedCases = await Api.updateCaseDataAdmin(selectedCase.timestamp, { casePatch: {}, recordPatch: { caseLimitOverride: newLimit } });
           setCases(updatedCases);
           showToast(newLimit ? `案件上限を${newLimit}回に変更しました。` : '案件上限をデフォルトに戻しました。', { type: 'success', title: '管理者操作' });
         } catch (e) {
@@ -1532,8 +1516,7 @@
         if (!selectedCase) return;
         setSubmitting(true);
         try {
-          await Api.updateCaseDataAdmin(selectedCase.timestamp, { casePatch: {}, recordPatch: { annualLimitOverride: newLimit } });
-          const updatedCases = await Api.getAllCases();
+          const updatedCases = await Api.updateCaseDataAdmin(selectedCase.timestamp, { casePatch: {}, recordPatch: { annualLimitOverride: newLimit } });
           setCases(updatedCases);
           showToast(newLimit ? `年度上限を${newLimit}回に変更しました。` : '年度上限をデフォルトに戻しました。', { type: 'success', title: '管理者操作' });
         } catch (e) {
@@ -1548,8 +1531,7 @@
         if (!selectedCase || staffEmail === (selectedCase.staffEmail || '')) return;
         setSubmitting(true);
         try {
-          await Api.reassignCaseAdmin(selectedCase.timestamp, staffEmail);
-          const updatedCases = await Api.getAllCases();
+          const updatedCases = await Api.reassignCaseAdmin(selectedCase.timestamp, staffEmail);
           setCases(updatedCases);
           showToast('担当者を変更しました。', { type: 'success', title: '管理者操作' });
         } catch (e) {
@@ -1585,8 +1567,7 @@
         };
         setSubmitting(true);
         try {
-          await Api.updateCaseDataAdmin(selectedCase.timestamp, payload);
-          const updatedCases = await Api.getAllCases();
+          const updatedCases = await Api.updateCaseDataAdmin(selectedCase.timestamp, payload);
           setCases(updatedCases);
           showToast('案件データを更新しました。', { type: 'success', title: '管理者操作' });
         } catch (e) {
@@ -2301,8 +2282,7 @@
                                       ev.stopPropagation();
                                       const next = subs.filter(x => x.email !== s.email);
                                       try {
-                                        await Api.updateSubStaff(selectedCase.id, next);
-                                        const updated = await Api.getAllCases();
+                                        const updated = await Api.updateSubStaff(selectedCase.id, next);
                                         setCases(updated);
                                         showToast('サブ担当を解除しました', { type: 'success' });
                                       } catch(e) { showToast(e.message, { type: 'error', title: 'サブ担当エラー' }); }
@@ -2330,8 +2310,7 @@
                                               const next = [...subs, { email: s.email, name: s.name }];
                                               try {
                                                 setInlineEditField(null); setSubStaffSearch('');
-                                                await Api.updateSubStaff(selectedCase.id, next);
-                                                const updated = await Api.getAllCases();
+                                                const updated = await Api.updateSubStaff(selectedCase.id, next);
                                                 setCases(updated);
                                                 showToast(s.name + ' をサブ担当に追加しました', { type: 'success' });
                                               } catch(e) { showToast(e.message, { type: 'error', title: 'サブ担当エラー' }); }
@@ -2949,8 +2928,7 @@
                     onClick={() => showConfirm('この案件をキャンセルしますか？\n元に戻すには管理者がステータスを変更してください。', async () => {
                       setSubmitting(true);
                       try {
-                        await Api.setCaseStatusAdmin(selectedCase.timestamp, 'cancelled');
-                        const updatedCases = await Api.getAllCases();
+                        const updatedCases = await Api.setCaseStatusAdmin(selectedCase.timestamp, 'cancelled');
                         setCases(updatedCases);
                         setSelectedCaseId(null);
                         showToast('案件をキャンセルしました。', { type: 'success', title: 'キャンセル完了' });
@@ -2982,8 +2960,8 @@
             <AddCaseDialog
               masters={masters}
               onClose={() => setAddCaseDialogOpen(false)}
-              onAdded={(newCase) => {
-                setCases(prev => [newCase, ...prev]);
+              onAdded={(updatedCases) => {
+                setCases(updatedCases);
                 setAddCaseDialogOpen(false);
                 showToast('案件を追加しました。', { type: 'success', title: '新規案件追加' });
               }}
@@ -3555,7 +3533,7 @@
         if (!form.details.trim())       return showToast('困りごと詳細を入力してください。', { type: 'error' });
         setSubmitting(true);
         try {
-          const pk = await Api.addManualCase({
+          const result = await Api.addManualCase({
             email: form.email.trim(),
             officeName: form.officeName.trim(),
             requesterName: form.requesterName.trim(),
@@ -3563,23 +3541,7 @@
             prefecture: form.prefecture || '',
             serviceType: form.serviceType || ''
           });
-          onAdded({
-            id: pk, timestamp: pk,
-            email: form.email.trim(),
-            officeName: form.officeName.trim(),
-            requesterName: form.requesterName.trim(),
-            details: form.details.trim(),
-            prefecture: form.prefecture || null,
-            serviceType: form.serviceType || '',
-            status: 'unhandled',
-            staffEmail: null, staffName: null,
-            scheduledDateTime: null, supportCount: 1,
-            method: null, businessType: null,
-            content: null, remarks: null,
-            eventId: null, meetUrl: null,
-            currentFiscalYearCount: 0,
-            supportHistory: [], attachments: [], emails: []
-          });
+          onAdded(result.cases);
         } catch (e) {
           showToast(e.message || String(e), { type: 'error', title: '案件追加エラー' });
         } finally {

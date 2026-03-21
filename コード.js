@@ -506,6 +506,7 @@ function assignCase(caseId, user, tools) {
       staffName: actor.name
     });
   }
+  return getAllCasesJoined();
 }
 
 // ======================================================================
@@ -573,6 +574,7 @@ function reopenCase(caseId, user) {
   sheet.getRange(rowIndex, IDX.RECORDS.MEET_URL + 1).setValue(null);
   sheet.getRange(rowIndex, IDX.RECORDS.ATTACHMENTS + 1).setValue('[]');
   appendAuditLog_(actor, 'reopen_case', 'case', caseId, { supportCount: currentCount }, { supportCount: currentCount + 1, status: 'inProgress' });
+  return getAllCasesJoined();
 }
 
 function ensureAttachmentSchema_() {
@@ -699,6 +701,7 @@ function declineCase(caseId, user, subject, body, cc, bcc) {
   var result = sendInThread_(recipientEmail, subject, body, null, null, cc || null, bcc || null);
   storeThreadId_(caseId, result.threadId);
   recordEmail_(caseId, actor, recipientEmail, subject, body);
+  return getAllCasesJoined();
 }
 
 // ======================================================================
@@ -1017,6 +1020,7 @@ function assignAndSendEmail(caseId, user, subject, body, cc, bcc, tools) {
 
   // メール履歴にも記録（バックアップ）
   recordEmail_(caseId, actor, recipientEmail, subject, body);
+  return getAllCasesJoined();
 }
 
 // ======================================================================
@@ -1037,6 +1041,7 @@ function sendNewCaseEmail(caseId, user, subject, body, cc, bcc) {
   var result = sendInThread_(recipientEmail, subject, body, null, null, cc || null, bcc || null);
   storeThreadId_(caseId, result.threadId);
   recordEmail_(caseId, actor, recipientEmail, subject, body);
+  return getAllCasesJoined();
 }
 
 // ======================================================================
@@ -1067,6 +1072,7 @@ function sendCaseEmail(caseId, user, subject, body, threadId, cc, bcc) {
   }
 
   recordEmail_(caseId, actor, recipientEmail, subject, body);
+  return getAllCasesJoined();
 }
 
 // ======================================================================
@@ -1393,6 +1399,7 @@ function updateSupportRecord(recordData) {
     scheduledDateTime: recordData.scheduledDateTime || null,
     method: recordData.method || null
   });
+  return getAllCasesJoined();
 }
 
 // ======================================================================
@@ -1819,7 +1826,7 @@ function reassignCaseAdmin(caseId, staffEmail) {
 
   if (isUnassign) {
     // 未割当：レコード行がなければ何もしない（元々 unhandled）
-    if (rowIndex === -1) return;
+    if (rowIndex === -1) return getAllCasesJoined();
     var before = {
       status: String(data[rowIndex - 1][IDX.RECORDS.STATUS] || ''),
       staffEmail: String(data[rowIndex - 1][IDX.RECORDS.STAFF_EMAIL] || ''),
@@ -1831,7 +1838,7 @@ function reassignCaseAdmin(caseId, staffEmail) {
     appendAuditLog_(actor, 'unassign_case', 'case', caseId, before, {
       status: 'unhandled', staffEmail: '', staffName: ''
     });
-    return;
+    return getAllCasesJoined();
   }
 
   if (rowIndex === -1) {
@@ -1844,7 +1851,7 @@ function reassignCaseAdmin(caseId, staffEmail) {
       staffEmail: targetEmail,
       staffName: targetStaff.name
     });
-    return;
+    return getAllCasesJoined();
   }
 
   var before = {
@@ -1861,6 +1868,7 @@ function reassignCaseAdmin(caseId, staffEmail) {
     staffEmail: targetEmail,
     staffName: targetStaff.name
   });
+  return getAllCasesJoined();
 }
 
 // ======================================================================
@@ -2048,7 +2056,7 @@ function addManualCase(payload) {
     requesterName: payload.requesterName
   });
 
-  return pk;
+  return { pk: pk, cases: getAllCasesJoined() };
 }
 
 function ensureRecordRowForCase_(sheet, caseId) {
@@ -2100,7 +2108,7 @@ function updateSubStaff(caseId, subStaffArray) {
   var before = row[IDX.RECORDS.SUB_STAFF] ? String(row[IDX.RECORDS.SUB_STAFF]) : '[]';
   sheet.getRange(rowIndex, IDX.RECORDS.SUB_STAFF + 1).setValue(JSON.stringify(validated));
   appendAuditLog_(actor, 'update_sub_staff', 'case', caseId, { subStaff: before }, { subStaff: JSON.stringify(validated) });
-  return { success: true, subStaff: validated };
+  return getAllCasesJoined();
 }
 
 function setCaseStatusAdmin(caseId, status) {
@@ -2122,6 +2130,7 @@ function setCaseStatusAdmin(caseId, status) {
 
   recordSheet.getRange(rowIndex, IDX.RECORDS.STATUS + 1).setValue(normalizedStatus);
   appendAuditLog_(actor, 'admin_set_case_status', 'case', caseId, before, { status: normalizedStatus });
+  return getAllCasesJoined();
 }
 
 function updateCaseDataAdmin(caseId, payload) {
@@ -2284,7 +2293,7 @@ function updateCaseDataAdmin(caseId, payload) {
         requesterName: String(beforeCaseRow[IDX.CASES.NAME] || ''),
         details: String(beforeCaseRow[IDX.CASES.DETAILS] || ''),
         prefecture: String(beforeCaseRow[IDX.CASES.PREFECTURE] || ''),
-        serviceType: String(beforeCaseRow[IDX.CASES.SERVICE] || '')
+        serviceType: String(beforeCaseRow[IDX.CASES.SERVICE] || ''),
       },
       recordRow: {
         status: String(beforeRecordRow[IDX.RECORDS.STATUS] || ''),
@@ -2301,6 +2310,7 @@ function updateCaseDataAdmin(caseId, payload) {
   } finally {
     lock.releaseLock();
   }
+  return getAllCasesJoined();
 }
 
 function setupSettingsSheet() {
