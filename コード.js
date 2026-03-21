@@ -186,16 +186,36 @@ function getActor_() {
   if (!actorEmail) {
     throw new Error('ユーザー情報の取得に失敗しました。');
   }
-  var staff = getStaffByEmail(actorEmail);
-  if (!staff) {
+  // Staffシート1回読みで name + role を同時取得
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
+  var staffName = null;
+  var staffRole = null;
+  if (sheet && sheet.getLastRow() > 1) {
+    var data = sheet.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      var em = normalizeEmail_(data[i][IDX.STAFF.EMAIL]);
+      if (em !== actorEmail) continue;
+      var active = parseBoolean_(data[i][IDX.STAFF.IS_ACTIVE], true);
+      if (!active) continue;
+      staffName = data[i][IDX.STAFF.NAME];
+      staffRole = String(data[i][IDX.STAFF.ROLE] || '').trim().toLowerCase() || 'staff';
+      break;
+    }
+  }
+  if (!staffName) {
     throw new Error('アクセス権限がありません。');
   }
-  var role = getStaffRoleByEmail_(actorEmail) || (isAdminEmail_(actorEmail) ? 'admin' : 'staff');
+  // 旧管理者メールリストとのフォールバック
+  if (staffRole !== 'admin') {
+    var adminEmails = getAdminEmails_();
+    if (adminEmails.indexOf(actorEmail) !== -1) staffRole = 'admin';
+  }
   return {
-    name: staff.name,
+    name: staffName,
     email: actorEmail,
-    role: role,
-    isAdmin: role === 'admin'
+    role: staffRole,
+    isAdmin: staffRole === 'admin'
   };
 }
 
@@ -518,7 +538,7 @@ function assignCase(caseId, user, tools) {
       staffName: actor.name
     });
   }
-  return getAllCasesJoined();
+  return;
 }
 
 // ======================================================================
@@ -574,19 +594,26 @@ function reopenCase(caseId, user) {
     staffName: row[IDX.RECORDS.STAFF_NAME] || null,
     staffEmail: row[IDX.RECORDS.STAFF_EMAIL] || null
   });
-  sheet.getRange(rowIndex, IDX.RECORDS.HISTORY + 1).setValue(JSON.stringify(history));
-
-  sheet.getRange(rowIndex, IDX.RECORDS.STATUS + 1).setValue('inProgress');
-  sheet.getRange(rowIndex, IDX.RECORDS.COUNT + 1).setValue(currentCount + 1);
-  sheet.getRange(rowIndex, IDX.RECORDS.DATE + 1).setValue(null);
-  sheet.getRange(rowIndex, IDX.RECORDS.METHOD + 1).setValue(null);
-  sheet.getRange(rowIndex, IDX.RECORDS.CONTENT + 1).setValue(null);
-  sheet.getRange(rowIndex, IDX.RECORDS.REMARKS + 1).setValue(null);
-  sheet.getRange(rowIndex, IDX.RECORDS.EVENT_ID + 1).setValue(null);
-  sheet.getRange(rowIndex, IDX.RECORDS.MEET_URL + 1).setValue(null);
-  sheet.getRange(rowIndex, IDX.RECORDS.ATTACHMENTS + 1).setValue('[]');
+  // STATUS(1)～ATTACHMENTS(14) を一括書き込み
+  var newRow = [];
+  newRow[IDX.RECORDS.STATUS] = 'inProgress';
+  newRow[IDX.RECORDS.COUNT] = currentCount + 1;
+  newRow[IDX.RECORDS.DATE] = null;
+  newRow[IDX.RECORDS.METHOD] = null;
+  newRow[IDX.RECORDS.CONTENT] = null;
+  newRow[IDX.RECORDS.REMARKS] = null;
+  newRow[IDX.RECORDS.HISTORY] = JSON.stringify(history);
+  newRow[IDX.RECORDS.EVENT_ID] = null;
+  newRow[IDX.RECORDS.MEET_URL] = null;
+  newRow[IDX.RECORDS.ATTACHMENTS] = '[]';
+  // STAFF_EMAIL(2), STAFF_NAME(3), BUSINESS(7) は既存値を保持
+  newRow[IDX.RECORDS.STAFF_EMAIL] = row[IDX.RECORDS.STAFF_EMAIL];
+  newRow[IDX.RECORDS.STAFF_NAME] = row[IDX.RECORDS.STAFF_NAME];
+  newRow[IDX.RECORDS.BUSINESS] = row[IDX.RECORDS.BUSINESS];
+  sheet.getRange(rowIndex, IDX.RECORDS.STATUS + 1, 1, IDX.RECORDS.ATTACHMENTS - IDX.RECORDS.STATUS + 1)
+    .setValues([newRow.slice(IDX.RECORDS.STATUS, IDX.RECORDS.ATTACHMENTS + 1)]);
   appendAuditLog_(actor, 'reopen_case', 'case', caseId, { supportCount: currentCount }, { supportCount: currentCount + 1, status: 'inProgress' });
-  return getAllCasesJoined();
+  return;
 }
 
 // スキーマバージョン: マイグレーション追加時にインクリメントする
@@ -727,7 +754,7 @@ function declineCase(caseId, user, subject, body, cc, bcc) {
   var result = sendInThread_(recipientEmail, subject, body, null, null, cc || null, bcc || null);
   storeThreadId_(caseId, result.threadId);
   recordEmail_(caseId, actor, recipientEmail, subject, body);
-  return getAllCasesJoined();
+  return { threadId: result.threadId };
 }
 
 // ======================================================================
@@ -1046,7 +1073,7 @@ function assignAndSendEmail(caseId, user, subject, body, cc, bcc, tools) {
 
   // メール履歴にも記録（バックアップ）
   recordEmail_(caseId, actor, recipientEmail, subject, body);
-  return getAllCasesJoined();
+  return { threadId: result.threadId };
 }
 
 // ======================================================================
@@ -1067,7 +1094,7 @@ function sendNewCaseEmail(caseId, user, subject, body, cc, bcc) {
   var result = sendInThread_(recipientEmail, subject, body, null, null, cc || null, bcc || null);
   storeThreadId_(caseId, result.threadId);
   recordEmail_(caseId, actor, recipientEmail, subject, body);
-  return getAllCasesJoined();
+  return { threadId: result.threadId };
 }
 
 // ======================================================================
@@ -1098,7 +1125,7 @@ function sendCaseEmail(caseId, user, subject, body, threadId, cc, bcc) {
   }
 
   recordEmail_(caseId, actor, recipientEmail, subject, body);
-  return getAllCasesJoined();
+  return { threadId: threadId || result.threadId };
 }
 
 // ======================================================================
@@ -1368,20 +1395,24 @@ function updateSupportRecord(recordData) {
   var currentAttachments = parseJsonArray_(data[rowIndex - 1][IDX.RECORDS.ATTACHMENTS]);
   var eventTitle = '【タダサポ】' + recordData.officeName + ' 様';
 
+  // サーバー生成データを追跡
+  var newMeetUrl = null;
+  var newEventId = null;
+
   // skipCalendar=true の場合はカレンダー・Meet・Zoom登録をスキップ
   if (recordData.scheduledDateTime && !currentMeetUrl && !recordData.skipCalendar) {
     if (recordData.method === 'GoogleMeet') {
       try {
         var meetResult = createGoogleMeetEvent(eventTitle, recordData.scheduledDateTime, recordData.details);
-        sheet.getRange(rowIndex, IDX.RECORDS.EVENT_ID + 1).setValue(meetResult.eventId);
-        sheet.getRange(rowIndex, IDX.RECORDS.MEET_URL + 1).setValue(meetResult.meetUrl);
+        newEventId = meetResult.eventId;
+        newMeetUrl = meetResult.meetUrl;
       } catch(e) { console.error('Google Meet作成エラー: ' + e.message); }
 
     } else if (recordData.method === 'Zoom') {
       try {
         var zoomResult = createZoomMeeting(eventTitle, recordData.scheduledDateTime, 60);
-        sheet.getRange(rowIndex, IDX.RECORDS.EVENT_ID + 1).setValue(zoomResult.meetingId);
-        sheet.getRange(rowIndex, IDX.RECORDS.MEET_URL + 1).setValue(zoomResult.joinUrl);
+        newEventId = String(zoomResult.meetingId);
+        newMeetUrl = zoomResult.joinUrl;
         var start = new Date(recordData.scheduledDateTime);
         var end = new Date(start.getTime() + 60 * 60 * 1000);
         CalendarApp.getDefaultCalendar().createEvent(eventTitle, start, end, {
@@ -1391,15 +1422,9 @@ function updateSupportRecord(recordData) {
     }
   }
 
-  sheet.getRange(rowIndex, IDX.RECORDS.STATUS + 1).setValue(recordData.status);
-  sheet.getRange(rowIndex, IDX.RECORDS.DATE + 1).setValue(recordData.scheduledDateTime ? new Date(recordData.scheduledDateTime) : null);
-  sheet.getRange(rowIndex, IDX.RECORDS.METHOD + 1).setValue(recordData.method);
-  sheet.getRange(rowIndex, IDX.RECORDS.CONTENT + 1).setValue(recordData.content);
-  if (recordData.tools !== undefined) {
-    var toolsVal = Array.isArray(recordData.tools) ? JSON.stringify(recordData.tools) : '[]';
-    sheet.getRange(rowIndex, IDX.RECORDS.TOOLS + 1).setValue(toolsVal);
-  }
-
+  // 添付ファイル処理（バッチ書き込みの前に解決）
+  var finalAttachments = null;
+  var attachmentsValue = data[rowIndex - 1][IDX.RECORDS.ATTACHMENTS];
   var hasAttachmentUpdate = recordData.keepAttachmentIds !== undefined || recordData.newAttachments !== undefined;
   if (hasAttachmentUpdate) {
     var keepIds = Array.isArray(recordData.keepAttachmentIds)
@@ -1417,15 +1442,39 @@ function updateSupportRecord(recordData) {
     }
 
     trashRemovedAttachments_(currentAttachments, keepIdMap);
-    sheet.getRange(rowIndex, IDX.RECORDS.ATTACHMENTS + 1).setValue(JSON.stringify(mergedAttachments));
+    attachmentsValue = JSON.stringify(mergedAttachments);
+    finalAttachments = mergedAttachments;
   }
+
+  // STATUS(1)～TOOLS(17) を一括書き込み（既存値を保持しつつ変更箇所を上書き）
+  var curRow = data[rowIndex - 1];
+  var batchRow = [
+    recordData.status,                                                          // STATUS(1)
+    curRow[IDX.RECORDS.STAFF_EMAIL],                                            // STAFF_EMAIL(2)
+    curRow[IDX.RECORDS.STAFF_NAME],                                             // STAFF_NAME(3)
+    recordData.scheduledDateTime ? new Date(recordData.scheduledDateTime) : null, // DATE(4)
+    curRow[IDX.RECORDS.COUNT],                                                  // COUNT(5)
+    recordData.method,                                                          // METHOD(6)
+    curRow[IDX.RECORDS.BUSINESS],                                               // BUSINESS(7)
+    recordData.content,                                                         // CONTENT(8)
+    curRow[IDX.RECORDS.REMARKS],                                                // REMARKS(9)
+    curRow[IDX.RECORDS.HISTORY],                                                // HISTORY(10)
+    newEventId || curRow[IDX.RECORDS.EVENT_ID],                                 // EVENT_ID(11)
+    newMeetUrl || curRow[IDX.RECORDS.MEET_URL],                                 // MEET_URL(12)
+    curRow[IDX.RECORDS.THREAD_ID],                                              // THREAD_ID(13)
+    attachmentsValue,                                                           // ATTACHMENTS(14)
+    curRow[IDX.RECORDS.CASE_LIMIT_OVERRIDE],                                    // CASE_LIMIT_OVERRIDE(15)
+    curRow[IDX.RECORDS.ANNUAL_LIMIT_OVERRIDE],                                  // ANNUAL_LIMIT_OVERRIDE(16)
+    recordData.tools !== undefined ? (Array.isArray(recordData.tools) ? JSON.stringify(recordData.tools) : '[]') : curRow[IDX.RECORDS.TOOLS]  // TOOLS(17)
+  ];
+  sheet.getRange(rowIndex, IDX.RECORDS.STATUS + 1, 1, batchRow.length).setValues([batchRow]);
 
   appendAuditLog_(actor, 'update_support_record', 'case', recordData.timestamp, before, {
     status: recordData.status,
     scheduledDateTime: recordData.scheduledDateTime || null,
     method: recordData.method || null
   });
-  return getAllCasesJoined();
+  return { meetUrl: newMeetUrl, eventId: newEventId, attachments: finalAttachments };
 }
 
 // ======================================================================
@@ -1593,6 +1642,10 @@ function migrateAdminEmailsToStaffRoles_() {
 }
 
 function ensureAdminSchema_() {
+  // CacheService でスキーマ確認済みならスキップ
+  try {
+    if (CacheService.getScriptCache().get('schema_v') === SCHEMA_VERSION_) return;
+  } catch (e) { /* フォールスルー */ }
   ensureStaffAdminSchema_();
   migrateAdminEmailsToStaffRoles_();
   getOrCreateAuditLogSheet_();
@@ -1852,7 +1905,7 @@ function reassignCaseAdmin(caseId, staffEmail) {
 
   if (isUnassign) {
     // 未割当：レコード行がなければ何もしない（元々 unhandled）
-    if (rowIndex === -1) return getAllCasesJoined();
+    if (rowIndex === -1) return;
     var before = {
       status: String(data[rowIndex - 1][IDX.RECORDS.STATUS] || ''),
       staffEmail: String(data[rowIndex - 1][IDX.RECORDS.STAFF_EMAIL] || ''),
@@ -1864,7 +1917,7 @@ function reassignCaseAdmin(caseId, staffEmail) {
     appendAuditLog_(actor, 'unassign_case', 'case', caseId, before, {
       status: 'unhandled', staffEmail: '', staffName: ''
     });
-    return getAllCasesJoined();
+    return;
   }
 
   if (rowIndex === -1) {
@@ -1877,7 +1930,7 @@ function reassignCaseAdmin(caseId, staffEmail) {
       staffEmail: targetEmail,
       staffName: targetStaff.name
     });
-    return getAllCasesJoined();
+    return;
   }
 
   var before = {
@@ -1894,7 +1947,7 @@ function reassignCaseAdmin(caseId, staffEmail) {
     staffEmail: targetEmail,
     staffName: targetStaff.name
   });
-  return getAllCasesJoined();
+  return;
 }
 
 // ======================================================================
@@ -2082,7 +2135,7 @@ function addManualCase(payload) {
     requesterName: payload.requesterName
   });
 
-  return { pk: pk, cases: getAllCasesJoined() };
+  return { pk: pk };
 }
 
 function ensureRecordRowForCase_(sheet, caseId) {
@@ -2134,7 +2187,7 @@ function updateSubStaff(caseId, subStaffArray) {
   var before = row[IDX.RECORDS.SUB_STAFF] ? String(row[IDX.RECORDS.SUB_STAFF]) : '[]';
   sheet.getRange(rowIndex, IDX.RECORDS.SUB_STAFF + 1).setValue(JSON.stringify(validated));
   appendAuditLog_(actor, 'update_sub_staff', 'case', caseId, { subStaff: before }, { subStaff: JSON.stringify(validated) });
-  return getAllCasesJoined();
+  return { subStaff: validated };
 }
 
 function setCaseStatusAdmin(caseId, status) {
@@ -2156,7 +2209,7 @@ function setCaseStatusAdmin(caseId, status) {
 
   recordSheet.getRange(rowIndex, IDX.RECORDS.STATUS + 1).setValue(normalizedStatus);
   appendAuditLog_(actor, 'admin_set_case_status', 'case', caseId, before, { status: normalizedStatus });
-  return getAllCasesJoined();
+  return;
 }
 
 function updateCaseDataAdmin(caseId, payload) {
@@ -2336,7 +2389,7 @@ function updateCaseDataAdmin(caseId, payload) {
   } finally {
     lock.releaseLock();
   }
-  return getAllCasesJoined();
+  return;
 }
 
 function setupSettingsSheet() {
