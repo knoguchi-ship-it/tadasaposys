@@ -70,7 +70,7 @@
       AlertTriangle, FileText, Clock, Info, CheckCircle2,
       Mail, Send, Reply, RotateCcw, Search, Filter, XCircle,
       Paperclip, UploadCloud, Trash2, Shield, Settings2, Save,
-      Bell, BellOff, ExternalLink, Plus, ClipboardList
+      Bell, BellOff, ExternalLink, Plus, ClipboardList, Copy
     } from 'lucide-react';
 
     // ======================================================================
@@ -2539,6 +2539,7 @@
                             </p>
                             <a href={selectedCase.meetUrl} target="_blank" rel="noreferrer" className={`text-sm font-bold truncate block hover:underline ${selectedCase.meetUrl.includes('zoom.us') ? 'text-blue-700' : 'text-indigo-700'}`}>{selectedCase.meetUrl}</a>
                           </div>
+                          <button onClick={() => { navigator.clipboard.writeText(selectedCase.meetUrl).then(() => showToast('URLをコピーしました', { type: 'success' })); }} className={`shrink-0 p-2 rounded-lg transition-colors ${selectedCase.meetUrl.includes('zoom.us') ? 'hover:bg-blue-100 text-blue-500' : 'hover:bg-indigo-100 text-indigo-500'}`} title="URLをコピー"><Copy size={16}/></button>
                         </div>
                       )}
                       {selectedCase.tools && selectedCase.tools.length > 0 && (
