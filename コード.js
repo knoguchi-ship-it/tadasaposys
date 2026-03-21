@@ -2076,6 +2076,10 @@ function updateSubStaff(caseId, subStaffArray) {
   var isMainStaff = staffEmail && staffEmail === normalizeEmail_(actor.email);
   if (!actor.isAdmin && !isMainStaff) throw new Error('サブ担当を設定する権限がありません。');
 
+  var MAX_SUB_STAFF = 1;
+  if (Array.isArray(subStaffArray) && subStaffArray.length > MAX_SUB_STAFF) {
+    throw new Error('サブ担当は最大' + MAX_SUB_STAFF + '名までです。');
+  }
   var validated = [];
   if (Array.isArray(subStaffArray)) {
     var staffSheet = ss.getSheetByName(SHEET_NAMES.STAFF);

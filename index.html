@@ -2298,7 +2298,7 @@
                                   )}
                                 </span>
                               ))}
-                              {canEditSub && (
+                              {canEditSub && subs.length < 1 && (
                                 <div className="relative">
                                   <button onClick={() => setInlineEditField(inlineEditField === 'subStaff' ? null : 'subStaff')} className="px-2 py-0.5 bg-violet-50 text-violet-500 rounded-full text-[10px] font-black border border-violet-100 hover:bg-violet-100">+ 追加</button>
                                   {inlineEditField === 'subStaff' && (
