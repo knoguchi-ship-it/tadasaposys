@@ -271,7 +271,7 @@ function doGet() {
 
   return HtmlService.createTemplateFromFile('index')
     .evaluate()
-    .setTitle('タダサポ管理 v1.9.0')
+    .setTitle('タダサポ管理')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
