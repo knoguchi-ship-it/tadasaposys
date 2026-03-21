@@ -270,13 +270,22 @@ function appendAuditLog_(actor, action, targetType, targetId, beforeObj, afterOb
 // Webアプリ エントリポイント
 // ======================================================================
 function doGet() {
-  ensureAttachmentSchema_();
-
-  return HtmlService.createTemplateFromFile('index')
+  var html = HtmlService.createTemplateFromFile('index')
     .evaluate()
     .setTitle('タダサポ管理')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+
+  // 初期データをHTMLに埋め込み（google.script.run の往復を1回削減）
+  try {
+    var data = getInitialData();
+    var json = JSON.stringify(data).replace(/<\//g, '<\\/');
+    html.append('<script>window.__INITIAL_DATA__=' + json + ';</script>');
+  } catch (e) {
+    // 認証エラー等: 埋め込みスキップ（フロントで再取得しエラー表示）
+  }
+
+  return html;
 }
 
 // ======================================================================

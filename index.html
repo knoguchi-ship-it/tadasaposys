@@ -6,6 +6,14 @@
   <title>タダサポ管理</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230d9488'/><text x='50%25' y='55%25' dominant-baseline='middle' text-anchor='middle' fill='white' font-size='18' font-weight='bold'>T</text></svg>">
 
+  <!-- CDN先行接続＋重量リソース先読み -->
+  <link rel="preconnect" href="https://esm.sh" crossorigin>
+  <link rel="preconnect" href="https://unpkg.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.tailwindcss.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preload" href="https://unpkg.com/@babel/standalone/babel.min.js" as="script">
+
   <!-- CDN警告を抑制 -->
   <script>
     (function(){
@@ -809,6 +817,16 @@
       }, [isAdminMode, refreshAdminPanelData]);
 
       useEffect(() => {
+        // doGet() が埋め込んだ初期データがあれば即使用（GAS往復を1回削減）
+        if (!IS_LOCAL && window.__INITIAL_DATA__) {
+          var data = window.__INITIAL_DATA__;
+          delete window.__INITIAL_DATA__;
+          setUser(data.user);
+          setCases(data.cases);
+          setMasters(data.masters);
+          setLoading(false);
+          return;
+        }
         Api.getInitialData()
           .then(data => {
             setUser(data.user);
