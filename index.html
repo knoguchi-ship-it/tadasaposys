@@ -2757,13 +2757,13 @@
                           <label className="text-[10px] font-black text-slate-500 block">相談内容: 受付時の原文
                             <textarea rows={3} value={adminCaseEditDraft.details || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, details: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
                           </label>
-                          <label className="text-[10px] font-black text-slate-500 block">対応記録: 実施内容
-                            <textarea rows={3} value={adminCaseEditDraft.content || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, content: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
-                          </label>
                           {renderToolSelector(adminCaseEditDraft.tools || [], (tool) => {
                             const cur = adminCaseEditDraft.tools || [];
                             setAdminCaseEditDraft(prev => ({ ...prev, tools: cur.includes(tool) ? cur.filter(t => t !== tool) : [...cur, tool] }));
                           }, true)}
+                          <label className="text-[10px] font-black text-slate-500 block">対応記録: 実施内容
+                            <textarea rows={3} value={adminCaseEditDraft.content || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, content: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
+                          </label>
                           <label className="text-[10px] font-black text-slate-500 block">備考: 内部メモ
                             <textarea rows={2} value={adminCaseEditDraft.remarks || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, remarks: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
                           </label>
