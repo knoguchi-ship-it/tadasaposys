@@ -70,7 +70,7 @@
       AlertTriangle, FileText, Clock, Info, CheckCircle2,
       Mail, Send, Reply, RotateCcw, Search, Filter, XCircle,
       Paperclip, UploadCloud, Trash2, Shield, Settings2, Save,
-      Bell, BellOff, ExternalLink, Plus
+      Bell, BellOff, ExternalLink, Plus, ClipboardList
     } from 'lucide-react';
 
     // ======================================================================
@@ -1760,6 +1760,27 @@
                     className="px-3 py-1.5 rounded-lg text-[10px] font-black bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 flex items-center gap-1.5"
                   >
                     <Settings2 size={12} /> 設定管理
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const rows = filteredCases.map(c => [c.prefecture || '', c.officeName || '']);
+                      const unique = [];
+                      const seen = new Set();
+                      rows.forEach(r => {
+                        const key = r.join('\t');
+                        if (!seen.has(key)) { seen.add(key); unique.push(r); }
+                      });
+                      const tsv = '都道府県\t事業所名\n' + unique.map(r => r.join('\t')).join('\n');
+                      navigator.clipboard.writeText(tsv).then(() => {
+                        showToast(`${unique.length}件の事業所データをコピーしました（重複除外済）。スプレッドシートに貼り付けできます。`, { type: 'success', title: 'データ抽出' });
+                      }).catch(() => {
+                        showToast('クリップボードへのコピーに失敗しました。', { type: 'error', title: 'データ抽出' });
+                      });
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-[10px] font-black bg-violet-50 text-violet-700 hover:bg-violet-100 border border-violet-200 flex items-center gap-1.5"
+                  >
+                    <ClipboardList size={12} /> データ抽出
                   </button>
                   {masters?.spreadsheetUrl && (
                     <a
