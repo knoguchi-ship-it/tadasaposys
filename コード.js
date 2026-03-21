@@ -41,16 +41,19 @@ var IDX = {
 // 設定読み込み（「設定」シートから全設定値を取得しキャッシュ）
 // ======================================================================
 var _settingsCache = null;
+var _spreadsheetCache = null;
 
 /**
- * スプレッドシートを取得
- * SPREADSHEET_ID（グローバル変数）を使用して開く
+ * スプレッドシートを取得（実行コンテキスト内キャッシュ）
+ * 同一リクエスト内では SpreadsheetApp.openById() を1回だけ呼ぶ
  */
 function getSpreadsheet_() {
+  if (_spreadsheetCache) return _spreadsheetCache;
   if (!SPREADSHEET_ID) {
     throw new Error('SPREADSHEET_ID が未設定です。コード.js 先頭の SPREADSHEET_ID にスプレッドシートIDを入力してください。');
   }
-  return SpreadsheetApp.openById(SPREADSHEET_ID);
+  _spreadsheetCache = SpreadsheetApp.openById(SPREADSHEET_ID);
+  return _spreadsheetCache;
 }
 
 /**
@@ -577,7 +580,16 @@ function reopenCase(caseId, user) {
   return getAllCasesJoined();
 }
 
+// スキーマバージョン: マイグレーション追加時にインクリメントする
+var SCHEMA_VERSION_ = '5';
+
 function ensureAttachmentSchema_() {
+  // CacheService でスキーマ確認済みなら全スキップ（6時間有効）
+  try {
+    var cache = CacheService.getScriptCache();
+    if (cache.get('schema_v') === SCHEMA_VERSION_) return;
+  } catch (e) { /* CacheService 利用不可の場合はフォールスルー */ }
+
   try {
     ensureAdminSchema_();
     addForcedCcSetting();
@@ -592,6 +604,11 @@ function ensureAttachmentSchema_() {
   } catch (e) {
     throw new Error('添付機能の初期化に失敗しました。管理者に連絡してください。詳細: ' + e.message);
   }
+
+  // 全マイグレーション成功後にキャッシュ（21600秒 = 6時間）
+  try {
+    CacheService.getScriptCache().put('schema_v', SCHEMA_VERSION_, 21600);
+  } catch (e) { /* キャッシュ保存失敗は無視 */ }
 }
 
 /**
