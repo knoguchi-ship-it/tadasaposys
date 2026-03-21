@@ -1630,7 +1630,7 @@
       }), []);
 
       const visibleSettingCategories = useMemo(() => {
-        const byCategory = { limits: 0, mail: 0, integration: 0, other: 0 };
+        const byCategory = { limits: 0, mail: 0, integration: 0, tools: 0, other: 0 };
         Object.keys(settingsDraft || {}).forEach(k => {
           const category = settingsMeta[k]?.category || 'other';
           byCategory[category] = (byCategory[category] || 0) + 1;
