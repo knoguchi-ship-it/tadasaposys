@@ -149,6 +149,7 @@
         annual: 10,
         caseSupport: 3
       },
+      toolMonthlyLimits: { 'ケアプランデータ連携システム': 30 },
       emailTemplates: {
         initialSubject: 'タダサポ｜ご相談を承りました',
         initialBody: '{{名前}} 様\n\nこの度はタダサポへご相談いただきありがとうございます。\n担当させていただきます{{担当者名}}と申します。\n\n以下の内容で受付いたしました。\n\n----------------\n【ご相談内容】\n{{相談内容}}\n----------------\n\n追ってサポート日時のご連絡をさせていただきます。\n\n何かご不明な点がございましたら、お気軽にお問い合わせください。\n\n今後ともよろしくお願いいたします。',
@@ -251,7 +252,8 @@
       ZOOM_ACCOUNT_ID: '',
       ZOOM_CLIENT_ID: '',
       ZOOM_CLIENT_SECRET: '',
-      SUPPORT_TOOLS: SUPPORT_TOOLS.join(',')
+      SUPPORT_TOOLS: SUPPORT_TOOLS.join(','),
+      TOOL_MONTHLY_LIMITS: 'ケアプランデータ連携システム:30'
     };
 
     // ======================================================================
@@ -320,15 +322,15 @@
           google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).declineCase(caseId, user, subject, body, cc, bcc);
         });
       },
-      assignCase: (caseId, user) => {
+      assignCase: (caseId, user, tools) => {
         if (IS_LOCAL) {
           return new Promise(resolve => setTimeout(() => {
-            mockCases = mockCases.map(c => c.id === caseId ? { ...c, status: 'inProgress', staffEmail: user.email, staffName: user.name } : c);
+            mockCases = mockCases.map(c => c.id === caseId ? { ...c, status: 'inProgress', staffEmail: user.email, staffName: user.name, tools: tools || [] } : c);
             resolve();
           }, 300));
         }
         return new Promise((resolve, reject) => {
-          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).assignCase(caseId, user);
+          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).assignCase(caseId, user, tools);
         });
       },
       reopenCase: (caseId, user) => {
@@ -359,7 +361,7 @@
           google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).reopenCase(caseId, user);
         });
       },
-      assignAndSendEmail: (caseId, user, subject, body, cc, bcc) => {
+      assignAndSendEmail: (caseId, user, subject, body, cc, bcc, tools) => {
         if (IS_LOCAL) {
           return new Promise(resolve => setTimeout(() => {
             var newThreadId = 'mock-thread-' + Date.now();
@@ -367,7 +369,7 @@
               if (c.id !== caseId) return c;
               var newThread = { threadId: newThreadId, subject, messages: [{ sendDate: new Date().toISOString(), senderName: user.name, subject, body, isStaff: true }] };
               return { ...c, status: 'inProgress', staffEmail: user.email, staffName: user.name,
-                threadIds: [newThreadId], threads: [newThread]
+                threadIds: [newThreadId], threads: [newThread], tools: tools || []
               };
             });
             console.log('=== 初回メール送信（モック） ===\n件名:', subject, cc ? '\nCC: ' + cc : '', bcc ? '\nBCC: ' + bcc : '');
@@ -375,7 +377,7 @@
           }, 500));
         }
         return new Promise((resolve, reject) => {
-          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).assignAndSendEmail(caseId, user, subject, body, cc, bcc);
+          google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).assignAndSendEmail(caseId, user, subject, body, cc, bcc, tools);
         });
       },
       sendNewCaseEmail: (caseId, user, subject, body, cc, bcc) => {
@@ -514,6 +516,18 @@
             }
             if (Object.prototype.hasOwnProperty.call(patch, 'SUPPORT_TOOLS')) {
               MOCK_MASTERS.supportTools = (patch.SUPPORT_TOOLS || '').split(',').map(s => s.trim()).filter(Boolean);
+            }
+            if (Object.prototype.hasOwnProperty.call(patch, 'TOOL_MONTHLY_LIMITS')) {
+              var limits = {};
+              (patch.TOOL_MONTHLY_LIMITS || '').split(',').forEach(function(pair) {
+                var parts = pair.split(':');
+                if (parts.length === 2) {
+                  var name = parts[0].trim();
+                  var limit = parseInt(parts[1].trim(), 10);
+                  if (name && !isNaN(limit) && limit > 0) limits[name] = limit;
+                }
+              });
+              MOCK_MASTERS.toolMonthlyLimits = limits;
             }
             resolve({ ...mockAdminSettings });
           }, 300));
@@ -717,6 +731,7 @@
       const [dragOverAttachments, setDragOverAttachments] = useState(false);
       const fileInputRef = useRef(null);
       const [submitting, setSubmitting] = useState(false);
+      const [assignToolsSelection, setAssignToolsSelection] = useState([]);
       const [emailModal, setEmailModal] = useState(null);
       const [expandedEmailIdx, setExpandedEmailIdx] = useState(null);
       const [threadGroups, setThreadGroups] = useState([]);
@@ -893,6 +908,31 @@
       const effectiveCaseLimit = selectedCase?.caseLimitOverride || masters?.limits?.caseSupport || 3;
       const effectiveAnnualLimit = selectedCase?.annualLimitOverride || masters?.limits?.annual || 10;
 
+      // ツール月間上限: 当月の使用件数を全案件から集計
+      const toolMonthlyLimits = masters?.toolMonthlyLimits || {};
+      const toolMonthlyUsage = useMemo(() => {
+        const limitedTools = Object.keys(toolMonthlyLimits);
+        if (!limitedTools.length) return {};
+        const now = new Date();
+        const thisMonth = now.getFullYear() * 100 + (now.getMonth() + 1); // YYYYMM
+        const counts = {};
+        limitedTools.forEach(t => { counts[t] = 0; });
+        cases.forEach(c => {
+          if (c.status !== 'inProgress' && c.status !== 'completed') return;
+          if (!Array.isArray(c.tools) || !c.tools.length) return;
+          // 日付から月を判定（scheduledDateTime優先、なければtimestamp）
+          var dateStr = c.scheduledDateTime || c.timestamp;
+          if (!dateStr) return;
+          var d = new Date(dateStr);
+          var caseMonth = d.getFullYear() * 100 + (d.getMonth() + 1);
+          if (caseMonth !== thisMonth) return;
+          limitedTools.forEach(t => {
+            if (c.tools.includes(t)) counts[t]++;
+          });
+        });
+        return counts;
+      }, [cases, toolMonthlyLimits]);
+
       // タブごとのケース一覧（新着バッジ計算・seenIds更新用。検索フィルタ非適用）
       const getTabCases = useCallback((tabKey) => {
         return cases.filter(c => {
@@ -997,6 +1037,67 @@
           .finally(() => setThreadLoading(false));
       }, [selectedCaseId, cases]);
 
+      // ツール月間上限: ツールが上限に達しているか判定
+      const isToolMonthlyLimitReached = useCallback((toolName) => {
+        const limit = toolMonthlyLimits[toolName];
+        if (limit == null) return false;
+        return (toolMonthlyUsage[toolName] || 0) >= limit;
+      }, [toolMonthlyLimits, toolMonthlyUsage]);
+
+      // ツール月間上限: ラベル生成（残数表示）
+      const getToolMonthlyLabel = useCallback((toolName) => {
+        const limit = toolMonthlyLimits[toolName];
+        if (limit == null) return null;
+        const used = toolMonthlyUsage[toolName] || 0;
+        const remaining = Math.max(0, limit - used);
+        return `${used}/${limit}件`;
+      }, [toolMonthlyLimits, toolMonthlyUsage]);
+
+      // ツール選択UIレンダラー（共通）
+      const renderToolSelector = useCallback((selectedTools, onToggle, allowAdminOverride) => {
+        const canOverride = allowAdminOverride && isAdminMode && user?.isAdmin;
+        return (
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><CheckCircle2 size={10}/> 対応ツール（複数選択可・任意）</label>
+            <div className="flex flex-wrap gap-2">
+              {(masters?.supportTools || SUPPORT_TOOLS).map(tool => {
+                const checked = (selectedTools || []).includes(tool);
+                const limitReached = isToolMonthlyLimitReached(tool);
+                const monthlyLabel = getToolMonthlyLabel(tool);
+                const disabled = limitReached && !checked && !canOverride;
+                return (
+                  <label key={tool} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-2 text-xs font-bold transition-all select-none ${
+                    disabled ? 'border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed' :
+                    checked ? 'border-teal-500 bg-teal-50 text-teal-700 cursor-pointer' :
+                    'border-slate-100 bg-white text-slate-500 hover:border-slate-300 cursor-pointer'
+                  }`} title={limitReached && !canOverride ? '当月の上限に達しています' : ''}>
+                    <input
+                      type="checkbox"
+                      className="hidden"
+                      checked={checked}
+                      disabled={disabled}
+                      onChange={() => !disabled && onToggle(tool)}
+                    />
+                    {tool}
+                    {monthlyLabel && (
+                      <span className={`text-[9px] font-black ml-0.5 ${limitReached ? 'text-rose-500' : 'text-slate-400'}`}>
+                        ({monthlyLabel})
+                      </span>
+                    )}
+                  </label>
+                );
+              })}
+            </div>
+            {Object.keys(toolMonthlyLimits).some(t => isToolMonthlyLimitReached(t)) && (
+              <p className="text-[10px] font-bold text-rose-500 flex items-center gap-1">
+                <AlertTriangle size={10}/> 上限に達したツールがあります。翌月以降のサポートをご案内ください。
+                {canOverride && <span className="text-amber-600 ml-1">（管理者は上限超過でも選択可能です）</span>}
+              </p>
+            )}
+          </div>
+        );
+      }, [masters, isAdminMode, user, isToolMonthlyLimitReached, getToolMonthlyLabel, toolMonthlyLimits]);
+
       const replaceCaseTags = (str) => {
         if (!selectedCase || !user) return str || '';
         const tags = {
@@ -1071,20 +1172,25 @@
 
       const handleAssignOnly = () => {
         if (!selectedCase || !user) return;
-        showConfirm('メールを送信せずに担当しますか？', async () => {
-          setSubmitting(true);
-          try {
-            await Api.assignCase(selectedCase.timestamp, user);
-            const updatedCases = await Api.getAllCases();
-            setCases(updatedCases);
-            setActiveTab('inProgress');
-            showToast('担当に設定しました（メール未送信）。', { type: 'success', title: '担当設定完了' });
-          } catch(e) {
-            showToast(e.message || String(e), { type: 'error', title: '担当設定エラー' });
-          } finally {
-            setSubmitting(false);
-          }
-        }, { title: '担当設定', confirmLabel: '担当する' });
+        setAssignToolsSelection([]);
+        setModalMode('assignOnly');
+      };
+
+      const handleAssignOnlySubmit = async () => {
+        if (!selectedCase || !user) return;
+        setSubmitting(true);
+        try {
+          await Api.assignCase(selectedCase.timestamp, user, assignToolsSelection.length > 0 ? assignToolsSelection : undefined);
+          const updatedCases = await Api.getAllCases();
+          setCases(updatedCases);
+          setActiveTab('inProgress');
+          setModalMode(null);
+          showToast('担当に設定しました（メール未送信）。', { type: 'success', title: '担当設定完了' });
+        } catch(e) {
+          showToast(e.message || String(e), { type: 'error', title: '担当設定エラー' });
+        } finally {
+          setSubmitting(false);
+        }
       };
 
       const handleAssign = () => {
@@ -1120,7 +1226,8 @@
           to: selectedCase.email,
           cc: '', bcc: '',
           subject: replaceTags(tpl.initialSubject || 'タダサポ｜ご相談を承りました'),
-          body: replaceTags(bodyTemplate)
+          body: replaceTags(bodyTemplate),
+          tools: []
         });
       };
 
@@ -1176,7 +1283,8 @@
           var trimmedCc = (emailModal.cc || '').trim() || null;
           var trimmedBcc = (emailModal.bcc || '').trim() || null;
           if (emailModal.mode === 'initial') {
-            await Api.assignAndSendEmail(emailModal.caseId, user, emailModal.subject, emailModal.body, trimmedCc, trimmedBcc);
+            var emailTools = (emailModal.tools && emailModal.tools.length > 0) ? emailModal.tools : undefined;
+            await Api.assignAndSendEmail(emailModal.caseId, user, emailModal.subject, emailModal.body, trimmedCc, trimmedBcc, emailTools);
           } else if (emailModal.mode === 'decline') {
             await Api.declineCase(emailModal.caseId, user, emailModal.subject, emailModal.body, trimmedCc, trimmedBcc);
           } else if (emailModal.mode === 'new') {
@@ -1517,7 +1625,8 @@
         ZOOM_ACCOUNT_ID: { label: 'Zoom Account ID', category: 'integration', desc: 'Zoom連携情報' },
         ZOOM_CLIENT_ID: { label: 'Zoom Client ID', category: 'integration', desc: 'Zoom連携情報' },
         ZOOM_CLIENT_SECRET: { label: 'Zoom Client Secret', category: 'integration', desc: 'Zoom連携情報' },
-        SUPPORT_TOOLS: { label: '対応ツール一覧', category: 'tools', type: 'tools', desc: 'フォームの「対応ツール」選択肢を管理します。追加・編集・削除・並び替えができます。' }
+        SUPPORT_TOOLS: { label: '対応ツール一覧', category: 'tools', type: 'tools', desc: 'フォームの「対応ツール」選択肢を管理します。追加・編集・削除・並び替えができます。' },
+        TOOL_MONTHLY_LIMITS: { label: 'ツール月間上限', category: 'tools', desc: '月間件数上限を設定するツール。形式: ツール名:上限 （例: ケアプランデータ連携システム:30）。カンマ区切りで複数指定可。' }
       }), []);
 
       const visibleSettingCategories = useMemo(() => {
@@ -2572,23 +2681,10 @@
                           <label className="text-[10px] font-black text-slate-500 block">対応記録: 実施内容
                             <textarea rows={3} value={adminCaseEditDraft.content || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, content: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
                           </label>
-                          <div>
-                            <span className="text-[10px] font-black text-slate-500">対応ツール（複数選択可）</span>
-                            <div className="mt-1 flex flex-wrap gap-1.5">
-                              {(masters?.supportTools || SUPPORT_TOOLS).map(tool => {
-                                const checked = (adminCaseEditDraft.tools || []).includes(tool);
-                                return (
-                                  <label key={tool} className={`flex items-center gap-1 px-2.5 py-1 rounded-xl border-2 cursor-pointer text-[10px] font-bold transition-all select-none ${checked ? 'border-teal-500 bg-teal-50 text-teal-700' : 'border-slate-100 bg-white text-slate-500 hover:border-slate-300'}`}>
-                                    <input type="checkbox" className="hidden" checked={checked} onChange={() => {
-                                      const cur = adminCaseEditDraft.tools || [];
-                                      setAdminCaseEditDraft(prev => ({ ...prev, tools: checked ? cur.filter(t => t !== tool) : [...cur, tool] }));
-                                    }} />
-                                    {tool}
-                                  </label>
-                                );
-                              })}
-                            </div>
-                          </div>
+                          {renderToolSelector(adminCaseEditDraft.tools || [], (tool) => {
+                            const cur = adminCaseEditDraft.tools || [];
+                            setAdminCaseEditDraft(prev => ({ ...prev, tools: cur.includes(tool) ? cur.filter(t => t !== tool) : [...cur, tool] }));
+                          }, true)}
                           <label className="text-[10px] font-black text-slate-500 block">備考: 内部メモ
                             <textarea rows={2} value={adminCaseEditDraft.remarks || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, remarks: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
                           </label>
@@ -2969,6 +3065,10 @@
                       className="w-full border-2 border-slate-100 rounded-xl p-3 text-xs font-bold outline-none focus:border-teal-500 leading-relaxed"
                     />
                   </div>
+                  {emailModal.mode === 'initial' && renderToolSelector(emailModal.tools || [], (tool) => {
+                    const current = emailModal.tools || [];
+                    setEmailModal({...emailModal, tools: current.includes(tool) ? current.filter(t => t !== tool) : [...current, tool]});
+                  }, true)}
                   <button
                     onClick={handleSendEmail}
                     disabled={submitting}
@@ -3002,14 +3102,31 @@
                 <div className="flex justify-between items-center mb-6">
                   <div>
                     <h3 className="font-black text-lg text-slate-800">
-                      {modalMode === 'schedule' ? '日程の確定・変更' : modalMode === 'report' ? '実施記録・完了報告' : '記録の修正'}
+                      {modalMode === 'assignOnly' ? '担当設定（メールなし）' : modalMode === 'schedule' ? '日程の確定・変更' : modalMode === 'report' ? '実施記録・完了報告' : '記録の修正'}
                     </h3>
                     <p className="text-[10px] font-bold text-slate-400 mt-0.5">
-                      {modalMode === 'schedule' ? '対応日時を設定します（カレンダー登録は任意）' : modalMode === 'report' ? 'ステータスを「完了」に変更します' : 'データを上書き保存します'}
+                      {modalMode === 'assignOnly' ? 'メールを送信せずに担当します。対応ツールが分かっていれば選択してください。' : modalMode === 'schedule' ? '対応日時を設定します（カレンダー登録は任意）' : modalMode === 'report' ? 'ステータスを「完了」に変更します' : 'データを上書き保存します'}
                     </p>
                   </div>
                   <button onClick={() => { setModalMode(null); setPendingFiles([]); setExistingAttachments([]); setDragOverAttachments(false); }}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
                 </div>
+                {modalMode === 'assignOnly' && (
+                  <div className="space-y-6">
+                    {renderToolSelector(assignToolsSelection, (tool) => {
+                      setAssignToolsSelection(prev => prev.includes(tool) ? prev.filter(t => t !== tool) : [...prev, tool]);
+                    }, true)}
+                    <button
+                      type="button"
+                      onClick={handleAssignOnlySubmit}
+                      disabled={submitting}
+                      className="relative w-full py-4 text-white rounded-xl font-black text-sm transition-all bg-slate-800 hover:bg-slate-900 shadow-lg shadow-slate-200"
+                    >
+                      <span className={submitting ? 'invisible' : ''}>担当する（メールなし）</span>
+                      {submitting && <Loader2 size={18} className="animate-spin absolute inset-0 m-auto"/>}
+                    </button>
+                  </div>
+                )}
+                {modalMode !== 'assignOnly' && (
                 <form onSubmit={handleEditSave} className="space-y-6">
                   {(modalMode === 'schedule' || modalMode === 'edit' || modalMode === 'report') && (
                     <div className="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100 space-y-4">
@@ -3050,30 +3167,10 @@
                       )}
                     </div>
                   )}
-                  {(modalMode === 'report' || modalMode === 'edit') && (
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><CheckCircle2 size={10}/> 対応ツール（複数選択可）</label>
-                      <div className="flex flex-wrap gap-2">
-                        {(masters?.supportTools || SUPPORT_TOOLS).map(tool => {
-                          const checked = (editFormData.tools || []).includes(tool);
-                          return (
-                            <label key={tool} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border-2 cursor-pointer text-xs font-bold transition-all select-none ${checked ? 'border-teal-500 bg-teal-50 text-teal-700' : 'border-slate-100 bg-white text-slate-500 hover:border-slate-300'}`}>
-                              <input
-                                type="checkbox"
-                                className="hidden"
-                                checked={checked}
-                                onChange={() => {
-                                  const current = editFormData.tools || [];
-                                  setEditFormData({...editFormData, tools: checked ? current.filter(t => t !== tool) : [...current, tool]});
-                                }}
-                              />
-                              {tool}
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
+                  {(modalMode === 'schedule' || modalMode === 'report' || modalMode === 'edit') && renderToolSelector(editFormData.tools || [], (tool) => {
+                    const current = editFormData.tools || [];
+                    setEditFormData({...editFormData, tools: current.includes(tool) ? current.filter(t => t !== tool) : [...current, tool]});
+                  }, true)}
                   {(modalMode === 'report' || modalMode === 'edit') && (
                     <div className="space-y-1">
                       <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><FileText size={10}/> 実施記録・メモ</label>
@@ -3169,6 +3266,7 @@
                     {submitting && <Loader2 size={18} className="animate-spin absolute inset-0 m-auto"/>}
                   </button>
                 </form>
+                )}
               </div>
             </div>
           )}

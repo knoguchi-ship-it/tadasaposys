@@ -455,13 +455,15 @@ function getAllCasesJoined() {
 // ======================================================================
 // 案件アサイン
 // ======================================================================
-function assignCase(caseId, user) {
+function assignCase(caseId, user, tools) {
   var actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, true);
 
   var ss = getSpreadsheet_();
   var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
   var data = sheet.getDataRange().getValues();
+
+  var toolsVal = Array.isArray(tools) && tools.length > 0 ? JSON.stringify(tools) : '[]';
 
   var rowIndex = -1;
   for (var i = 1; i < data.length; i++) {
@@ -474,7 +476,7 @@ function assignCase(caseId, user) {
   if (rowIndex === -1) {
     sheet.appendRow([
       caseId, 'inProgress', actor.email, actor.name,
-      null, 1, null, null, null, null, null, null, null, null, '[]', '', ''
+      null, 1, null, null, null, null, null, null, null, null, '[]', '', '', toolsVal
     ]);
   } else {
     var before = {
@@ -485,6 +487,9 @@ function assignCase(caseId, user) {
     sheet.getRange(rowIndex, IDX.RECORDS.STATUS + 1).setValue('inProgress');
     sheet.getRange(rowIndex, IDX.RECORDS.STAFF_EMAIL + 1).setValue(actor.email);
     sheet.getRange(rowIndex, IDX.RECORDS.STAFF_NAME + 1).setValue(actor.name);
+    if (toolsVal !== '[]') {
+      sheet.getRange(rowIndex, IDX.RECORDS.TOOLS + 1).setValue(toolsVal);
+    }
     appendAuditLog_(actor, 'assign_case', 'case', caseId, before, {
       status: 'inProgress',
       staffEmail: actor.email,
@@ -984,14 +989,14 @@ function getAllStaffEmails_() {
  * 案件を担当し、初回メールを送信する。
  * Gmail API でスレッドIDを取得し、サポート記録に保存する。
  */
-function assignAndSendEmail(caseId, user, subject, body, cc, bcc) {
+function assignAndSendEmail(caseId, user, subject, body, cc, bcc, tools) {
   var actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, true);
 
   var recipientEmail = getRecipientEmail_(caseId);
   if (!recipientEmail) throw new Error('案件が見つかりません: ' + caseId);
 
-  assignCase(caseId, actor);
+  assignCase(caseId, actor, tools);
 
   // Gmail API で送信（新規スレッド開始）
   var result = sendInThread_(recipientEmail, subject, body, null, null, cc || null, bcc || null);
@@ -1451,6 +1456,20 @@ function getMasters() {
       if (!raw) return null; // nullのときフロントエンドでデフォルトにフォールバック
       return raw.split(',').map(function(s) { return s.trim(); }).filter(function(s) { return s; });
     })(),
+    toolMonthlyLimits: (function() {
+      var raw = getSetting_('TOOL_MONTHLY_LIMITS', '');
+      if (!raw) return {};
+      var result = {};
+      raw.split(',').forEach(function(pair) {
+        var parts = pair.split(':');
+        if (parts.length === 2) {
+          var name = parts[0].trim();
+          var limit = parseInt(parts[1].trim(), 10);
+          if (name && !isNaN(limit) && limit > 0) result[name] = limit;
+        }
+      });
+      return result;
+    })(),
     emailTemplates: {
       initialSubject: getSetting_('MAIL_INITIAL_SUBJECT', 'タダサポ｜ご相談を承りました'),
       initialBody: getSetting_('MAIL_INITIAL_BODY', '{{名前}} 様\n\nこの度はタダサポへご相談いただきありがとうございます。\n担当させていただきます{{担当者名}}と申します。\n\n以下の内容で受付いたしました。\n\n----------------\n【ご相談内容】\n{{相談内容}}\n----------------\n\n追ってサポート日時のご連絡をさせていただきます。\n\n何かご不明な点がございましたら、お気軽にお問い合わせください。\n\n今後ともよろしくお願いいたします。'),
@@ -1478,7 +1497,8 @@ function getEditableSettingsKeys_() {
     'ZOOM_ACCOUNT_ID',
     'ZOOM_CLIENT_ID',
     'ZOOM_CLIENT_SECRET',
-    'SUPPORT_TOOLS'
+    'SUPPORT_TOOLS',
+    'TOOL_MONTHLY_LIMITS'
   ];
 }
 
