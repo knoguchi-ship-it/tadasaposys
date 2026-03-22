@@ -2436,12 +2436,13 @@
                                     <button onClick={async (ev) => {
                                       ev.stopPropagation();
                                       const next = subs.filter(x => x.email !== s.email);
+                                      startSubmit('サブ担当更新中...');
                                       try {
                                         const result = await Api.updateSubStaff(selectedCase.id, next);
                                         var subRemoveId = selectedCase.id;
                                         setCases(prev => prev.map(c => c.id === subRemoveId ? { ...c, subStaff: result.subStaff } : c));
                                         showToast('サブ担当を解除しました', { type: 'success' });
-                                      } catch(e) { showToast(e.message, { type: 'error', title: 'サブ担当エラー' }); }
+                                      } catch(e) { showToast(e.message, { type: 'error', title: 'サブ担当エラー' }); } finally { setSubmitting(false); }
                                     }} className="ml-0.5 hover:text-rose-500"><X size={9}/></button>
                                   )}
                                 </span>
@@ -2464,13 +2465,14 @@
                                           {filtered.map(s => (
                                             <button key={s.email} onClick={async () => {
                                               const next = [...subs, { email: s.email, name: s.name }];
+                                              setInlineEditField(null); setSubStaffSearch('');
+                                              startSubmit('サブ担当更新中...');
                                               try {
-                                                setInlineEditField(null); setSubStaffSearch('');
                                                 const result = await Api.updateSubStaff(selectedCase.id, next);
                                                 var subAddId = selectedCase.id;
                                                 setCases(prev => prev.map(c => c.id === subAddId ? { ...c, subStaff: result.subStaff } : c));
                                                 showToast(s.name + ' をサブ担当に追加しました', { type: 'success' });
-                                              } catch(e) { showToast(e.message, { type: 'error', title: 'サブ担当エラー' }); }
+                                              } catch(e) { showToast(e.message, { type: 'error', title: 'サブ担当エラー' }); } finally { setSubmitting(false); }
                                             }} className="w-full text-left px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-violet-50 flex items-center gap-2">
                                               <UserIcon size={12} className="text-violet-400"/> {s.name}
                                             </button>
