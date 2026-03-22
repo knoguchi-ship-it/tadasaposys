@@ -2263,7 +2263,7 @@
                           if (c.status === 'completed' && c.scheduledDateTime) {
                             const sd = new Date(c.scheduledDateTime);
                             const impl = sd.getFullYear() + '/' + String(sd.getMonth() + 1).padStart(2, '0') + '/' + String(sd.getDate()).padStart(2, '0');
-                            return '【' + impl + '】 ' + base;
+                            return impl + ' | ' + base;
                           }
                           return base;
                         })()}</span>
