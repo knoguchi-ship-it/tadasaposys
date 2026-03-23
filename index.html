@@ -78,7 +78,7 @@
       AlertTriangle, FileText, Clock, Info, CheckCircle2,
       Mail, Send, Reply, RotateCcw, Search, Filter, XCircle,
       Paperclip, UploadCloud, Trash2, Shield, Settings2, Save,
-      Bell, BellOff, ExternalLink, Plus, ClipboardList, Copy
+      Bell, BellOff, ExternalLink, Plus, ClipboardList, Copy, Pencil
     } from 'lucide-react';
 
     // ======================================================================
@@ -702,6 +702,20 @@
         return new Promise((resolve, reject) => {
           google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).updateSupportHistory(caseId, roundIndex, patch);
         });
+      },
+      updateMeetUrl: (caseId, newUrl) => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            mockCases = mockCases.map(c => {
+              if (c.id !== caseId) return c;
+              return { ...c, meetUrl: newUrl || '' };
+            });
+            resolve({ meetUrl: newUrl || '' });
+          }, 300));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).updateMeetUrl(caseId, newUrl);
+        });
       }
     };
 
@@ -820,6 +834,8 @@
       const [openThreadId, setOpenThreadId] = useState(null);
       const [historyEditIdx, setHistoryEditIdx] = useState(null); // 編集中の履歴インデックス (null=非編集)
       const [historyEditDraft, setHistoryEditDraft] = useState({});
+      const [meetUrlEditing, setMeetUrlEditing] = useState(false); // URL編集モード
+      const [meetUrlDraft, setMeetUrlDraft] = useState('');
       const [adminPanelData, setAdminPanelData] = useState(null);
       const [adminPanelLoading, setAdminPanelLoading] = useState(false);
       const [adminRoleDialogOpen, setAdminRoleDialogOpen] = useState(false);
@@ -1164,6 +1180,8 @@
         setThreadGroups([]);
         setHistoryEditIdx(null);
         setHistoryEditDraft({});
+        setMeetUrlEditing(false);
+        setMeetUrlDraft('');
         if (!selectedCaseId) return;
         // selectedCase はレンダー時に最新値が取れるので ref 不要で直接参照
         if (selectedCase && selectedCase.status === 'unhandled') return;
@@ -1628,6 +1646,31 @@
           showToast('過去の対応記録を更新しました。', { type: 'success', title: '履歴更新' });
         } catch(e) {
           showToast(e.message || String(e), { type: 'error', title: '履歴更新エラー' });
+        } finally {
+          setSubmitting(false);
+        }
+      };
+
+      // Meet/Zoom URL 編集
+      const startMeetUrlEdit = () => {
+        setMeetUrlEditing(true);
+        setMeetUrlDraft(selectedCase?.meetUrl || '');
+      };
+      const cancelMeetUrlEdit = () => {
+        setMeetUrlEditing(false);
+        setMeetUrlDraft('');
+      };
+      const handleSaveMeetUrl = async () => {
+        if (!selectedCase) return;
+        startSubmit('URLを更新中...');
+        try {
+          var result = await Api.updateMeetUrl(selectedCase.id, meetUrlDraft);
+          setCases(prev => prev.map(c => c.id === selectedCase.id ? { ...c, meetUrl: result.meetUrl } : c));
+          showToast('URL更新', 'URLを更新しました。カレンダーにも反映されます。', 'success');
+          setMeetUrlEditing(false);
+          setMeetUrlDraft('');
+        } catch(e) {
+          showToast('エラー', e.message, 'error');
         } finally {
           setSubmitting(false);
         }
@@ -2756,18 +2799,37 @@
                           <span className="text-sm font-black">{selectedCase.method || <span className="text-slate-400">未定</span>}</span>
                         </div>
                       </div>
-                      {selectedCase.meetUrl && (
-                        <div className={`border p-4 rounded-2xl flex items-center gap-3 ${
-                          selectedCase.meetUrl.includes('zoom.us') ? 'bg-blue-50 border-blue-100' : 'bg-indigo-50 border-indigo-100'
-                        }`}>
-                          <div className={`text-white p-2 rounded-lg ${selectedCase.meetUrl.includes('zoom.us') ? 'bg-blue-500' : 'bg-indigo-500'}`}><Video size={16}/></div>
+                      {selectedCase.meetUrl && !meetUrlEditing && (() => {
+                        var isZoom = selectedCase.meetUrl.includes('zoom.us');
+                        return (
+                        <div className={`border p-4 rounded-2xl flex items-center gap-3 ${isZoom ? 'bg-blue-50 border-blue-100' : 'bg-indigo-50 border-indigo-100'}`}>
+                          <div className={`text-white p-2 rounded-lg ${isZoom ? 'bg-blue-500' : 'bg-indigo-500'}`}><Video size={16}/></div>
                           <div className="flex-1 min-w-0">
-                            <p className={`text-[10px] font-black uppercase ${selectedCase.meetUrl.includes('zoom.us') ? 'text-blue-400' : 'text-indigo-400'}`}>
-                              {selectedCase.meetUrl.includes('zoom.us') ? 'Zoom URL' : 'Google Meet URL'}
+                            <p className={`text-[10px] font-black uppercase ${isZoom ? 'text-blue-400' : 'text-indigo-400'}`}>
+                              {isZoom ? 'Zoom URL' : 'Google Meet URL'}
                             </p>
-                            <a href={selectedCase.meetUrl} target="_blank" rel="noreferrer" className={`text-sm font-bold truncate block hover:underline ${selectedCase.meetUrl.includes('zoom.us') ? 'text-blue-700' : 'text-indigo-700'}`}>{selectedCase.meetUrl}</a>
+                            <a href={selectedCase.meetUrl} target="_blank" rel="noreferrer" className={`text-sm font-bold truncate block hover:underline ${isZoom ? 'text-blue-700' : 'text-indigo-700'}`}>{selectedCase.meetUrl}</a>
                           </div>
-                          <button onClick={() => { navigator.clipboard.writeText(selectedCase.meetUrl).then(() => showToast('URLをコピーしました', { type: 'success' })); }} className={`shrink-0 p-2 rounded-lg transition-colors ${selectedCase.meetUrl.includes('zoom.us') ? 'hover:bg-blue-100 text-blue-500' : 'hover:bg-indigo-100 text-indigo-500'}`} title="URLをコピー"><Copy size={16}/></button>
+                          <button onClick={() => { navigator.clipboard.writeText(selectedCase.meetUrl).then(() => showToast('URLをコピーしました', { type: 'success' })); }} className={`shrink-0 p-2 rounded-lg transition-colors ${isZoom ? 'hover:bg-blue-100 text-blue-500' : 'hover:bg-indigo-100 text-indigo-500'}`} title="URLをコピー"><Copy size={16}/></button>
+                          {!isReadOnlyMode && (
+                            <button onClick={startMeetUrlEdit} className={`shrink-0 p-2 rounded-lg transition-colors ${isZoom ? 'hover:bg-blue-100 text-blue-500' : 'hover:bg-indigo-100 text-indigo-500'}`} title="URLを編集"><Pencil size={16}/></button>
+                          )}
+                        </div>
+                        );
+                      })()}
+                      {meetUrlEditing && (
+                        <div className="border-2 border-indigo-200 p-4 rounded-2xl bg-indigo-50/50 space-y-3">
+                          <div className="flex items-center gap-2">
+                            <Video size={16} className="text-indigo-500"/>
+                            <span className="text-xs font-black text-indigo-600">URL編集</span>
+                          </div>
+                          <input type="url" value={meetUrlDraft} onChange={e => setMeetUrlDraft(e.target.value)}
+                            placeholder="https://meet.google.com/... または https://zoom.us/..."
+                            className="w-full border-2 border-white bg-white rounded-xl p-3 text-xs font-bold outline-none focus:border-indigo-500 shadow-sm"/>
+                          <div className="flex justify-end gap-2">
+                            <button onClick={cancelMeetUrlEdit} className="px-4 py-2 text-xs font-bold text-slate-500 bg-white border border-slate-200 rounded-xl hover:bg-slate-50">キャンセル</button>
+                            <button onClick={handleSaveMeetUrl} disabled={submitting} className="px-4 py-2 text-xs font-bold text-white bg-indigo-500 rounded-xl hover:bg-indigo-600 disabled:opacity-50">保存</button>
+                          </div>
                         </div>
                       )}
                       {selectedCase.tools && selectedCase.tools.length > 0 && (

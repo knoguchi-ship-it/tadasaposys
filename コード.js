@@ -1297,20 +1297,57 @@ function createGoogleMeetEvent(title, startTime, description) {
 
   try {
     var eventId = created.getId().replace('@google.com', '');
-    var calEvent = Calendar.Events.get('primary', eventId);
+    var calEvent = Calendar.Events.get(calendarId || 'primary', eventId);
     calEvent.conferenceData = {
       createRequest: { requestId: Utilities.getUuid(), conferenceSolutionKey: { type: 'hangoutsMeet' } }
     };
-    var updated = Calendar.Events.patch(calEvent, 'primary', calEvent.id, { conferenceDataVersion: 1 });
+    var updated = Calendar.Events.patch(calEvent, calendarId || 'primary', calEvent.id, { conferenceDataVersion: 1 });
     if (updated.conferenceData && updated.conferenceData.entryPoints) {
       var videoEntry = updated.conferenceData.entryPoints.find(function(ep) { return ep.entryPointType === 'video'; });
-      if (videoEntry) return { meetUrl: videoEntry.uri, eventId: created.getId() };
+      if (videoEntry) {
+        // descriptionにもMeet URLを記載
+        Calendar.Events.patch({ description: 'Google Meet URL: ' + videoEntry.uri + '\n\n' + (description || '') }, calendarId || 'primary', calEvent.id);
+        return { meetUrl: videoEntry.uri, eventId: created.getId() };
+      }
     }
   } catch(e) {
     console.log('Calendar Advanced Service未設定のため簡易URL使用: ' + e.message);
   }
 
   return { meetUrl: 'https://meet.google.com/lookup/' + Utilities.getUuid().substring(0, 10), eventId: created.getId() };
+}
+
+// ======================================================================
+// 既存カレンダーイベントの日時を更新
+// ======================================================================
+function updateCalendarEventDateTime_(eventId, newStartTime) {
+  if (!eventId) return;
+  try {
+    var calendarId = getSetting_('SHARED_CALENDAR_ID', 'primary') || 'primary';
+    var cleanId = String(eventId).replace('@google.com', '');
+    var start = new Date(newStartTime);
+    var end = new Date(start.getTime() + 60 * 60 * 1000);
+    Calendar.Events.patch({
+      start: { dateTime: start.toISOString() },
+      end: { dateTime: end.toISOString() }
+    }, calendarId, cleanId);
+  } catch(e) {
+    console.log('カレンダーイベント日時更新エラー: ' + e.message);
+  }
+}
+
+// ======================================================================
+// 既存カレンダーイベントのdescriptionを更新
+// ======================================================================
+function updateCalendarEventDescription_(eventId, newDescription) {
+  if (!eventId) return;
+  try {
+    var calendarId = getSetting_('SHARED_CALENDAR_ID', 'primary') || 'primary';
+    var cleanId = String(eventId).replace('@google.com', '');
+    Calendar.Events.patch({ description: newDescription }, calendarId, cleanId);
+  } catch(e) {
+    console.log('カレンダーイベント説明更新エラー: ' + e.message);
+  }
 }
 
 function parseJsonArray_(value) {
@@ -1424,6 +1461,8 @@ function updateSupportRecord(recordData) {
   var newMeetUrl = null;
   var newEventId = null;
 
+  var currentEventId = data[rowIndex - 1][IDX.RECORDS.EVENT_ID];
+
   // skipCalendar=true の場合はカレンダー・Meet・Zoom登録をスキップ
   if (recordData.scheduledDateTime && !currentMeetUrl && !recordData.skipCalendar) {
     if (recordData.method === 'GoogleMeet') {
@@ -1445,6 +1484,9 @@ function updateSupportRecord(recordData) {
         });
       } catch(e) { console.error('Zoom作成エラー: ' + e.message); }
     }
+  } else if (recordData.scheduledDateTime && currentEventId && !recordData.skipCalendar) {
+    // 既存カレンダーイベントの日時を更新
+    updateCalendarEventDateTime_(currentEventId, recordData.scheduledDateTime);
   }
 
   // 添付ファイル処理（バッチ書き込みの前に解決）
@@ -2213,6 +2255,60 @@ function updateSubStaff(caseId, subStaffArray) {
   sheet.getRange(rowIndex, IDX.RECORDS.SUB_STAFF + 1).setValue(JSON.stringify(validated));
   appendAuditLog_(actor, 'update_sub_staff', 'case', caseId, { subStaff: before }, { subStaff: JSON.stringify(validated) });
   return { subStaff: validated };
+}
+
+// ======================================================================
+// Meet/Zoom URL の更新
+// ======================================================================
+
+/**
+ * 案件のMeet/Zoom URLを更新する。カレンダーイベントのdescriptionも同期更新。
+ * @param {string} caseId - 案件ID
+ * @param {string} newUrl - 新しいURL（空文字で削除）
+ * @returns {object} { meetUrl }
+ */
+function updateMeetUrl(caseId, newUrl) {
+  var actor = getActor_();
+  ensureCaseEditableByActor_(caseId, actor, false);
+
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  var data = sheet.getDataRange().getValues();
+  var rowIndex = -1;
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][IDX.RECORDS.FK]) === String(caseId)) {
+      rowIndex = i + 1;
+      break;
+    }
+  }
+  if (rowIndex === -1) throw new Error('レコードが見つかりません: ' + caseId);
+
+  var row = data[rowIndex - 1];
+  var beforeUrl = row[IDX.RECORDS.MEET_URL] || '';
+  var eventId = row[IDX.RECORDS.EVENT_ID];
+  var url = (newUrl || '').trim();
+
+  // MEET_URL 列を更新
+  sheet.getRange(rowIndex, IDX.RECORDS.MEET_URL + 1).setValue(url);
+
+  // カレンダーイベントのdescriptionも更新
+  if (eventId) {
+    var casesSheet = ss.getSheetByName(SHEET_NAMES.CASES);
+    var casesData = casesSheet.getDataRange().getValues();
+    var details = '';
+    for (var j = 1; j < casesData.length; j++) {
+      if (String(casesData[j][IDX.CASES.PK]) === String(caseId)) {
+        details = casesData[j][IDX.CASES.DETAILS] || '';
+        break;
+      }
+    }
+    var label = url.includes('zoom.us') ? 'Zoom URL' : url.includes('meet.google') ? 'Google Meet URL' : 'URL';
+    var desc = url ? (label + ': ' + url + '\n\n' + details) : details;
+    updateCalendarEventDescription_(eventId, desc);
+  }
+
+  appendAuditLog_(actor, 'update_meet_url', 'case', caseId, { meetUrl: beforeUrl }, { meetUrl: url });
+  return { meetUrl: url };
 }
 
 // ======================================================================
