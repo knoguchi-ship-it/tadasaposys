@@ -1284,55 +1284,82 @@ function createZoomMeeting(title, startTime, durationMinutes) {
 // ======================================================================
 // Google Meet カレンダー予定作成
 // ======================================================================
+/**
+ * Google Calendar + Google Meet イベント作成
+ * CalendarApp でイベント作成 → Calendar Advanced Service で conferenceData 付与
+ *
+ * SHARED_CALENDAR_ID の扱い:
+ *   - 未設定/空/primary → CalendarApp.getDefaultCalendar() を使用
+ *   - 具体的なカレンダーID → CalendarApp.getCalendarById(id) を使用
+ *   - Calendar Advanced Service 側は 'primary' エイリアスまたは具体ID
+ */
 function createGoogleMeetEvent(title, startTime, description) {
   var start = new Date(startTime);
   var end = new Date(start.getTime() + 60 * 60 * 1000);
-  var calendarId = getSetting_('SHARED_CALENDAR_ID', 'primary');
+  var sharedCalId = getSetting_('SHARED_CALENDAR_ID', '');
 
-  var event = CalendarApp.getCalendarById(calendarId || 'primary')
-    || CalendarApp.getDefaultCalendar();
-  var created = (typeof event.createEvent === 'function')
-    ? event.createEvent(title, start, end, { description: description })
-    : CalendarApp.getDefaultCalendar().createEvent(title, start, end, { description: description });
+  // CalendarApp: 'primary' は認識しないので getDefaultCalendar() を使う
+  var cal;
+  if (sharedCalId && sharedCalId !== 'primary') {
+    cal = CalendarApp.getCalendarById(sharedCalId);
+  }
+  if (!cal) {
+    cal = CalendarApp.getDefaultCalendar();
+  }
+  var created = cal.createEvent(title, start, end, { description: description || '' });
+
+  // Calendar Advanced Service 用のカレンダーID
+  var apiCalId = getApiCalendarId_();
+  // CalendarApp.getId() は "xxx@google.com" 形式。Advanced Service はその @google.com なしを使う
+  var rawEventId = created.getId();
+  var cleanEventId = rawEventId.replace('@google.com', '');
 
   try {
-    var eventId = created.getId().replace('@google.com', '');
-    var calEvent = Calendar.Events.get(calendarId || 'primary', eventId);
+    var calEvent = Calendar.Events.get(apiCalId, cleanEventId);
     calEvent.conferenceData = {
       createRequest: { requestId: Utilities.getUuid(), conferenceSolutionKey: { type: 'hangoutsMeet' } }
     };
-    var updated = Calendar.Events.patch(calEvent, calendarId || 'primary', calEvent.id, { conferenceDataVersion: 1 });
+    var updated = Calendar.Events.patch(calEvent, apiCalId, calEvent.id, { conferenceDataVersion: 1 });
     if (updated.conferenceData && updated.conferenceData.entryPoints) {
       var videoEntry = updated.conferenceData.entryPoints.find(function(ep) { return ep.entryPointType === 'video'; });
       if (videoEntry) {
         // descriptionにもMeet URLを記載
-        Calendar.Events.patch({ description: 'Google Meet URL: ' + videoEntry.uri + '\n\n' + (description || '') }, calendarId || 'primary', calEvent.id);
-        return { meetUrl: videoEntry.uri, eventId: created.getId() };
+        Calendar.Events.patch({ description: 'Google Meet URL: ' + videoEntry.uri + '\n\n' + (description || '') }, apiCalId, calEvent.id);
+        console.log('Google Meet作成成功: ' + videoEntry.uri + ' eventId=' + rawEventId);
+        return { meetUrl: videoEntry.uri, eventId: rawEventId };
       }
     }
+    console.warn('conferenceData.entryPoints にvideoが見つかりません');
   } catch(e) {
-    console.log('Calendar Advanced Service未設定のため簡易URL使用: ' + e.message);
+    console.error('Calendar Advanced Serviceエラー: ' + e.message + ' (apiCalId=' + apiCalId + ', eventId=' + cleanEventId + ')');
   }
 
-  return { meetUrl: 'https://meet.google.com/lookup/' + Utilities.getUuid().substring(0, 10), eventId: created.getId() };
+  // フォールバック: Meet URLは自動生成できなかったが、カレンダーイベントは作成済み
+  return { meetUrl: '', eventId: rawEventId };
 }
 
 // ======================================================================
 // 既存カレンダーイベントの日時を更新
 // ======================================================================
+function getApiCalendarId_() {
+  var sharedCalId = getSetting_('SHARED_CALENDAR_ID', '');
+  return (sharedCalId && sharedCalId !== 'primary') ? sharedCalId : 'primary';
+}
+
 function updateCalendarEventDateTime_(eventId, newStartTime) {
   if (!eventId) return;
   try {
-    var calendarId = getSetting_('SHARED_CALENDAR_ID', 'primary') || 'primary';
+    var apiCalId = getApiCalendarId_();
     var cleanId = String(eventId).replace('@google.com', '');
     var start = new Date(newStartTime);
     var end = new Date(start.getTime() + 60 * 60 * 1000);
     Calendar.Events.patch({
       start: { dateTime: start.toISOString() },
       end: { dateTime: end.toISOString() }
-    }, calendarId, cleanId);
+    }, apiCalId, cleanId);
+    console.log('カレンダーイベント日時更新成功: eventId=' + cleanId);
   } catch(e) {
-    console.log('カレンダーイベント日時更新エラー: ' + e.message);
+    console.error('カレンダーイベント日時更新エラー: ' + e.message + ' (eventId=' + eventId + ')');
   }
 }
 
@@ -1342,11 +1369,12 @@ function updateCalendarEventDateTime_(eventId, newStartTime) {
 function updateCalendarEventDescription_(eventId, newDescription) {
   if (!eventId) return;
   try {
-    var calendarId = getSetting_('SHARED_CALENDAR_ID', 'primary') || 'primary';
+    var apiCalId = getApiCalendarId_();
     var cleanId = String(eventId).replace('@google.com', '');
-    Calendar.Events.patch({ description: newDescription }, calendarId, cleanId);
+    Calendar.Events.patch({ description: newDescription }, apiCalId, cleanId);
+    console.log('カレンダーイベント説明更新成功: eventId=' + cleanId);
   } catch(e) {
-    console.log('カレンダーイベント説明更新エラー: ' + e.message);
+    console.error('カレンダーイベント説明更新エラー: ' + e.message + ' (eventId=' + eventId + ')');
   }
 }
 
@@ -1477,9 +1505,12 @@ function updateSupportRecord(recordData) {
         var zoomResult = createZoomMeeting(eventTitle, recordData.scheduledDateTime, 60);
         newEventId = String(zoomResult.meetingId);
         newMeetUrl = zoomResult.joinUrl;
-        var start = new Date(recordData.scheduledDateTime);
-        var end = new Date(start.getTime() + 60 * 60 * 1000);
-        CalendarApp.getDefaultCalendar().createEvent(eventTitle, start, end, {
+        var zStart = new Date(recordData.scheduledDateTime);
+        var zEnd = new Date(zStart.getTime() + 60 * 60 * 1000);
+        var zSharedCalId = getSetting_('SHARED_CALENDAR_ID', '');
+        var zCal = (zSharedCalId && zSharedCalId !== 'primary') ? CalendarApp.getCalendarById(zSharedCalId) : null;
+        if (!zCal) zCal = CalendarApp.getDefaultCalendar();
+        zCal.createEvent(eventTitle, zStart, zEnd, {
           description: 'Zoom URL: ' + zoomResult.joinUrl + '\n\n' + (recordData.details || '')
         });
       } catch(e) { console.error('Zoom作成エラー: ' + e.message); }
