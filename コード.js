@@ -2215,6 +2215,68 @@ function updateSubStaff(caseId, subStaffArray) {
   return { subStaff: validated };
 }
 
+// ======================================================================
+// 過去の対応記録（supportHistory）の編集
+// ======================================================================
+
+/**
+ * supportHistory 配列内の指定 roundIndex の記録を更新する。
+ * 編集可能フィールド: scheduledDateTime, method, content, remarks, tools
+ * @param {string} caseId - 案件ID
+ * @param {number} roundIndex - 履歴配列内のインデックス（0始まり）
+ * @param {object} patch - 更新するフィールド
+ * @returns {object} 更新後の supportHistory 配列
+ */
+function updateSupportHistory(caseId, roundIndex, patch) {
+  var actor = getActor_();
+  ensureCaseEditableByActor_(caseId, actor, false);
+
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  var data = sheet.getDataRange().getValues();
+  var rowIndex = -1;
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][IDX.RECORDS.FK]) === String(caseId)) {
+      rowIndex = i + 1;
+      break;
+    }
+  }
+  if (rowIndex === -1) throw new Error('レコードが見つかりません: ' + caseId);
+
+  var row = data[rowIndex - 1];
+  var historyJson = row[IDX.RECORDS.HISTORY] ? String(row[IDX.RECORDS.HISTORY]) : '[]';
+  var history = [];
+  try { history = JSON.parse(historyJson); } catch(e) { history = []; }
+
+  var idx = Number(roundIndex);
+  if (!isFinite(idx) || idx < 0 || idx >= history.length) {
+    throw new Error('指定された履歴インデックスが範囲外です: ' + roundIndex);
+  }
+
+  var before = JSON.parse(JSON.stringify(history[idx]));
+
+  // 編集可能フィールドのみ更新
+  if (patch.hasOwnProperty('scheduledDateTime')) {
+    history[idx].scheduledDateTime = patch.scheduledDateTime || null;
+  }
+  if (patch.hasOwnProperty('method')) {
+    history[idx].method = patch.method || null;
+  }
+  if (patch.hasOwnProperty('content')) {
+    history[idx].content = patch.content || null;
+  }
+  if (patch.hasOwnProperty('remarks')) {
+    history[idx].remarks = patch.remarks || null;
+  }
+  if (patch.hasOwnProperty('tools')) {
+    history[idx].tools = Array.isArray(patch.tools) ? patch.tools : [];
+  }
+
+  sheet.getRange(rowIndex, IDX.RECORDS.HISTORY + 1).setValue(JSON.stringify(history));
+  appendAuditLog_(actor, 'update_support_history', 'case', caseId, { roundIndex: idx, before: before }, { roundIndex: idx, after: history[idx] });
+  return { supportHistory: history };
+}
+
 function setCaseStatusAdmin(caseId, status) {
   var actor = requireAdmin_();
   ensureAdminSchema_();
