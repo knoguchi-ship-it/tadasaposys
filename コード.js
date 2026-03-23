@@ -1286,56 +1286,66 @@ function createZoomMeeting(title, startTime, durationMinutes) {
 // ======================================================================
 /**
  * Google Calendar + Google Meet イベント作成
- * CalendarApp でイベント作成 → Calendar Advanced Service で conferenceData 付与
- *
- * SHARED_CALENDAR_ID の扱い:
- *   - 未設定/空/primary → CalendarApp.getDefaultCalendar() を使用
- *   - 具体的なカレンダーID → CalendarApp.getCalendarById(id) を使用
- *   - Calendar Advanced Service 側は 'primary' エイリアスまたは具体ID
+ * Calendar Advanced Service (Events.insert) でイベントと Meet を同時作成する。
+ * conferenceDataVersion: 1 を指定することで、Google Meet が自動発行される。
  */
 function createGoogleMeetEvent(title, startTime, description) {
   var start = new Date(startTime);
   var end = new Date(start.getTime() + 60 * 60 * 1000);
-  var sharedCalId = getSetting_('SHARED_CALENDAR_ID', '');
-
-  // CalendarApp: 'primary' は認識しないので getDefaultCalendar() を使う
-  var cal;
-  if (sharedCalId && sharedCalId !== 'primary') {
-    cal = CalendarApp.getCalendarById(sharedCalId);
-  }
-  if (!cal) {
-    cal = CalendarApp.getDefaultCalendar();
-  }
-  var created = cal.createEvent(title, start, end, { description: description || '' });
-
-  // Calendar Advanced Service 用のカレンダーID
   var apiCalId = getApiCalendarId_();
-  // CalendarApp.getId() は "xxx@google.com" 形式。Advanced Service はその @google.com なしを使う
-  var rawEventId = created.getId();
-  var cleanEventId = rawEventId.replace('@google.com', '');
 
-  try {
-    var calEvent = Calendar.Events.get(apiCalId, cleanEventId);
-    calEvent.conferenceData = {
-      createRequest: { requestId: Utilities.getUuid(), conferenceSolutionKey: { type: 'hangoutsMeet' } }
-    };
-    var updated = Calendar.Events.patch(calEvent, apiCalId, calEvent.id, { conferenceDataVersion: 1 });
-    if (updated.conferenceData && updated.conferenceData.entryPoints) {
-      var videoEntry = updated.conferenceData.entryPoints.find(function(ep) { return ep.entryPointType === 'video'; });
-      if (videoEntry) {
-        // descriptionにもMeet URLを記載
-        Calendar.Events.patch({ description: 'Google Meet URL: ' + videoEntry.uri + '\n\n' + (description || '') }, apiCalId, calEvent.id);
-        console.log('Google Meet作成成功: ' + videoEntry.uri + ' eventId=' + rawEventId);
-        return { meetUrl: videoEntry.uri, eventId: rawEventId };
+  // Calendar Advanced Service で直接イベント+Meet を作成
+  var eventResource = {
+    summary: title,
+    description: description || '',
+    start: {
+      dateTime: Utilities.formatDate(start, 'Asia/Tokyo', "yyyy-MM-dd'T'HH:mm:ss"),
+      timeZone: 'Asia/Tokyo'
+    },
+    end: {
+      dateTime: Utilities.formatDate(end, 'Asia/Tokyo', "yyyy-MM-dd'T'HH:mm:ss"),
+      timeZone: 'Asia/Tokyo'
+    },
+    conferenceData: {
+      createRequest: {
+        requestId: Utilities.getUuid(),
+        conferenceSolutionKey: { type: 'hangoutsMeet' }
       }
     }
-    console.warn('conferenceData.entryPoints にvideoが見つかりません');
-  } catch(e) {
-    console.error('Calendar Advanced Serviceエラー: ' + e.message + ' (apiCalId=' + apiCalId + ', eventId=' + cleanEventId + ')');
-  }
+  };
 
-  // フォールバック: Meet URLは自動生成できなかったが、カレンダーイベントは作成済み
-  return { meetUrl: '', eventId: rawEventId };
+  try {
+    var created = Calendar.Events.insert(eventResource, apiCalId, { conferenceDataVersion: 1 });
+    var meetUrl = '';
+    if (created.conferenceData && created.conferenceData.entryPoints) {
+      var videoEntry = created.conferenceData.entryPoints.find(function(ep) { return ep.entryPointType === 'video'; });
+      if (videoEntry) meetUrl = videoEntry.uri;
+    }
+    if (meetUrl) {
+      // descriptionにもMeet URLを記載（カレンダーの説明欄からもアクセス可能に）
+      Calendar.Events.patch({
+        description: 'Google Meet URL: ' + meetUrl + '\n\n' + (description || '')
+      }, apiCalId, created.id);
+      console.log('Google Meet作成成功: ' + meetUrl + ' eventId=' + created.id);
+    } else {
+      console.warn('conferenceData.entryPoints にvideoが見つかりません eventId=' + created.id);
+    }
+    return { meetUrl: meetUrl, eventId: created.id };
+  } catch(e) {
+    console.error('Calendar Events.insert エラー: ' + e.message + ' (apiCalId=' + apiCalId + ')');
+    // フォールバック: CalendarApp でイベントだけ作成（Meetなし）
+    try {
+      var sharedCalId = getSetting_('SHARED_CALENDAR_ID', '');
+      var cal = (sharedCalId && sharedCalId !== 'primary') ? CalendarApp.getCalendarById(sharedCalId) : null;
+      if (!cal) cal = CalendarApp.getDefaultCalendar();
+      var fallback = cal.createEvent(title, start, end, { description: description || '' });
+      console.log('フォールバック: CalendarAppでイベント作成 eventId=' + fallback.getId());
+      return { meetUrl: '', eventId: fallback.getId() };
+    } catch(e2) {
+      console.error('CalendarApp フォールバックも失敗: ' + e2.message);
+      return { meetUrl: '', eventId: '' };
+    }
+  }
 }
 
 // ======================================================================
