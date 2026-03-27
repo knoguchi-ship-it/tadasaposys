@@ -78,7 +78,8 @@
       AlertTriangle, FileText, Clock, Info, CheckCircle2,
       Mail, Send, Reply, RotateCcw, Search, Filter, XCircle,
       Paperclip, UploadCloud, Trash2, Shield, Settings2, Save,
-      Bell, BellOff, ExternalLink, Plus, ClipboardList, Copy, Pencil
+      Bell, BellOff, ExternalLink, Plus, ClipboardList, Copy, Pencil,
+      HelpCircle, BookOpen, ArrowRight, ChevronDown, ChevronUp
     } from 'lucide-react';
 
     // ======================================================================
@@ -782,6 +783,22 @@
       );
     }
 
+    // ヘルプ用アコーディオンセクション
+    function HelpSection({ icon, title, children, defaultOpen }) {
+      const [open, setOpen] = useState(defaultOpen !== false);
+      return (
+        <div className="border border-slate-200 rounded-xl overflow-hidden">
+          <button onClick={() => setOpen(!open)}
+            className="w-full flex items-center gap-3 px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors text-left">
+            <span className="text-teal-600">{icon}</span>
+            <span className="flex-1 text-sm font-black text-slate-800">{title}</span>
+            {open ? <ChevronUp size={14} className="text-slate-400"/> : <ChevronDown size={14} className="text-slate-400"/>}
+          </button>
+          {open && <div className="px-4 py-3 space-y-3 text-xs leading-relaxed text-slate-600">{children}</div>}
+        </div>
+      );
+    }
+
     // ======================================================================
     // 5. Main Component (App)
     // ======================================================================
@@ -859,6 +876,9 @@
       const [filterPrefWord, setFilterPrefWord] = useState('');
       const [filterPrefOpen, setFilterPrefOpen] = useState(false);
       const [inlineLimitDraft, setInlineLimitDraft] = useState('');
+
+      // ヘルプ
+      const [helpOpen, setHelpOpen] = useState(false);
 
       // Dialog state
       const [toasts, setToasts] = useState([]);
@@ -2036,13 +2056,201 @@
           {/* Confirm Dialog */}
           <ConfirmDialog dialog={confirmDialog} onClose={() => setConfirmDialog(null)} />
 
+          {/* Help Modal */}
+          {helpOpen && (() => {
+            const Step = ({ n, children }) => (
+              <div className="flex gap-2.5 items-start">
+                <span className="shrink-0 w-5 h-5 rounded-full bg-teal-100 text-teal-700 flex items-center justify-center text-[10px] font-black mt-0.5">{n}</span>
+                <span className="font-bold">{children}</span>
+              </div>
+            );
+            const Kbd = ({ children }) => (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-lg bg-slate-100 border border-slate-200 text-[10px] font-black text-slate-600 mx-0.5">{children}</span>
+            );
+            const Tip = ({ children }) => (
+              <div className="flex gap-2 items-start p-2.5 rounded-lg bg-amber-50 border border-amber-100">
+                <Info size={12} className="text-amber-500 shrink-0 mt-0.5"/>
+                <span className="text-[11px] font-bold text-amber-700">{children}</span>
+              </div>
+            );
+            return (
+              <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[300] p-4 animate-in fade-in" onClick={e => { if (e.target === e.currentTarget) setHelpOpen(false); }}>
+                <div className="bg-white w-full max-w-2xl max-h-[85vh] rounded-2xl shadow-2xl flex flex-col animate-in zoom-in duration-200">
+                  <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+                    <div className="flex items-center gap-2.5">
+                      <div className="bg-teal-100 p-2 rounded-xl"><BookOpen size={18} className="text-teal-600"/></div>
+                      <div>
+                        <h2 className="text-base font-black text-slate-800">操作マニュアル</h2>
+                        <p className="text-[10px] font-bold text-slate-400">タダサポ管理システムの使い方</p>
+                      </div>
+                    </div>
+                    <button onClick={() => setHelpOpen(false)} className="p-2 rounded-xl hover:bg-slate-100 transition-colors"><X size={18} className="text-slate-400"/></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+
+                    <HelpSection icon={<Eye size={16}/>} title="画面の見かた" defaultOpen={true}>
+                      <p>画面は<Kbd>左: 案件リスト</Kbd>と<Kbd>右: 案件詳細</Kbd>の2カラム構成です。左のリストから案件をクリックすると、右に詳細が表示されます。</p>
+                      <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-2">
+                        <p className="text-[10px] font-black text-slate-500 uppercase">表示モード</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <div className="p-2 rounded-lg bg-white border border-slate-200">
+                            <p className="font-black text-slate-800 text-[11px] mb-1">通常</p>
+                            <p className="text-[10px] text-slate-500">自分の担当案件のみ表示</p>
+                          </div>
+                          <div className="p-2 rounded-lg bg-white border border-slate-200">
+                            <p className="font-black text-slate-800 text-[11px] mb-1">閲覧</p>
+                            <p className="text-[10px] text-slate-500">全メンバーの案件を閲覧</p>
+                          </div>
+                          <div className="p-2 rounded-lg bg-white border border-amber-200 bg-amber-50">
+                            <p className="font-black text-amber-700 text-[11px] mb-1">管理</p>
+                            <p className="text-[10px] text-amber-600">管理者のみ。全案件の編集可</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-2">
+                        <p className="text-[10px] font-black text-slate-500 uppercase">タブの種類</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {[
+                            { name: '未対応', color: 'bg-rose-100 text-rose-700', desc: '対応待ち' },
+                            { name: '対応中', color: 'bg-sky-100 text-sky-700', desc: '担当者がアサイン済み' },
+                            { name: '完了', color: 'bg-emerald-100 text-emerald-700', desc: '対応完了' },
+                            { name: 'キャンセル', color: 'bg-amber-100 text-amber-700', desc: '取消済み' },
+                            { name: '対応不可', color: 'bg-slate-100 text-slate-600', desc: '回数超過等' },
+                            { name: '全て', color: 'bg-indigo-100 text-indigo-700', desc: '一括表示' }
+                          ].map(t => (
+                            <span key={t.name} className={`px-2 py-1 rounded-lg text-[10px] font-black ${t.color}`} title={t.desc}>{t.name}</span>
+                          ))}
+                        </div>
+                      </div>
+                    </HelpSection>
+
+                    <HelpSection icon={<UserIcon size={16}/>} title="案件を担当する（アサイン）">
+                      <Step n="1">未対応タブから案件を選択</Step>
+                      <Step n="2">右パネルで<Kbd>担当する</Kbd>または<Kbd>担当する + メール送信</Kbd>をクリック</Step>
+                      <Step n="3">対応ツールを選択（任意・複数選択可）</Step>
+                      <Step n="4">メール送信の場合は件名・本文を確認して送信</Step>
+                      <Tip>「担当する」はメールなしで即アサイン。相手へ連絡が必要な場合は「担当する + メール送信」を使います。</Tip>
+                    </HelpSection>
+
+                    <HelpSection icon={<Calendar size={16}/>} title="日程を確定する">
+                      <Step n="1">対応中の案件を選択</Step>
+                      <Step n="2"><Kbd>日程確定</Kbd>ボタンをクリック</Step>
+                      <Step n="3">日時・対応方法（GoogleMeet / Zoom / 電話 / 対面）を選択</Step>
+                      <Step n="4">保存するとカレンダーに予定が作成されます</Step>
+                      <Tip>GoogleMeetの場合は自動でMeet URLが発行され、カレンダーに「Meetに参加する」ボタンが追加されます。</Tip>
+                    </HelpSection>
+
+                    <HelpSection icon={<CheckCircle size={16}/>} title="完了報告をする">
+                      <Step n="1">対応中の案件を選択</Step>
+                      <Step n="2"><Kbd>完了報告</Kbd>ボタンをクリック</Step>
+                      <Step n="3">対応内容・備考を入力</Step>
+                      <Step n="4">必要に応じてファイルを添付（ドラッグ&ドロップ可・最大5件）</Step>
+                      <Step n="5">保存で対応完了</Step>
+                    </HelpSection>
+
+                    <HelpSection icon={<RotateCcw size={16}/>} title="案件を再開する">
+                      <p>完了済みの案件で追加対応が必要な場合、再開できます。</p>
+                      <Step n="1">完了タブから案件を選択</Step>
+                      <Step n="2"><Kbd>案件を再開</Kbd>ボタンをクリック</Step>
+                      <Step n="3">確認ダイアログで「再開する」を選択</Step>
+                      <Tip>再開すると対応回数が +1 され、前回の記録は「過去の対応記録」に保存されます。案件の対応上限（通常3回）に達している場合は再開できません。</Tip>
+                    </HelpSection>
+
+                    <HelpSection icon={<Mail size={16}/>} title="メールを送る">
+                      <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-2">
+                        <p className="text-[10px] font-black text-slate-500 uppercase">メールの種類</p>
+                        <div className="space-y-1.5">
+                          <div className="flex items-start gap-2"><span className="shrink-0 text-teal-600"><Send size={11}/></span><span><strong>初回メール</strong> — アサイン時に自動送信（テンプレート使用）</span></div>
+                          <div className="flex items-start gap-2"><span className="shrink-0 text-sky-600"><Mail size={11}/></span><span><strong>新規メール</strong> — 案件詳細の「新規メール」から送信</span></div>
+                          <div className="flex items-start gap-2"><span className="shrink-0 text-indigo-600"><Reply size={11}/></span><span><strong>返信</strong> — メール履歴のスレッドから返信</span></div>
+                        </div>
+                      </div>
+                      <Tip>CC/BCCはメール作成画面で個別に設定できます。管理設定で全メールに自動CCを追加することも可能です。</Tip>
+                    </HelpSection>
+
+                    <HelpSection icon={<Search size={16}/>} title="案件を検索する">
+                      <Step n="1">リスト上部の<Kbd>検索</Kbd>ボタンをクリック</Step>
+                      <Step n="2">キーワード・期間・都道府県・サービス種別・担当者等で絞り込み</Step>
+                      <p>期間プリセット（今月・先月・今年度・前年度）を使うと素早く絞り込めます。適用中のフィルタはチップで表示され、個別に解除できます。</p>
+                    </HelpSection>
+
+                    <HelpSection icon={<Video size={16}/>} title="Meet / Zoom URLを変更する">
+                      <Step n="1">案件詳細のURL横にある<Kbd>編集</Kbd>アイコンをクリック</Step>
+                      <Step n="2">新しいURLを入力して保存</Step>
+                      <Tip>保存するとカレンダーイベントの「Meetに参加する」ボタンのリンク先と、説明文のURL行が自動で更新されます。既存のメモは保持されます。</Tip>
+                    </HelpSection>
+
+                    <HelpSection icon={<Paperclip size={16}/>} title="ファイルを添付する">
+                      <p>日程確定・完了報告・記録修正の際にファイルを添付できます。</p>
+                      <Step n="1">フォーム内の添付エリアにファイルをドラッグ&ドロップ、またはクリックして選択</Step>
+                      <Step n="2">1回の保存につき最大5件まで添付可能</Step>
+                      <Tip>添付ファイルは Google Drive のフォルダに保存されます。管理設定で保存先フォルダを指定できます。</Tip>
+                    </HelpSection>
+
+                    <HelpSection icon={<AlertTriangle size={16}/>} title="回数超過（対応不可）">
+                      <p>年間の利用回数が上限（通常10回）に達した場合：</p>
+                      <Step n="1">未対応タブに<Kbd>回数超過</Kbd>ボタンが表示されます</Step>
+                      <Step n="2">クリックすると回数超過メールを送信</Step>
+                      <Step n="3">案件ステータスが「対応不可」に変更されます</Step>
+                      <Tip>管理者は案件ごとに上限の特例設定が可能です。</Tip>
+                    </HelpSection>
+
+                    {user?.isAdmin && (
+                      <HelpSection icon={<Shield size={16}/>} title="管理者メニュー">
+                        <p>管理モードに切り替えると、以下の機能が使えます：</p>
+                        <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <div className="flex items-start gap-2 p-2 rounded-lg bg-white border border-slate-200">
+                              <Plus size={12} className="text-teal-600 shrink-0 mt-0.5"/>
+                              <div><p className="font-black text-[11px] text-slate-800">新規案件</p><p className="text-[10px] text-slate-500">手動で案件を追加</p></div>
+                            </div>
+                            <div className="flex items-start gap-2 p-2 rounded-lg bg-white border border-slate-200">
+                              <Shield size={12} className="text-amber-600 shrink-0 mt-0.5"/>
+                              <div><p className="font-black text-[11px] text-slate-800">権限管理</p><p className="text-[10px] text-slate-500">メンバーの追加・権限変更</p></div>
+                            </div>
+                            <div className="flex items-start gap-2 p-2 rounded-lg bg-white border border-slate-200">
+                              <Settings2 size={12} className="text-sky-600 shrink-0 mt-0.5"/>
+                              <div><p className="font-black text-[11px] text-slate-800">設定管理</p><p className="text-[10px] text-slate-500">上限値・メールテンプレート等</p></div>
+                            </div>
+                            <div className="flex items-start gap-2 p-2 rounded-lg bg-white border border-slate-200">
+                              <ClipboardList size={12} className="text-violet-600 shrink-0 mt-0.5"/>
+                              <div><p className="font-black text-[11px] text-slate-800">データ抽出</p><p className="text-[10px] text-slate-500">案件データのCSV出力</p></div>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="p-3 rounded-xl bg-slate-50 border border-slate-100 space-y-2">
+                          <p className="text-[10px] font-black text-slate-500 uppercase">案件の管理操作</p>
+                          <div className="space-y-1.5 text-[11px]">
+                            <p><strong>担当者の再アサイン</strong> — 案件詳細の担当者名をクリックして変更</p>
+                            <p><strong>ステータス変更</strong> — ステータスラベルをクリックして直接変更</p>
+                            <p><strong>案件情報の編集</strong> — 「編集」ボタンで事業所名・メール等を修正</p>
+                            <p><strong>回数上限の特例</strong> — 案件ごと / 年間の上限値を個別に設定</p>
+                            <p><strong>案件の削除</strong> — 詳細パネル内の削除ボタン（復元不可）</p>
+                          </div>
+                        </div>
+                      </HelpSection>
+                    )}
+
+                  </div>
+                  <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
+                    <p className="text-[10px] text-slate-400 text-center font-bold">ご不明な点は管理者にお問い合わせください</p>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Header */}
           <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-3 sm:px-4 lg:px-6 shrink-0 z-20 shadow-sm">
             <div className="flex items-center gap-3">
               <div className="bg-teal-600 text-white p-1.5 rounded-lg"><Activity size={18} /></div>
               <span className="font-black text-base tracking-tighter hidden sm:inline">タダサポ管理</span>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <button onClick={() => setHelpOpen(true)} title="操作マニュアル"
+                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-slate-100 transition-colors text-slate-400 hover:text-teal-600">
+                <HelpCircle size={18} />
+              </button>
               <div className="text-right hidden sm:block">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ログイン中</p>
                 <p className="text-xs font-bold text-slate-700">{user?.name}</p>
