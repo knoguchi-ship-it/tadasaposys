@@ -2332,20 +2332,32 @@ function updateMeetUrl(caseId, newUrl) {
   // MEET_URL 列を更新
   sheet.getRange(rowIndex, IDX.RECORDS.MEET_URL + 1).setValue(url);
 
-  // カレンダーイベントのdescriptionも更新
+  // カレンダーイベントのdescriptionを取得し、URL行だけを差し替え（メモを保持）
   if (eventId) {
-    var casesSheet = ss.getSheetByName(SHEET_NAMES.CASES);
-    var casesData = casesSheet.getDataRange().getValues();
-    var details = '';
-    for (var j = 1; j < casesData.length; j++) {
-      if (String(casesData[j][IDX.CASES.PK]) === String(caseId)) {
-        details = casesData[j][IDX.CASES.DETAILS] || '';
-        break;
+    try {
+      var apiCalId = getApiCalendarId_();
+      var cleanId = String(eventId).replace('@google.com', '');
+      var event = Calendar.Events.get(apiCalId, cleanId);
+      var existingDesc = event.description || '';
+
+      // 既存のURL行（"...URL: http..."）を除去
+      var urlLinePattern = /^(Google Meet URL|Zoom URL|URL)\s*[:：]\s*https?:\/\/\S+\s*/gm;
+      var stripped = existingDesc.replace(urlLinePattern, '');
+      // 先頭の空行を整理
+      stripped = stripped.replace(/^\n+/, '');
+
+      // 新しいURL行を先頭に挿入
+      var newDesc;
+      if (url) {
+        var label = url.indexOf('zoom.us') !== -1 ? 'Zoom URL' : url.indexOf('meet.google') !== -1 ? 'Google Meet URL' : 'URL';
+        newDesc = label + ': ' + url + (stripped ? '\n\n' + stripped : '');
+      } else {
+        newDesc = stripped;
       }
+      updateCalendarEventDescription_(eventId, newDesc);
+    } catch (e) {
+      console.error('カレンダーURL差し替えエラー: ' + e.message + ' (eventId=' + eventId + ')');
     }
-    var label = url.includes('zoom.us') ? 'Zoom URL' : url.includes('meet.google') ? 'Google Meet URL' : 'URL';
-    var desc = url ? (label + ': ' + url + '\n\n' + details) : details;
-    updateCalendarEventDescription_(eventId, desc);
   }
 
   appendAuditLog_(actor, 'update_meet_url', 'case', caseId, { meetUrl: beforeUrl }, { meetUrl: url });
