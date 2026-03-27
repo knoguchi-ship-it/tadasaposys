@@ -1096,7 +1096,7 @@
         return counts;
       }, [cases, toolMonthlyLimits]);
 
-      // 当月の依頼件数（全ステータス対象）
+      // 当月の依頼件数（cancelled除外 — 「全て」タブと同じ基準）
       // 手動追加案件（PK="manual_xxx"）はnew Date()でInvalid Dateになるため
       // dateLabel（yyyy/MM/dd）優先、フォールバックでtimestampとmanual_接頭辞を処理
       const monthlyCaseCount = useMemo(() => {
@@ -1104,6 +1104,7 @@
         const thisYear = now.getFullYear();
         const thisMonthNum = now.getMonth() + 1; // 1-indexed
         return cases.filter(c => {
+          if (c.status === 'cancelled') return false;
           // dateLabel（"yyyy/MM/dd"）があればそれを使う（バックエンドがJST変換済み）
           if (c.dateLabel) {
             var parts = c.dateLabel.split('/');
