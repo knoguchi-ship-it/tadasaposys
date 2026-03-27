@@ -381,12 +381,13 @@
                 remarks: c.remarks || null,
                 meetUrl: c.meetUrl || null,
                 attachments: c.attachments || [],
+                tools: c.tools || [],
                 staffName: c.staffName || null,
                 staffEmail: c.staffEmail || null
               });
               return { ...c, status: 'inProgress', supportCount: (c.supportCount || 1) + 1,
                 supportHistory: history,
-                scheduledDateTime: null, method: null, content: null, remarks: null, eventId: null, meetUrl: null, attachments: [] };
+                scheduledDateTime: null, method: null, content: null, remarks: null, eventId: null, meetUrl: null, attachments: [], tools: [] };
             });
             resolve();
           }, 300));
@@ -1037,6 +1038,7 @@
       const effectiveAnnualLimit = selectedCase?.annualLimitOverride || masters?.limits?.annual || 10;
 
       // ツール月間上限: 当月の使用件数を全案件から集計
+      // 現在回（c.tools）だけでなく、supportHistory 内の過去回のツールもカウントする
       const toolMonthlyLimits = masters?.toolMonthlyLimits || {};
       const toolMonthlyUsage = useMemo(() => {
         const limitedTools = Object.keys(toolMonthlyLimits);
@@ -1045,18 +1047,37 @@
         const thisMonth = now.getFullYear() * 100 + (now.getMonth() + 1); // YYYYMM
         const counts = {};
         limitedTools.forEach(t => { counts[t] = 0; });
+        // 月判定ヘルパー
+        const isThisMonth = (dateStr) => {
+          if (!dateStr) return false;
+          var d = new Date(dateStr);
+          return d.getFullYear() * 100 + (d.getMonth() + 1) === thisMonth;
+        };
         cases.forEach(c => {
           if (c.status !== 'inProgress' && c.status !== 'completed') return;
-          if (!Array.isArray(c.tools) || !c.tools.length) return;
-          // 日付から月を判定（scheduledDateTime優先、なければtimestamp）
-          var dateStr = c.scheduledDateTime || c.timestamp;
-          if (!dateStr) return;
-          var d = new Date(dateStr);
-          var caseMonth = d.getFullYear() * 100 + (d.getMonth() + 1);
-          if (caseMonth !== thisMonth) return;
-          limitedTools.forEach(t => {
-            if (c.tools.includes(t)) counts[t]++;
-          });
+          // 現在回のツールをカウント（scheduledDateTime優先、なければtimestamp）
+          var currentTools = Array.isArray(c.tools) ? c.tools : [];
+          if (currentTools.length > 0) {
+            var dateStr = c.scheduledDateTime || c.timestamp;
+            if (isThisMonth(dateStr)) {
+              limitedTools.forEach(t => {
+                if (currentTools.includes(t)) counts[t]++;
+              });
+            }
+          }
+          // supportHistory 内の過去回もカウント
+          if (Array.isArray(c.supportHistory)) {
+            c.supportHistory.forEach(h => {
+              var hTools = Array.isArray(h.tools) ? h.tools : [];
+              if (!hTools.length) return;
+              var hDate = h.scheduledDateTime || c.timestamp;
+              if (isThisMonth(hDate)) {
+                limitedTools.forEach(t => {
+                  if (hTools.includes(t)) counts[t]++;
+                });
+              }
+            });
+          }
         });
         return counts;
       }, [cases, toolMonthlyLimits]);
