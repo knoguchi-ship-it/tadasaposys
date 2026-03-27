@@ -975,14 +975,28 @@
             var haystack = [c.officeName, c.requesterName, c.email, c.details, c.serviceType, c.prefecture, c.staffName, subStaffNames].filter(Boolean).join(' ').toLowerCase();
             if (haystack.indexOf(kw) === -1) return false;
           }
-          // 期間検索
-          if (searchDateFrom) {
-            var from = new Date(searchDateFrom); from.setHours(0,0,0,0);
-            if (new Date(c.timestamp) < from) return false;
-          }
-          if (searchDateTo) {
-            var to = new Date(searchDateTo); to.setHours(23,59,59,999);
-            if (new Date(c.timestamp) > to) return false;
+          // 期間検索（manual_接頭辞の手動案件にも対応）
+          if (searchDateFrom || searchDateTo) {
+            var tsRaw = c.timestamp || '';
+            var caseDate;
+            if (c.dateLabel) {
+              // dateLabel "yyyy/MM/dd" をパース（JSTで生成済み）
+              caseDate = new Date(c.dateLabel.replace(/\//g, '-'));
+            } else if (tsRaw.startsWith('manual_')) {
+              var epoch = Number(tsRaw.replace('manual_', ''));
+              caseDate = isFinite(epoch) ? new Date(epoch) : new Date(NaN);
+            } else {
+              caseDate = new Date(tsRaw);
+            }
+            if (isNaN(caseDate.getTime())) return false; // 日付不明の案件は除外
+            if (searchDateFrom) {
+              var from = new Date(searchDateFrom); from.setHours(0,0,0,0);
+              if (caseDate < from) return false;
+            }
+            if (searchDateTo) {
+              var to = new Date(searchDateTo); to.setHours(23,59,59,999);
+              if (caseDate > to) return false;
+            }
           }
           if (searchPrefecture && c.prefecture !== searchPrefecture) return false;
           if (searchServiceType && c.serviceType !== searchServiceType) return false;
@@ -1082,13 +1096,31 @@
         return counts;
       }, [cases, toolMonthlyLimits]);
 
-      // 当月の依頼件数（timestamp基準で全ステータス対象）
+      // 当月の依頼件数（全ステータス対象）
+      // 手動追加案件（PK="manual_xxx"）はnew Date()でInvalid Dateになるため
+      // dateLabel（yyyy/MM/dd）優先、フォールバックでtimestampとmanual_接頭辞を処理
       const monthlyCaseCount = useMemo(() => {
         const now = new Date();
-        const thisMonth = now.getFullYear() * 100 + (now.getMonth() + 1);
+        const thisYear = now.getFullYear();
+        const thisMonthNum = now.getMonth() + 1; // 1-indexed
         return cases.filter(c => {
-          var d = new Date(c.timestamp);
-          return d.getFullYear() * 100 + (d.getMonth() + 1) === thisMonth;
+          // dateLabel（"yyyy/MM/dd"）があればそれを使う（バックエンドがJST変換済み）
+          if (c.dateLabel) {
+            var parts = c.dateLabel.split('/');
+            return Number(parts[0]) === thisYear && Number(parts[1]) === thisMonthNum;
+          }
+          // dateLabelが空の場合: manual_ 接頭辞からエポックミリ秒を復元
+          var ts = c.timestamp || '';
+          if (ts.startsWith('manual_')) {
+            var epoch = Number(ts.replace('manual_', ''));
+            if (isFinite(epoch)) {
+              var md = new Date(epoch);
+              return md.getFullYear() === thisYear && md.getMonth() + 1 === thisMonthNum;
+            }
+          }
+          // その他: 通常のDate解析
+          var d = new Date(ts);
+          return !isNaN(d.getTime()) && d.getFullYear() === thisYear && d.getMonth() + 1 === thisMonthNum;
         }).length;
       }, [cases]);
 
