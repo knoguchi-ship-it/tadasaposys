@@ -2332,7 +2332,7 @@ function updateMeetUrl(caseId, newUrl) {
   // MEET_URL 列を更新
   sheet.getRange(rowIndex, IDX.RECORDS.MEET_URL + 1).setValue(url);
 
-  // カレンダーイベントのdescriptionを取得し、URL行だけを差し替え（メモを保持）
+  // カレンダーイベントのdescription + conferenceData（「Meetに参加する」ボタン）を更新
   if (eventId) {
     try {
       var apiCalId = getApiCalendarId_();
@@ -2343,7 +2343,6 @@ function updateMeetUrl(caseId, newUrl) {
       // 既存のURL行（"...URL: http..."）を除去
       var urlLinePattern = /^(Google Meet URL|Zoom URL|URL)\s*[:：]\s*https?:\/\/\S+\s*/gm;
       var stripped = existingDesc.replace(urlLinePattern, '');
-      // 先頭の空行を整理
       stripped = stripped.replace(/^\n+/, '');
 
       // 新しいURL行を先頭に挿入
@@ -2354,7 +2353,32 @@ function updateMeetUrl(caseId, newUrl) {
       } else {
         newDesc = stripped;
       }
-      updateCalendarEventDescription_(eventId, newDesc);
+
+      // patch用オブジェクトを構築
+      var patchBody = { description: newDesc };
+
+      // 「Google Meetに参加する」ボタン（conferenceData）の更新
+      var isMeetUrl = url && url.indexOf('meet.google.com/') !== -1;
+      if (isMeetUrl) {
+        // Meet URLからミーティングコードを抽出（例: abc-defg-hij）
+        var meetCode = url.replace(/.*meet\.google\.com\//, '').replace(/[?#].*$/, '');
+        patchBody.conferenceData = {
+          conferenceId: meetCode,
+          conferenceSolution: {
+            key: { type: 'hangoutsMeet' },
+            name: 'Google Meet'
+          },
+          entryPoints: [
+            { entryPointType: 'video', uri: url, label: meetCode }
+          ]
+        };
+      } else if (event.conferenceData) {
+        // Meet以外のURL or URL削除 → conferenceDataをクリア（古いボタンが残らないように）
+        patchBody.conferenceData = null;
+      }
+
+      Calendar.Events.patch(patchBody, apiCalId, cleanId, { conferenceDataVersion: 1 });
+      console.log('カレンダーイベント更新成功: eventId=' + cleanId + ' url=' + url);
     } catch (e) {
       console.error('カレンダーURL差し替えエラー: ' + e.message + ' (eventId=' + eventId + ')');
     }
