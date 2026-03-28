@@ -656,9 +656,14 @@
       addManualCase: (payload) => {
         if (IS_LOCAL) {
           return new Promise(resolve => setTimeout(() => {
-            var pk = 'manual_' + Date.now();
+            var baseTime = payload.applicationDate
+              ? new Date(payload.applicationDate + 'T12:00:00+09:00').getTime()
+              : Date.now();
+            var pk = 'manual_' + baseTime;
+            var bd = new Date(baseTime);
+            var dateLabel = bd.getFullYear() + '/' + String(bd.getMonth()+1).padStart(2,'0') + '/' + String(bd.getDate()).padStart(2,'0');
             var newCase = {
-              id: pk, timestamp: pk,
+              id: pk, timestamp: pk, dateLabel: dateLabel,
               email: payload.email,
               officeName: payload.officeName,
               requesterName: payload.requesterName,
@@ -1079,45 +1084,42 @@
       const effectiveCaseLimit = selectedCase?.caseLimitOverride || masters?.limits?.caseSupport || 3;
       const effectiveAnnualLimit = selectedCase?.annualLimitOverride || masters?.limits?.annual || 10;
 
-      // ツール月間上限: 当月の使用件数を全案件から集計
-      // 現在回（c.tools）だけでなく、supportHistory 内の過去回のツールもカウントする
+      // ツール月間上限: 当月の申込件数（受付日ベース）を全案件から集計
+      // 案件の受付日（dateLabel / timestamp）で当月判定し、案件ごとに1回カウント
       const toolMonthlyLimits = masters?.toolMonthlyLimits || {};
       const toolMonthlyUsage = useMemo(() => {
         const limitedTools = Object.keys(toolMonthlyLimits);
         if (!limitedTools.length) return {};
         const now = new Date();
-        const thisMonth = now.getFullYear() * 100 + (now.getMonth() + 1); // YYYYMM
+        const thisYear = now.getFullYear();
+        const thisMonthNum = now.getMonth() + 1; // 1-indexed
         const counts = {};
         limitedTools.forEach(t => { counts[t] = 0; });
-        // 月判定ヘルパー
-        const isThisMonth = (dateStr) => {
-          if (!dateStr) return false;
-          var d = new Date(dateStr);
-          return d.getFullYear() * 100 + (d.getMonth() + 1) === thisMonth;
-        };
-        cases.forEach(c => {
-          if (c.status !== 'inProgress' && c.status !== 'completed') return;
-          // 現在回のツールをカウント（scheduledDateTime優先、なければtimestamp）
-          var currentTools = Array.isArray(c.tools) ? c.tools : [];
-          if (currentTools.length > 0) {
-            var dateStr = c.scheduledDateTime || c.timestamp;
-            if (isThisMonth(dateStr)) {
-              limitedTools.forEach(t => {
-                if (currentTools.includes(t)) counts[t]++;
-              });
+        // 受付日が当月かどうか判定（monthlyCaseCount と同じロジック）
+        const isCaseThisMonth = (c) => {
+          if (c.dateLabel) {
+            var parts = c.dateLabel.split('/');
+            return Number(parts[0]) === thisYear && Number(parts[1]) === thisMonthNum;
+          }
+          var ts = c.timestamp || '';
+          if (ts.startsWith('manual_')) {
+            var epoch = Number(ts.replace('manual_', ''));
+            if (isFinite(epoch)) {
+              var md = new Date(epoch);
+              return md.getFullYear() === thisYear && md.getMonth() + 1 === thisMonthNum;
             }
           }
-          // supportHistory 内の過去回もカウント
-          if (Array.isArray(c.supportHistory)) {
-            c.supportHistory.forEach(h => {
-              var hTools = Array.isArray(h.tools) ? h.tools : [];
-              if (!hTools.length) return;
-              var hDate = h.scheduledDateTime || c.timestamp;
-              if (isThisMonth(hDate)) {
-                limitedTools.forEach(t => {
-                  if (hTools.includes(t)) counts[t]++;
-                });
-              }
+          var d = new Date(ts);
+          return !isNaN(d.getTime()) && d.getFullYear() === thisYear && d.getMonth() + 1 === thisMonthNum;
+        };
+        cases.forEach(c => {
+          if (c.status === 'cancelled') return;
+          if (!isCaseThisMonth(c)) return;
+          // 現在回のツールをカウント
+          var currentTools = Array.isArray(c.tools) ? c.tools : [];
+          if (currentTools.length > 0) {
+            limitedTools.forEach(t => {
+              if (currentTools.includes(t)) counts[t]++;
             });
           }
         });
@@ -4287,7 +4289,7 @@
     function AddCaseDialog({ masters, onClose, onAdded, showToast }) {
       const PREFECTURES = masters?.prefectures || [];
       const SERVICE_TYPES = masters?.businessTypes || [];
-      const [form, setForm] = useState({ email: '', officeName: '', requesterName: '', details: '', prefecture: '', serviceType: '' });
+      const [form, setForm] = useState({ email: '', officeName: '', requesterName: '', details: '', prefecture: '', serviceType: '', applicationDate: '' });
       const [submitting, setSubmitting] = useState(false);
 
       const set = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
@@ -4306,7 +4308,8 @@
             requesterName: form.requesterName.trim(),
             details: form.details.trim(),
             prefecture: form.prefecture || '',
-            serviceType: form.serviceType || ''
+            serviceType: form.serviceType || '',
+            applicationDate: form.applicationDate || ''
           };
           const result = await Api.addManualCase(addPayload);
           onAdded(result.pk, addPayload);
@@ -4342,6 +4345,10 @@
               <div>
                 <label className={labelCls}>お名前 <span className="text-rose-500">*</span></label>
                 <input type="text" className={inputCls} value={form.requesterName} onChange={e => set('requesterName', e.target.value)} placeholder="山田 太郎" />
+              </div>
+              <div>
+                <label className={labelCls}>申込日 <span className="text-[9px] text-slate-400 normal-case tracking-normal font-bold">（空欄の場合は本日）</span></label>
+                <input type="date" className={inputCls} value={form.applicationDate} onChange={e => set('applicationDate', e.target.value)} />
               </div>
               <div className="flex gap-3">
                 <div className="flex-1">

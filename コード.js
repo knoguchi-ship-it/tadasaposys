@@ -2226,7 +2226,15 @@ function addManualCase(payload) {
   var ss = getSpreadsheet_();
   var sheet = ensureCasesManualSheet_(ss);
 
-  var pk = 'manual_' + new Date().getTime();
+  // 申込日が指定されていればそのエポックミリ秒をPKに使用（月間カウントに反映）
+  var baseTime;
+  if (payload.applicationDate) {
+    // "yyyy-MM-dd" → JST正午で生成（日付ずれ防止）
+    baseTime = new Date(payload.applicationDate + 'T12:00:00+09:00').getTime();
+  } else {
+    baseTime = new Date().getTime();
+  }
+  var pk = 'manual_' + baseTime;
   sheet.appendRow([
     pk,
     payload.email,
