@@ -4300,7 +4300,7 @@
         if (!form.officeName.trim())    return showToast('介護事業所名を入力してください。', { type: 'error' });
         if (!form.requesterName.trim()) return showToast('お名前を入力してください。', { type: 'error' });
         if (!form.details.trim())       return showToast('困りごと詳細を入力してください。', { type: 'error' });
-        startSubmit('案件追加中...');
+        setSubmitting(true);
         try {
           var addPayload = {
             email: form.email.trim(),
