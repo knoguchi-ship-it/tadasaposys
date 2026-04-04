@@ -490,7 +490,16 @@ function getAllCasesJoined() {
     // c[IDX.CASES.PK] は GAS が Sheet から読んだ Date オブジェクトのため、
     // String() → new Date() の往復変換を避けて直接 formatDate に渡す
     var pkRaw = c[IDX.CASES.PK];
-    var pkDate = (pkRaw && typeof pkRaw.getTime === 'function') ? pkRaw : new Date(pkRaw);
+    var pkDate;
+    if (pkRaw && typeof pkRaw.getTime === 'function') {
+      pkDate = pkRaw;
+    } else if (typeof pkRaw === 'string' && pkRaw.indexOf('manual_') === 0) {
+      // 手動追加案件: "manual_" + エポックミリ秒 から日付を復元
+      var epoch = Number(pkRaw.replace('manual_', ''));
+      pkDate = isFinite(epoch) ? new Date(epoch) : new Date(NaN);
+    } else {
+      pkDate = new Date(pkRaw);
+    }
     var dateLabel = isNaN(pkDate.getTime()) ? '' : Utilities.formatDate(pkDate, ssTimeZone, 'yyyy/MM/dd');
 
     joinedCases.push({

@@ -290,7 +290,14 @@
       });
       return mockCases.map(function(c) {
         var key = c.email + '_' + getFY(c.timestamp);
-        var dateLabel = (c.timestamp || '').slice(0, 10).replace(/-/g, '/');
+        var dateLabel = (() => {
+          var ts = c.timestamp || '';
+          if (typeof ts === 'string' && ts.indexOf('manual_') === 0) {
+            var epoch = Number(ts.replace('manual_', ''));
+            if (isFinite(epoch)) { var d = new Date(epoch); return d.getFullYear() + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + String(d.getDate()).padStart(2,'0'); }
+          }
+          return ts.slice(0, 10).replace(/-/g, '/');
+        })();
         return { ...c, dateLabel: dateLabel, currentFiscalYearCount: fyCounts[key] || 0 };
       });
     };
@@ -2684,7 +2691,13 @@
                     <div className="min-w-0 flex-1">
                       <div className="flex justify-between items-center mb-1">
                         <span className="text-[9px] font-black text-slate-400">{(() => {
-                          const base = c.dateLabel || new Date(c.timestamp).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' });
+                          const base = c.dateLabel || (() => {
+                            if (typeof c.timestamp === 'string' && c.timestamp.indexOf('manual_') === 0) {
+                              var ep = Number(c.timestamp.replace('manual_', ''));
+                              if (isFinite(ep)) return new Date(ep).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' });
+                            }
+                            return new Date(c.timestamp).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' });
+                          })();
                           if (c.status === 'completed' && c.scheduledDateTime) {
                             const sd = new Date(c.scheduledDateTime);
                             const impl = sd.getFullYear() + '/' + String(sd.getMonth() + 1).padStart(2, '0') + '/' + String(sd.getDate()).padStart(2, '0');
