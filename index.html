@@ -2093,24 +2093,24 @@
       }, [adminPanelData, roleSearchWord, roleStatusFilter, getRoleStatusValue]);
 
       const settingsMeta = useMemo(() => ({
-        ANNUAL_USAGE_LIMIT: { label: '年度利用回数上限', category: 'limits', desc: '1ユーザーの年度内対応上限' },
-        CASE_USAGE_LIMIT: { label: '案件ごとの対応上限', category: 'limits', desc: '1案件あたりの対応上限' },
-        MAIL_FORCE_CC: { label: '通常CCメールアドレス（任意）', category: 'mail', desc: '通常のCCとして追加されます（未設定可）' },
-        MAIL_INITIAL_SUBJECT: { label: '初回メール件名', category: 'mail', desc: '案件の初回送信時に使用' },
-        MAIL_INITIAL_BODY: { label: '初回メール本文', category: 'mail', desc: 'テンプレート本文（タグ利用可）' },
-        MAIL_INITIAL_INCLUDE_DETAILS: { label: '初回メールに相談内容を含める', category: 'mail', desc: 'OFFにすると相談内容ブロック（セパレータ含む）を省略します', type: 'boolean' },
-        MAIL_NEW_BODY: { label: '新規メール本文テンプレート', category: 'mail', desc: '「新規メール送信」時の初期本文。使用可能タグ: {{名前}} {{事業所名}} {{担当者名}}' },
-        MAIL_SCHEDULE_SUBJECT: { label: '日程確定メール件名', category: 'mail', desc: '日程確定時に使用。タグ: {{名前}} {{事業所名}} {{担当者名}}' },
-        MAIL_SCHEDULE_BODY: { label: '日程確定メール本文', category: 'mail', desc: '日程確定時のテンプレート。タグ: {{名前}} {{事業所名}} {{担当者名}} {{日程}} {{対応方法}} {{URL}}' },
-        MAIL_DECLINED_SUBJECT: { label: '回数超過メール件名', category: 'mail', desc: '回数超過時に使用' },
-        MAIL_DECLINED_BODY: { label: '回数超過メール本文', category: 'mail', desc: '回数超過時のテンプレート本文' },
-        SHARED_CALENDAR_ID: { label: '共有カレンダーID', category: 'integration', desc: '予定作成に使用' },
-        ATTACHMENT_FOLDER_ID: { label: '添付保存先フォルダID', category: 'integration', desc: '添付ファイル保存先' },
-        ZOOM_ACCOUNT_ID: { label: 'Zoom Account ID', category: 'integration', desc: 'Zoom連携情報' },
-        ZOOM_CLIENT_ID: { label: 'Zoom Client ID', category: 'integration', desc: 'Zoom連携情報' },
-        ZOOM_CLIENT_SECRET: { label: 'Zoom Client Secret', category: 'integration', desc: 'Zoom連携情報' },
-        SUPPORT_TOOLS: { label: '対応ツール一覧', category: 'tools', type: 'tools', desc: 'フォームの「対応ツール」選択肢を管理します。追加・編集・削除・並び替えができます。' },
-        TOOL_MONTHLY_LIMITS: { label: 'ツール月間上限', category: 'tools', desc: '月間件数上限を設定するツール。形式: ツール名:上限 （例: ケアプランデータ連携システム:30）。カンマ区切りで複数指定可。' }
+        ANNUAL_USAGE_LIMIT: { label: '年度利用回数上限', category: 'limits', order: 1, desc: '1ユーザーの年度内対応上限' },
+        CASE_USAGE_LIMIT: { label: '案件ごとの対応上限', category: 'limits', order: 2, desc: '1案件あたりの対応上限' },
+        MAIL_FORCE_CC: { label: '通常CCメールアドレス（任意）', category: 'mail', order: 1, group: '共通設定', desc: '全メールのCCに追加されます（未設定可）' },
+        MAIL_INITIAL_SUBJECT: { label: '件名', category: 'mail', order: 10, group: '初回メール', desc: '担当設定時に送信するメールの件名' },
+        MAIL_INITIAL_BODY: { label: '本文', category: 'mail', order: 11, desc: '使用可能タグ: {{名前}} {{事業所名}} {{担当者名}} {{相談内容}}' },
+        MAIL_INITIAL_INCLUDE_DETAILS: { label: '本文に相談内容を含める', category: 'mail', order: 12, desc: 'OFFにすると相談内容ブロック（セパレータ含む）を省略します', type: 'boolean' },
+        MAIL_SCHEDULE_SUBJECT: { label: '件名', category: 'mail', order: 20, group: '日程確定メール', desc: '日程確定・変更時に送信するメールの件名' },
+        MAIL_SCHEDULE_BODY: { label: '本文', category: 'mail', order: 21, desc: '使用可能タグ: {{名前}} {{事業所名}} {{担当者名}} {{日程}} {{対応方法}} {{URL}}' },
+        MAIL_NEW_BODY: { label: '本文', category: 'mail', order: 30, group: '新規メール', desc: '「新規メール送信」時の初期本文。タグ: {{名前}} {{事業所名}} {{担当者名}}' },
+        MAIL_DECLINED_SUBJECT: { label: '件名', category: 'mail', order: 40, group: '回数超過メール', desc: '年間利用回数超過時に送信するメールの件名' },
+        MAIL_DECLINED_BODY: { label: '本文', category: 'mail', order: 41, desc: '使用可能タグ: {{名前}} {{事業所名}} {{担当者名}}' },
+        SHARED_CALENDAR_ID: { label: '共有カレンダーID', category: 'integration', order: 1, desc: '予定作成に使用' },
+        ATTACHMENT_FOLDER_ID: { label: '添付保存先フォルダID', category: 'integration', order: 2, desc: '添付ファイル保存先' },
+        ZOOM_ACCOUNT_ID: { label: 'Zoom Account ID', category: 'integration', order: 3, desc: 'Zoom連携情報' },
+        ZOOM_CLIENT_ID: { label: 'Zoom Client ID', category: 'integration', order: 4, desc: 'Zoom連携情報' },
+        ZOOM_CLIENT_SECRET: { label: 'Zoom Client Secret', category: 'integration', order: 5, desc: 'Zoom連携情報' },
+        SUPPORT_TOOLS: { label: '対応ツール一覧', category: 'tools', order: 1, type: 'tools', desc: 'フォームの「対応ツール」選択肢を管理します。追加・編集・削除・並び替えができます。' },
+        TOOL_MONTHLY_LIMITS: { label: 'ツール月間上限', category: 'tools', order: 2, desc: '月間件数上限を設定するツール。形式: ツール名:上限 （例: ケアプランデータ連携システム:30）。カンマ区切りで複数指定可。' }
       }), []);
 
       const visibleSettingCategories = useMemo(() => {
@@ -4057,8 +4057,13 @@
                     ))}
                   </div>
                   <div className="max-h-[65vh] overflow-auto border border-slate-100 rounded-2xl divide-y divide-slate-50">
-                    {Object.keys(settingsDraft || {}).filter(k => (settingsMeta[k]?.category || 'other') === settingsTab).map(key => {
-                      const meta = settingsMeta[key] || { label: key, desc: '' };
+                    {(() => {
+                      const sortedKeys = Object.keys(settingsDraft || {}).filter(k => (settingsMeta[k]?.category || 'other') === settingsTab).sort((a, b) => (settingsMeta[a]?.order || 99) - (settingsMeta[b]?.order || 99));
+                      let lastGroup = null;
+                      return sortedKeys.map(key => {
+                        const meta = settingsMeta[key] || { label: key, desc: '' };
+                        const groupHeader = meta.group && meta.group !== lastGroup ? meta.group : null;
+                        if (meta.group) lastGroup = meta.group;
                       const isTextArea = key.endsWith('_BODY');
                       const isBoolean = meta.type === 'boolean';
                       const isTools = meta.type === 'tools';
@@ -4071,7 +4076,13 @@
                         : [];
                       const updateTools = (arr) => setSettingsDraft(prev => ({ ...prev, [key]: arr.join(',') }));
                       return (
-                        <div key={key} className="p-4 space-y-1">
+                        <React.Fragment key={key}>
+                        {groupHeader && (
+                          <div className="px-4 pt-5 pb-1 bg-slate-50/80 border-t border-slate-200 first:border-t-0">
+                            <p className="text-[11px] font-black text-slate-500 tracking-wide flex items-center gap-1.5"><Mail size={12} className="text-slate-400"/>{groupHeader}</p>
+                          </div>
+                        )}
+                        <div className="p-4 space-y-1">
                           <p className="text-xs font-black text-slate-700">{meta.label}</p>
                           <p className="text-[10px] text-slate-400">{meta.desc}</p>
                           {isTools ? (
@@ -4137,8 +4148,10 @@
                             />
                           )}
                         </div>
+                        </React.Fragment>
                       );
-                    })}
+                    });
+                    })()}
                   </div>
                   <div className="flex justify-end">
                     <button onClick={handleSaveSettings} disabled={submitting || adminPanelLoading} className="px-4 py-2 rounded-xl text-xs font-black bg-sky-600 text-white disabled:opacity-40 inline-flex items-center gap-1.5">
