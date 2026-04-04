@@ -174,7 +174,9 @@
         declinedSubject: 'タダサポ｜ご利用回数上限のお知らせ',
         declinedBody: '{{名前}} 様\n\nいつもタダサポをご利用いただきありがとうございます。\n\n誠に恐れ入りますが、{{事業所名}} 様の今年度のご利用回数が上限（10回）に達しております。\nそのため、今回のご相談につきましては対応を見送らせていただくこととなりました。\n\n大変申し訳ございませんが、何卒ご理解くださいますようお願い申し上げます。\n次年度のご利用をお待ちしております。',
         includeDetails: 'true',
-        newBody: '{{名前}} 様\n\n\n\n{{担当者名}}'
+        newBody: '{{名前}} 様\n\n\n\n{{担当者名}}',
+        scheduleSubject: 'タダサポ｜サポート日程のご連絡',
+        scheduleBody: '{{名前}} 様\n\nいつもお世話になっております。\nタダサポ担当の{{担当者名}}です。\n\nサポート日程が決まりましたのでご連絡いたします。\n\n----------------\n【サポート日程】\n日時：{{日程}}\n方法：{{対応方法}}\n{{URL}}\n----------------\n\n当日はどうぞよろしくお願いいたします。\nご不明な点がございましたらお気軽にご連絡ください。'
       }
     };
     let mockCases = [
@@ -265,6 +267,8 @@
       MAIL_DECLINED_SUBJECT: MOCK_MASTERS.emailTemplates.declinedSubject,
       MAIL_DECLINED_BODY: MOCK_MASTERS.emailTemplates.declinedBody,
       MAIL_NEW_BODY: MOCK_MASTERS.emailTemplates.newBody,
+      MAIL_SCHEDULE_SUBJECT: MOCK_MASTERS.emailTemplates.scheduleSubject,
+      MAIL_SCHEDULE_BODY: MOCK_MASTERS.emailTemplates.scheduleBody,
       SHARED_CALENDAR_ID: '',
       ATTACHMENT_FOLDER_ID: '',
       ZOOM_ACCOUNT_ID: '',
@@ -1570,6 +1574,13 @@
           } else if (emailModal.mode === 'decline') {
             result = await Api.declineCase(emailModal.caseId, user, emailModal.subject, emailModal.body, trimmedCc, trimmedBcc);
             patch = { status: 'rejected', staffEmail: user.email, staffName: user.name };
+          } else if (emailModal.mode === 'schedule') {
+            // 日程確定メール: 既存スレッドがあれば返信、なければ新規スレッド
+            if (emailModal.threadId) {
+              result = await Api.sendCaseEmail(emailModal.caseId, user, emailModal.subject, emailModal.body, emailModal.threadId, trimmedCc, trimmedBcc);
+            } else {
+              result = await Api.sendNewCaseEmail(emailModal.caseId, user, emailModal.subject, emailModal.body, trimmedCc, trimmedBcc);
+            }
           } else if (emailModal.mode === 'new') {
             result = await Api.sendNewCaseEmail(emailModal.caseId, user, emailModal.subject, emailModal.body, trimmedCc, trimmedBcc);
           } else {
@@ -1594,6 +1605,8 @@
           } else if (emailModal.mode === 'decline') {
             setActiveTab('rejected');
             showToast('回数超過の連絡を送信し、対応不可に設定しました。', { type: 'success', title: '対応不可' });
+          } else if (emailModal.mode === 'schedule') {
+            showToast('日程確定メールを送信しました。', { type: 'success', title: '送信完了' });
           } else {
             showToast('メールを送信しました。', { type: 'success', title: '送信完了' });
           }
@@ -1653,6 +1666,12 @@
             });
             return recalcFiscalYearCounts(updated, editCaseId);
           });
+          // 日程確定モードで日時が設定されている場合、メール作成モーダルを表示
+          var shouldShowScheduleEmail = modalMode === 'schedule' && payload.scheduledDateTime;
+          var savedMethod = payload.method || selectedCase.method;
+          var savedMeetUrl = result?.meetUrl || selectedCase.meetUrl || '';
+          var savedDateTime = payload.scheduledDateTime;
+
           setModalMode(null);
           setPendingFiles([]);
           setExistingAttachments([]);
@@ -1663,6 +1682,45 @@
             showToast('完了報告を保存しました。', { type: 'success', title: '保存完了' });
           } else {
             showToast('記録を保存しました。', { type: 'success', title: '保存完了' });
+          }
+
+          // 日程確定メールモーダルを自動表示
+          if (shouldShowScheduleEmail) {
+            const tpl = masters?.emailTemplates || {};
+            // 日時をフォーマット
+            const dtObj = new Date(savedDateTime);
+            const formattedDate = dtObj.getFullYear() + '年' + (dtObj.getMonth() + 1) + '月' + dtObj.getDate() + '日（' + ['日','月','火','水','木','金','土'][dtObj.getDay()] + '） ' + String(dtObj.getHours()).padStart(2, '0') + ':' + String(dtObj.getMinutes()).padStart(2, '0');
+            // URL行の組み立て（オンライン方法の場合のみ表示）
+            const isOnline = savedMethod === 'GoogleMeet' || savedMethod === 'Zoom';
+            const urlLine = isOnline && savedMeetUrl ? 'URL：' + savedMeetUrl : '';
+            // タグ置換
+            const scheduleTags = {
+              '{{事業所名}}': selectedCase.officeName || '',
+              '{{名前}}': selectedCase.requesterName || '',
+              '{{担当者名}}': user?.name || '',
+              '{{日程}}': formattedDate,
+              '{{対応方法}}': savedMethod || '',
+              '{{URL}}': urlLine
+            };
+            const replaceScheduleTags = (str) => {
+              var r = str || '';
+              Object.keys(scheduleTags).forEach(tag => { r = r.split(tag).join(scheduleTags[tag]); });
+              // URL行が空の場合、空行を整理
+              r = r.replace(/\n\n\n/g, '\n\n');
+              return r;
+            };
+            // 既存スレッドがあれば返信、なければ新規
+            const threads = selectedCase.threadIds || [];
+            const latestThreadId = threads.length > 0 ? threads[threads.length - 1] : null;
+            setEmailModal({
+              mode: 'schedule',
+              caseId: selectedCase.timestamp,
+              to: selectedCase.email,
+              cc: getSubStaffAutoCc(selectedCase), bcc: '',
+              subject: replaceScheduleTags(tpl.scheduleSubject || 'タダサポ｜サポート日程のご連絡'),
+              body: replaceScheduleTags(tpl.scheduleBody || ''),
+              threadId: latestThreadId
+            });
           }
         } catch (err) {
           showToast(err.message || String(err), { type: 'error', title: '保存エラー' });
@@ -2042,6 +2100,8 @@
         MAIL_INITIAL_BODY: { label: '初回メール本文', category: 'mail', desc: 'テンプレート本文（タグ利用可）' },
         MAIL_INITIAL_INCLUDE_DETAILS: { label: '初回メールに相談内容を含める', category: 'mail', desc: 'OFFにすると相談内容ブロック（セパレータ含む）を省略します', type: 'boolean' },
         MAIL_NEW_BODY: { label: '新規メール本文テンプレート', category: 'mail', desc: '「新規メール送信」時の初期本文。使用可能タグ: {{名前}} {{事業所名}} {{担当者名}}' },
+        MAIL_SCHEDULE_SUBJECT: { label: '日程確定メール件名', category: 'mail', desc: '日程確定時に使用。タグ: {{名前}} {{事業所名}} {{担当者名}}' },
+        MAIL_SCHEDULE_BODY: { label: '日程確定メール本文', category: 'mail', desc: '日程確定時のテンプレート。タグ: {{名前}} {{事業所名}} {{担当者名}} {{日程}} {{対応方法}} {{URL}}' },
         MAIL_DECLINED_SUBJECT: { label: '回数超過メール件名', category: 'mail', desc: '回数超過時に使用' },
         MAIL_DECLINED_BODY: { label: '回数超過メール本文', category: 'mail', desc: '回数超過時のテンプレート本文' },
         SHARED_CALENDAR_ID: { label: '共有カレンダーID', category: 'integration', desc: '予定作成に使用' },
@@ -4097,11 +4157,11 @@
                 <div className="flex justify-between items-center mb-6">
                   <div>
                     <h3 className="font-black text-lg text-slate-800 flex items-center gap-2">
-                      <Mail size={20} className={emailModal.mode === 'initial' ? 'text-teal-500' : emailModal.mode === 'decline' ? 'text-rose-500' : emailModal.mode === 'reply' ? 'text-amber-500' : 'text-sky-500'}/>
-                      {emailModal.mode === 'initial' ? '初回メール送信' : emailModal.mode === 'decline' ? '回数超過の連絡' : emailModal.mode === 'reply' ? 'スレッド返信' : '新規メール送信'}
+                      <Mail size={20} className={emailModal.mode === 'initial' ? 'text-teal-500' : emailModal.mode === 'decline' ? 'text-rose-500' : emailModal.mode === 'schedule' ? 'text-indigo-500' : emailModal.mode === 'reply' ? 'text-amber-500' : 'text-sky-500'}/>
+                      {emailModal.mode === 'initial' ? '初回メール送信' : emailModal.mode === 'decline' ? '回数超過の連絡' : emailModal.mode === 'schedule' ? '日程確定メール送信' : emailModal.mode === 'reply' ? 'スレッド返信' : '新規メール送信'}
                     </h3>
                     <p className="text-[10px] font-bold text-slate-400 mt-0.5">
-                      {emailModal.mode === 'initial' ? 'メール送信と同時に担当が確定します' : emailModal.mode === 'decline' ? '回数超過のメールを送信し、対応不可に設定します' : emailModal.mode === 'reply' ? '既存スレッドに返信します' : '新しいスレッドでメールを送信します'}
+                      {emailModal.mode === 'initial' ? 'メール送信と同時に担当が確定します' : emailModal.mode === 'decline' ? '回数超過のメールを送信し、対応不可に設定します' : emailModal.mode === 'schedule' ? '日程確定の連絡メールを送信します（送信しない場合は×で閉じてください）' : emailModal.mode === 'reply' ? '既存スレッドに返信します' : '新しいスレッドでメールを送信します'}
                     </p>
                   </div>
                   <button onClick={() => setEmailModal(null)}>
@@ -4165,6 +4225,7 @@
                     className={`w-full py-4 text-white rounded-xl font-black text-sm transition-all flex items-center justify-center gap-2 ${
                       emailModal.mode === 'initial' ? 'bg-teal-600 hover:bg-teal-700 shadow-lg shadow-teal-200'
                       : emailModal.mode === 'decline' ? 'bg-rose-600 hover:bg-rose-700 shadow-lg shadow-rose-200'
+                      : emailModal.mode === 'schedule' ? 'bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200'
                       : emailModal.mode === 'reply' ? 'bg-amber-500 hover:bg-amber-600 shadow-lg shadow-amber-200'
                       : 'bg-sky-600 hover:bg-sky-700 shadow-lg shadow-sky-200'
                     }`}
@@ -4175,9 +4236,11 @@
                         ? <><Send size={16}/> 送信して担当する</>
                         : emailModal.mode === 'decline'
                           ? <><AlertTriangle size={16}/> 送信して対応不可にする</>
-                          : emailModal.mode === 'reply'
-                            ? <><Reply size={16}/> 返信する</>
-                            : <><Send size={16}/> 送信する</>
+                          : emailModal.mode === 'schedule'
+                            ? <><Calendar size={16}/> 日程確定メールを送信</>
+                            : emailModal.mode === 'reply'
+                              ? <><Reply size={16}/> 返信する</>
+                              : <><Send size={16}/> 送信する</>
                     }
                   </button>
                 </div>

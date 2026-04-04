@@ -710,8 +710,14 @@ function addMissingEmailSettings_() {
   if (!existingKeys['MAIL_NEW_BODY']) {
     toAdd.push(['MAIL_NEW_BODY', '新規メール本文テンプレート', '{{名前}} 様\n\n\n\n{{担当者名}}', '', '「新規メール送信」時の初期本文。使用可能タグ: {{名前}} {{事業所名}} {{担当者名}}']);
   }
+  if (!existingKeys['MAIL_SCHEDULE_SUBJECT']) {
+    toAdd.push(['MAIL_SCHEDULE_SUBJECT', '日程確定メール件名', 'タダサポ｜サポート日程のご連絡', '', '日程確定時に送信するメールの件名。使用可能タグ: {{名前}} {{事業所名}} {{担当者名}}']);
+  }
+  if (!existingKeys['MAIL_SCHEDULE_BODY']) {
+    toAdd.push(['MAIL_SCHEDULE_BODY', '日程確定メール本文', '{{名前}} 様\n\nいつもお世話になっております。\nタダサポ担当の{{担当者���}}です。\n\nサポート日程が決まりましたのでご連絡い��します。\n\n----------------\n【サポート日程】\n日時：{{日程}}\n方法：{{対応方法}}\n{{URL}}\n----------------\n\n当日はどうぞよろしく��願いいたします。\nご不明な点がございましたらお気軽にご連絡ください。', '', '日程確定時のメール本文テンプレー���。使用可能タグ: {{名前}} {{事業所名}} {{担当者名}} {{日程}} {{対応方��}} {{URL}}']);
+  }
   if (!existingKeys['SUPPORT_TOOLS']) {
-    toAdd.push(['SUPPORT_TOOLS', '対応ツール一覧', 'Word・Excel,Windows（基本操作）,LINEWORKS,Google（基本操作）,Google Workspace,AI（ChatGPT、Gemini 他）,ケアプランデータ連携システム,介護ソフト,その他', '', 'カンマ区切りで管理。フォームの対応ツール選択肢に使用']);
+    toAdd.push(['SUPPORT_TOOLS', '対応ツール一覧', 'Word・Excel,Windows（基本操作）,LINEWORKS,Google（基本操作）,Google Workspace,AI（ChatGPT、Gemini 他）,ケアプランデータ連携システム,介護ソフト,その他', '', 'カン��区切りで管理。フォームの対応ツー���選択肢に使用']);
   }
 
   if (!toAdd.length) return;
@@ -1689,7 +1695,9 @@ function getMasters() {
       includeDetails: getSetting_('MAIL_INITIAL_INCLUDE_DETAILS', 'true'),
       declinedSubject: getSetting_('MAIL_DECLINED_SUBJECT', 'タダサポ｜ご利用回数上限のお知らせ'),
       declinedBody: getSetting_('MAIL_DECLINED_BODY', '{{名前}} 様\n\nいつもタダサポをご利用いただきありがとうございます。\n\n誠に恐れ入りますが、{{事業所名}} 様の今年度のご利用回数が上限（10回）に達しております。\nそのため、今回のご相談につきましては対応を見送らせていただくこととなりました。\n\n大変申し訳ございませんが、何卒ご理解くださいますようお願い申し上げます。\n次年度のご利用をお待ちしております。'),
-      newBody: getSetting_('MAIL_NEW_BODY', '{{名前}} 様\n\n\n\n{{担当者名}}')
+      newBody: getSetting_('MAIL_NEW_BODY', '{{名前}} 様\n\n\n\n{{担当者名}}'),
+      scheduleSubject: getSetting_('MAIL_SCHEDULE_SUBJECT', 'タダサポ｜サポート日程のご連絡'),
+      scheduleBody: getSetting_('MAIL_SCHEDULE_BODY', '{{名前}} 様\n\nいつもお世話になっており���す。\nタダサポ担当���{{担当者名}}です。\n\nサポ��ト日程が決まり��したのでご連絡いたしま���。\n\n----------------\n【���ポート日程】\n日時：{{日程}}\n方法：{{対応方法}}\n{{URL}}\n----------------\n\n当日はどうぞよろしくお願いいたします。\nご不明な点がございましたらお気軽にご連絡ください。')
     }
   };
 }
@@ -1705,6 +1713,8 @@ function getEditableSettingsKeys_() {
     'MAIL_DECLINED_SUBJECT',
     'MAIL_DECLINED_BODY',
     'MAIL_NEW_BODY',
+    'MAIL_SCHEDULE_SUBJECT',
+    'MAIL_SCHEDULE_BODY',
     'SHARED_CALENDAR_ID',
     'ATTACHMENT_FOLDER_ID',
     'ZOOM_ACCOUNT_ID',
