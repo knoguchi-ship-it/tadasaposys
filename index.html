@@ -3113,9 +3113,9 @@
                     <h1 className="text-2xl lg:text-3xl font-black text-slate-900 leading-tight">{selectedCase.officeName}</h1>
                     <p className="text-base font-black text-slate-600 mt-1 mb-4">{selectedCase.requesterName} 様</p>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                       <div className="bg-slate-50 p-3 rounded-xl">
-                         <span className="text-[9px] font-black text-slate-400 uppercase flex items-center gap-1 mb-1"><Activity size={10}/> サービス種別</span>
-                         <span className="text-xs font-black text-slate-700">{selectedCase.serviceType || '—'}</span>
+                       <div className={`p-3 rounded-xl ${selectedCase.serviceType ? 'bg-slate-50' : 'bg-amber-50 ring-1 ring-amber-200'}`}>
+                         <span className={`text-[9px] font-black uppercase flex items-center gap-1 mb-1 ${selectedCase.serviceType ? 'text-slate-400' : 'text-amber-500'}`}><Activity size={10}/> サービス種別</span>
+                         <span className={`text-xs font-black ${selectedCase.serviceType ? 'text-slate-700' : 'text-amber-600'}`}>{selectedCase.serviceType || '未入力'}</span>
                        </div>
                        <div className="bg-slate-50 p-3 rounded-xl cursor-pointer hover:bg-indigo-50 transition-colors"
                          onClick={() => {
@@ -3128,9 +3128,9 @@
                          <span className="text-[9px] font-black text-slate-400 uppercase flex items-center gap-1 mb-1"><Mail size={10}/> メールアドレス</span>
                          <span className="text-xs font-black text-indigo-600 flex items-center gap-1">{selectedCase.email} <Send size={10}/></span>
                        </div>
-                       <div className="bg-slate-50 p-3 rounded-xl">
-                         <span className="text-[9px] font-black text-slate-400 uppercase flex items-center gap-1 mb-1"><MapPin size={10}/> 都道府県</span>
-                         <span className="text-xs font-black text-slate-700">{selectedCase.prefecture || '—'}</span>
+                       <div className={`p-3 rounded-xl ${selectedCase.prefecture ? 'bg-slate-50' : 'bg-amber-50 ring-1 ring-amber-200'}`}>
+                         <span className={`text-[9px] font-black uppercase flex items-center gap-1 mb-1 ${selectedCase.prefecture ? 'text-slate-400' : 'text-amber-500'}`}><MapPin size={10}/> 都道府県</span>
+                         <span className={`text-xs font-black ${selectedCase.prefecture ? 'text-slate-700' : 'text-amber-600'}`}>{selectedCase.prefecture || '未入力'}</span>
                        </div>
                     </div>
                   </div>
