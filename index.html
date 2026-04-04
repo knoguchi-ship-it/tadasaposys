@@ -883,6 +883,8 @@
       const [adminCaseEditDraft, setAdminCaseEditDraft] = useState({});
       const [inlineEditField, setInlineEditField] = useState(null); // 'status' | 'staff' | 'caseLimit' | 'annualLimit' | null
       const [staffDropdownSearch, setStaffDropdownSearch] = useState('');
+      const [adminEditStaffSearch, setAdminEditStaffSearch] = useState('');
+      const [adminEditStaffOpen, setAdminEditStaffOpen] = useState(false);
       const [subStaffSearch, setSubStaffSearch] = useState('');
       const [filterStaffWord, setFilterStaffWord] = useState('');
       const [filterStaffOpen, setFilterStaffOpen] = useState(false);
@@ -1261,6 +1263,7 @@
             return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
           })(),
           method: selectedCase.method || '',
+          duration: selectedCase.duration || '60',
           content: selectedCase.content || '',
           remarks: selectedCase.remarks || '',
           tools: Array.isArray(selectedCase.tools) ? selectedCase.tools : []
@@ -1632,6 +1635,7 @@
               var p = {
                 status: payload.status,
                 method: payload.method || c.method,
+                duration: payload.duration || c.duration || '60',
                 content: payload.content !== undefined ? payload.content : c.content,
                 scheduledDateTime: payload.scheduledDateTime !== undefined ? payload.scheduledDateTime : c.scheduledDateTime,
                 tools: Array.isArray(payload.tools) ? payload.tools : c.tools
@@ -3077,10 +3081,14 @@
                           ? `${selectedCase.supportCount || 1}回目の実施情報（現在）`
                           : '実施情報'}
                       </h3>
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-3 gap-4">
                         <div className="p-4 bg-slate-50 rounded-2xl">
                           <span className="text-xs font-bold text-slate-500 block mb-1">日時</span>
                           <span className="text-sm font-black">{selectedCase.scheduledDateTime ? new Date(selectedCase.scheduledDateTime).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : <span className="text-slate-400">未定</span>}</span>
+                        </div>
+                        <div className="p-4 bg-slate-50 rounded-2xl">
+                          <span className="text-xs font-bold text-slate-500 block mb-1">時間</span>
+                          <span className="text-sm font-black">{selectedCase.duration ? (Number(selectedCase.duration) >= 60 ? '1時間' : selectedCase.duration + '分') : <span className="text-slate-400">未定</span>}</span>
                         </div>
                         <div className="p-4 bg-slate-50 rounded-2xl">
                           <span className="text-xs font-bold text-slate-500 block mb-1">方法</span>
@@ -3494,14 +3502,77 @@
                                 ))}
                               </select>
                             </label>
-                            <label className="text-[10px] font-black text-slate-500">担当者
-                              <select value={adminCaseEditDraft.staffEmail || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, staffEmail: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold">
-                                <option value="">未割当</option>
-                                {activeStaffMembers.map(s => (
-                                  <option key={s.email} value={s.email}>{s.name}（{s.email}）</option>
-                                ))}
-                              </select>
-                            </label>
+                            <div className="text-[10px] font-black text-slate-500">担当者
+                              <div className="relative mt-1">
+                                <div className="relative">
+                                  <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                  <input
+                                    type="text"
+                                    value={adminEditStaffOpen ? adminEditStaffSearch : (() => {
+                                      const em = adminCaseEditDraft.staffEmail || '';
+                                      if (!em) return '未割当';
+                                      const found = activeStaffMembers.find(s => s.email === em);
+                                      return found ? found.name : em;
+                                    })()}
+                                    onFocus={() => { setAdminEditStaffOpen(true); setAdminEditStaffSearch(''); }}
+                                    onBlur={() => setTimeout(() => setAdminEditStaffOpen(false), 200)}
+                                    onChange={e => setAdminEditStaffSearch(e.target.value)}
+                                    placeholder="名前・メールで検索..."
+                                    className={`w-full pl-8 pr-3 py-2 border-2 rounded-xl text-xs font-bold outline-none transition-colors ${
+                                      adminEditStaffOpen ? 'border-teal-400 bg-white' : 'border-slate-100 bg-white'
+                                    }`}
+                                  />
+                                </div>
+                                {adminEditStaffOpen && (
+                                  <div className="absolute top-full left-0 right-0 mt-1 bg-white shadow-xl rounded-2xl border border-slate-200 z-50 overflow-hidden">
+                                    {adminEditStaffSearch && (
+                                      <p className="text-[10px] text-slate-400 px-3 pt-1.5">{
+                                        activeStaffMembers.filter(s => {
+                                          const kw = adminEditStaffSearch.trim().toLowerCase();
+                                          return s.name.toLowerCase().includes(kw) || (s.email || '').toLowerCase().includes(kw);
+                                        }).length
+                                      } 件</p>
+                                    )}
+                                    <div className="overflow-y-auto max-h-52 py-1">
+                                      {!adminEditStaffSearch && (
+                                        <button type="button"
+                                          onMouseDown={e => { e.preventDefault(); setAdminCaseEditDraft(prev => ({ ...prev, staffEmail: '' })); setAdminEditStaffOpen(false); }}
+                                          className={`w-full px-4 py-2.5 text-xs font-bold text-left flex items-center gap-2 transition-colors hover:bg-slate-50 ${
+                                            !adminCaseEditDraft.staffEmail ? 'text-teal-600 bg-teal-50' : 'text-slate-500'
+                                          }`}>
+                                          {!adminCaseEditDraft.staffEmail && <CheckCircle size={10}/>}
+                                          {adminCaseEditDraft.staffEmail && <span className="w-[10px]"/>}
+                                          未割当
+                                        </button>
+                                      )}
+                                      {activeStaffMembers
+                                        .filter(s => {
+                                          if (!adminEditStaffSearch.trim()) return true;
+                                          const kw = adminEditStaffSearch.trim().toLowerCase();
+                                          return s.name.toLowerCase().includes(kw) || (s.email || '').toLowerCase().includes(kw);
+                                        })
+                                        .map(s => (
+                                        <button key={s.email} type="button"
+                                          onMouseDown={e => { e.preventDefault(); setAdminCaseEditDraft(prev => ({ ...prev, staffEmail: s.email })); setAdminEditStaffOpen(false); }}
+                                          className={`w-full px-4 py-2.5 text-xs font-bold text-left flex items-center gap-2 transition-colors hover:bg-slate-50 ${
+                                            s.email === adminCaseEditDraft.staffEmail ? 'text-teal-600 bg-teal-50' : 'text-slate-700'
+                                          }`}>
+                                          {s.email === adminCaseEditDraft.staffEmail && <CheckCircle size={10}/>}
+                                          {s.email !== adminCaseEditDraft.staffEmail && <span className="w-[10px]"/>}
+                                          <span className="flex-1">{s.name}<span className="text-slate-400 ml-1">({s.email})</span></span>
+                                        </button>
+                                      ))}
+                                      {adminEditStaffSearch.trim() && activeStaffMembers.filter(s => {
+                                        const kw = adminEditStaffSearch.trim().toLowerCase();
+                                        return s.name.toLowerCase().includes(kw) || (s.email || '').toLowerCase().includes(kw);
+                                      }).length === 0 && (
+                                        <p className="text-xs text-slate-400 text-center py-4">一致なし</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                             <label className="text-[10px] font-black text-slate-500">事業所名: 案件の対象事業所
                               <input value={adminCaseEditDraft.officeName || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, officeName: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
                             </label>
@@ -3535,12 +3606,22 @@
                                 <p className="text-[9px] text-slate-400 mt-1">時間未入力の場合、日付のみ保存されます</p>
                               )}
                             </div>
-                            <label className="text-[10px] font-black text-slate-500">対応方法
-                              <select value={adminCaseEditDraft.method || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, method: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold">
-                                <option value="">未設定</option>
-                                {(masters?.methods || ['GoogleMeet', '電話等', '対面']).map(m => <option key={m} value={m}>{m}</option>)}
-                              </select>
-                            </label>
+                            <div className="grid grid-cols-2 gap-2">
+                              <label className="text-[10px] font-black text-slate-500">対応方法
+                                <select value={adminCaseEditDraft.method || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, method: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold">
+                                  <option value="">未設定</option>
+                                  {(masters?.methods || ['GoogleMeet', '電話等', '対面']).map(m => <option key={m} value={m}>{m}</option>)}
+                                </select>
+                              </label>
+                              <label className="text-[10px] font-black text-slate-500">対応時間
+                                <select value={adminCaseEditDraft.duration || '60'} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, duration: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold">
+                                  <option value="15">15分</option>
+                                  <option value="30">30分</option>
+                                  <option value="45">45分</option>
+                                  <option value="60">1時間</option>
+                                </select>
+                              </label>
+                            </div>
                           </div>
                           <label className="text-[10px] font-black text-slate-500 block">相談内容: 受付時の原文
                             <textarea rows={3} value={adminCaseEditDraft.details || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, details: e.target.value }))} className="mt-1 w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
@@ -4126,10 +4207,19 @@
                 <form onSubmit={handleEditSave} className="space-y-6">
                   {(modalMode === 'schedule' || modalMode === 'edit' || modalMode === 'report') && (
                     <div className="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100 space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-[1fr_auto_auto] gap-3">
                         <div className="space-y-1">
                           <label className="text-[10px] font-black text-indigo-400 uppercase flex items-center gap-1"><Clock size={10}/> 日時</label>
                           <input type="datetime-local" required={modalMode === 'schedule'} value={editFormData.scheduledDateTime || ''} onChange={e => setEditFormData({...editFormData, scheduledDateTime: e.target.value})} className="w-full border-2 border-white bg-white rounded-xl p-3 text-xs font-bold outline-none focus:border-indigo-500 shadow-sm" />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black text-indigo-400 uppercase flex items-center gap-1"><Clock size={10}/> 時間</label>
+                          <select value={editFormData.duration || '60'} onChange={e => setEditFormData({...editFormData, duration: e.target.value})} className="w-full border-2 border-white bg-white rounded-xl p-3 text-xs font-bold outline-none focus:border-indigo-500 shadow-sm">
+                            <option value="15">15分</option>
+                            <option value="30">30分</option>
+                            <option value="45">45分</option>
+                            <option value="60">1時間</option>
+                          </select>
                         </div>
                         <div className="space-y-1">
                           <label className="text-[10px] font-black text-indigo-400 uppercase flex items-center gap-1"><Video size={10}/> 方法</label>

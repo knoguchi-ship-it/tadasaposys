@@ -1289,9 +1289,10 @@ function createZoomMeeting(title, startTime, durationMinutes) {
  * Calendar Advanced Service (Events.insert) でイベントと Meet を同時作成する。
  * conferenceDataVersion: 1 を指定することで、Google Meet が自動発行される。
  */
-function createGoogleMeetEvent(title, startTime, description) {
+function createGoogleMeetEvent(title, startTime, description, durationMinutes) {
   var start = new Date(startTime);
-  var end = new Date(start.getTime() + 60 * 60 * 1000);
+  var dur = (durationMinutes && Number(durationMinutes) > 0) ? Number(durationMinutes) : 60;
+  var end = new Date(start.getTime() + dur * 60 * 1000);
   var apiCalId = getApiCalendarId_();
 
   // Calendar Advanced Service で直接イベント+Meet を作成
@@ -1356,13 +1357,14 @@ function getApiCalendarId_() {
   return (sharedCalId && sharedCalId !== 'primary') ? sharedCalId : 'primary';
 }
 
-function updateCalendarEventDateTime_(eventId, newStartTime) {
+function updateCalendarEventDateTime_(eventId, newStartTime, durationMinutes) {
   if (!eventId) return;
   try {
     var apiCalId = getApiCalendarId_();
     var cleanId = String(eventId).replace('@google.com', '');
     var start = new Date(newStartTime);
-    var end = new Date(start.getTime() + 60 * 60 * 1000);
+    var dur = (durationMinutes && Number(durationMinutes) > 0) ? Number(durationMinutes) : 60;
+    var end = new Date(start.getTime() + dur * 60 * 1000);
     Calendar.Events.patch({
       start: { dateTime: start.toISOString() },
       end: { dateTime: end.toISOString() }
@@ -1505,18 +1507,19 @@ function updateSupportRecord(recordData) {
   if (recordData.scheduledDateTime && !currentMeetUrl && !recordData.skipCalendar) {
     if (recordData.method === 'GoogleMeet') {
       try {
-        var meetResult = createGoogleMeetEvent(eventTitle, recordData.scheduledDateTime, recordData.details);
+        var meetResult = createGoogleMeetEvent(eventTitle, recordData.scheduledDateTime, recordData.details, recordData.duration);
         newEventId = meetResult.eventId;
         newMeetUrl = meetResult.meetUrl;
       } catch(e) { console.error('Google Meet作成エラー: ' + e.message); }
 
     } else if (recordData.method === 'Zoom') {
       try {
-        var zoomResult = createZoomMeeting(eventTitle, recordData.scheduledDateTime, 60);
+        var zDur = (recordData.duration && Number(recordData.duration) > 0) ? Number(recordData.duration) : 60;
+        var zoomResult = createZoomMeeting(eventTitle, recordData.scheduledDateTime, zDur);
         newEventId = String(zoomResult.meetingId);
         newMeetUrl = zoomResult.joinUrl;
         var zStart = new Date(recordData.scheduledDateTime);
-        var zEnd = new Date(zStart.getTime() + 60 * 60 * 1000);
+        var zEnd = new Date(zStart.getTime() + zDur * 60 * 1000);
         var zSharedCalId = getSetting_('SHARED_CALENDAR_ID', '');
         var zCal = (zSharedCalId && zSharedCalId !== 'primary') ? CalendarApp.getCalendarById(zSharedCalId) : null;
         if (!zCal) zCal = CalendarApp.getDefaultCalendar();
@@ -1527,7 +1530,7 @@ function updateSupportRecord(recordData) {
     }
   } else if (recordData.scheduledDateTime && currentEventId && !recordData.skipCalendar) {
     // 既存カレンダーイベントの日時を更新
-    updateCalendarEventDateTime_(currentEventId, recordData.scheduledDateTime);
+    updateCalendarEventDateTime_(currentEventId, recordData.scheduledDateTime, recordData.duration);
   }
 
   // 添付ファイル処理（バッチ書き込みの前に解決）
