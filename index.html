@@ -3919,10 +3919,18 @@
             const doExtract = () => {
               const selectedDefs = EXTRACT_FIELD_DEFS.filter(d => extractFields.includes(d.key));
               if (!selectedDefs.length) { showToast('抽出する項目を選択してください。', { type: 'error', title: 'データ抽出' }); return; }
+              const escapeCell = (v) => {
+                const s = v == null ? '' : String(v);
+                if (s.indexOf('\n') !== -1 || s.indexOf('\r') !== -1 || s.indexOf('\t') !== -1 || s.indexOf('"') !== -1) {
+                  return '"' + s.replace(/"/g, '""') + '"';
+                }
+                return s;
+              };
               const headers = selectedDefs.map(d => d.label);
               const rows = filteredCases.map(c => selectedDefs.map(d => {
                 const val = c[d.key];
-                return d.format ? d.format(val) : (val == null ? '' : String(val));
+                const raw = d.format ? d.format(val) : (val == null ? '' : String(val));
+                return escapeCell(raw);
               }));
               const tsv = headers.join('\t') + '\n' + rows.map(r => r.join('\t')).join('\n');
               navigator.clipboard.writeText(tsv).then(() => {
