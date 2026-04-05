@@ -1673,6 +1673,9 @@
           if (modalMode === 'report') {
             payload.status = 'completed';
           }
+          if (modalMode === 'cancel') {
+            payload.status = 'cancelled';
+          }
           if (modalMode === 'report' || modalMode === 'edit') {
             var total = (existingAttachments?.length || 0) + (pendingFiles?.length || 0);
             if (total > MAX_ATTACHMENTS_PER_REPORT) {
@@ -1717,7 +1720,11 @@
           setExistingAttachments([]);
           setDragOverAttachments(false);
 
-          if (payload.status === 'completed') {
+          if (payload.status === 'cancelled') {
+            setActiveTab('cancelled');
+            setSelectedCaseId(null);
+            showToast('案件をキャンセルしました。', { type: 'success', title: 'キャンセル完了' });
+          } else if (payload.status === 'completed') {
             setActiveTab('completed');
             showToast('完了報告を保存しました。', { type: 'success', title: '保存完了' });
           } else {
@@ -1926,7 +1933,7 @@
             return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0') + 'T' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
           })() : '',
           method: selectedCase.method || 'GoogleMeet',
-          content: selectedCase.content || '',
+          content: mode === 'cancel' ? '' : (selectedCase.content || ''),
           tools: Array.isArray(selectedCase.tools) ? selectedCase.tools : [],
           status: selectedCase.status
         });
@@ -3884,27 +3891,14 @@
                     )}
                   </>
                 )}
-                {/* キャンセルボタン（担当者・サブ担当・管理者・非キャンセル案件） */}
-                {selectedCase.status !== 'cancelled' && selectedCase.status !== 'rejected' && (
+                {/* キャンセルボタン（1回目のみ・担当者・サブ担当・管��者・非キャ���セル案件） */}
+                {(selectedCase.supportCount || 1) <= 1 && selectedCase.status !== 'cancelled' && selectedCase.status !== 'rejected' && (
                   selectedCase.staffEmail === user?.email ||
                   (Array.isArray(selectedCase.subStaff) && selectedCase.subStaff.some(s => s.email === user?.email)) ||
                   (isAdminMode && user?.isAdmin)
                 ) && (
                   <button
-                    onClick={() => showConfirm('この案件をキャンセルしますか？\n元に戻すには管理者がステータスを変更してください。', async () => {
-                      startSubmit('キャンセル中...');
-                      try {
-                        await Api.cancelCase(selectedCase.timestamp);
-                        var cancelCaseId = selectedCase.id;
-                        setCases(prev => recalcFiscalYearCounts(prev.map(c => c.id === cancelCaseId ? { ...c, status: 'cancelled' } : c), cancelCaseId));
-                        setSelectedCaseId(null);
-                        showToast('案件をキャンセルしました。', { type: 'success', title: 'キャンセル完了' });
-                      } catch (e) {
-                        showToast(e.message || String(e), { type: 'error', title: 'エラー' });
-                      } finally {
-                        setSubmitting(false);
-                      }
-                    }, { title: '案件キャンセル', confirmLabel: 'キャンセルする', variant: 'danger' })}
+                    onClick={() => openModal('cancel')}
                     disabled={submitting}
                     className="px-5 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-black flex items-center gap-2 transition-all active:scale-95 cursor-pointer disabled:opacity-60">
                     <X size={18} /> キャンセル
@@ -4366,10 +4360,10 @@
                 <div className="flex justify-between items-center mb-6">
                   <div>
                     <h3 className="font-black text-lg text-slate-800">
-                      {modalMode === 'assignOnly' ? '担当設定（メールなし）' : modalMode === 'schedule' ? '日程の確定・変更' : modalMode === 'report' ? '実施記録・完了報告' : '記録の修正'}
+                      {modalMode === 'assignOnly' ? '担当設定（メールなし）' : modalMode === 'schedule' ? '日程の確���・変更' : modalMode === 'report' ? '実施記録・完了報告' : modalMode === 'cancel' ? '案件キ��ンセル' : '記録の修正'}
                     </h3>
                     <p className="text-[10px] font-bold text-slate-400 mt-0.5">
-                      {modalMode === 'assignOnly' ? 'メールを送信せずに担当します。対応ツールが分かっていれば選択してください。' : modalMode === 'schedule' ? '対応日時を設定します（カレンダー登録は任意）' : modalMode === 'report' ? 'ステータスを「完了」に変更します' : 'データを上書き保存します'}
+                      {modalMode === 'assignOnly' ? 'メールを送信せずに担当します。対応ツールが分かっていれば選択してください。' : modalMode === 'schedule' ? '対応日時を設定します（カレンダー登録は任意）' : modalMode === 'report' ? 'ステータスを「完了」に変更します' : modalMode === 'cancel' ? 'キャンセル理由を記録してステータスを変更します' : 'データを上書き保存します'}
                     </p>
                   </div>
                   <button onClick={() => { setModalMode(null); setPendingFiles([]); setExistingAttachments([]); setDragOverAttachments(false); }}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
@@ -4444,10 +4438,10 @@
                     const current = editFormData.tools || [];
                     setEditFormData({...editFormData, tools: current.includes(tool) ? current.filter(t => t !== tool) : [...current, tool]});
                   }, true)}
-                  {(modalMode === 'report' || modalMode === 'edit') && (
+                  {(modalMode === 'report' || modalMode === 'edit' || modalMode === 'cancel') && (
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><FileText size={10}/> 実施記録・メモ</label>
-                      <textarea rows={6} required={modalMode === 'report'} value={editFormData.content || ''} onChange={e => setEditFormData({...editFormData, content: e.target.value})} className="w-full border-2 border-slate-100 rounded-xl p-3 text-xs font-bold outline-none focus:border-teal-500" placeholder="実施したサポート内容や、次回の引継ぎ事項を入力してください..." />
+                      <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><FileText size={10}/> {modalMode === 'cancel' ? 'キャンセル理由・対応内容' : '実施記録・メモ'}</label>
+                      <textarea rows={6} required={modalMode === 'report' || modalMode === 'cancel'} value={editFormData.content || ''} onChange={e => setEditFormData({...editFormData, content: e.target.value})} className="w-full border-2 border-slate-100 rounded-xl p-3 text-xs font-bold outline-none focus:border-teal-500" placeholder={modalMode === 'cancel' ? 'キャンセルの理由や経緯を記録してください...' : '実施したサポート内容や、次回の引継ぎ事項を入力してください...'} />
                     </div>
                   )}
                   {(modalMode === 'report' || modalMode === 'edit') && (
@@ -4533,9 +4527,9 @@
                     </div>
                   )}
                   <button disabled={submitting} className={`relative w-full py-4 text-white rounded-xl font-black text-sm transition-all shadow-lg shadow-slate-200 ${
-                    modalMode === 'schedule' ? 'bg-indigo-600 hover:bg-indigo-700' : modalMode === 'report' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-900 hover:bg-slate-800'
+                    modalMode === 'cancel' ? 'bg-amber-500 hover:bg-amber-600' : modalMode === 'schedule' ? 'bg-indigo-600 hover:bg-indigo-700' : modalMode === 'report' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-900 hover:bg-slate-800'
                   }`}>
-                    <span className={submitting ? 'invisible' : ''}>{modalMode === 'schedule' ? '日時を確定してカレンダー作成' : modalMode === 'report' ? '記録を保存して完了にする' : '変更を保存'}</span>
+                    <span className={submitting ? 'invisible' : ''}>{modalMode === 'cancel' ? '記録を保存してキャンセルする' : modalMode === 'schedule' ? '日時を確定してカレンダー作成' : modalMode === 'report' ? '記録を保存して完了にする' : '変更を保存'}</span>
                     {submitting && <Loader2 size={18} className="animate-spin absolute inset-0 m-auto"/>}
                   </button>
                 </form>
