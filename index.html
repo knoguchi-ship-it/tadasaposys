@@ -418,6 +418,33 @@
           google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).reopenCase(caseId, user);
         });
       },
+      rollbackCurrentRound: (caseId) => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            mockCases = mockCases.map(c => {
+              if (c.id !== caseId) return c;
+              var hist = [...(c.supportHistory || [])];
+              if (hist.length === 0 || (c.supportCount || 1) <= 1) return c;
+              var prev = hist.pop();
+              return { ...c, status: 'completed', supportCount: (c.supportCount || 1) - 1,
+                supportHistory: hist,
+                scheduledDateTime: prev.scheduledDateTime || null,
+                method: prev.method || null,
+                content: prev.content || null,
+                remarks: prev.remarks || null,
+                meetUrl: prev.meetUrl || null,
+                attachments: prev.attachments || [],
+                tools: prev.tools || [],
+                staffName: prev.staffName || c.staffName,
+                staffEmail: prev.staffEmail || c.staffEmail };
+            });
+            resolve();
+          }, 300));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).rollbackCurrentRound(caseId);
+        });
+      },
       assignAndSendEmail: (caseId, user, subject, body, cc, bcc, tools) => {
         if (IS_LOCAL) {
           return new Promise(resolve => setTimeout(() => {
@@ -1759,6 +1786,43 @@
           showToast(newCount + '回目の対応を開始しました。', { type: 'success', title: '案件再開' });
         } catch(e) {
           showToast(e.message || String(e), { type: 'error', title: '再開エラー' });
+        } finally {
+          setSubmitting(false);
+        }
+      };
+
+      // 現在の回（2回目以降）を取り消して前回の完了状態に戻す
+      const handleRollbackRound = async () => {
+        if (!selectedCase) return;
+        if ((selectedCase.supportCount || 1) <= 1) return;
+        startSubmit('取り消し中...');
+        try {
+          await Api.rollbackCurrentRound(selectedCase.timestamp);
+          var rollbackCaseId = selectedCase.id;
+          var prevCount = (selectedCase.supportCount || 1) - 1;
+          var prevHist = [...(selectedCase.supportHistory || [])];
+          var restored = prevHist.length > 0 ? prevHist.pop() : {};
+          setCases(prev => {
+            var updated = prev.map(c => {
+              if (c.id !== rollbackCaseId) return c;
+              return { ...c, status: 'completed', supportCount: prevCount,
+                supportHistory: prevHist,
+                scheduledDateTime: restored.scheduledDateTime || null,
+                method: restored.method || null,
+                content: restored.content || null,
+                remarks: restored.remarks || null,
+                meetUrl: restored.meetUrl || null,
+                attachments: restored.attachments || [],
+                tools: restored.tools || [],
+                staffName: restored.staffName || c.staffName,
+                staffEmail: restored.staffEmail || c.staffEmail };
+            });
+            return recalcFiscalYearCounts(updated, rollbackCaseId);
+          });
+          setActiveTab('completed');
+          showToast(prevCount + '回目の完了状態に戻しました。', { type: 'success', title: '回の取り消し' });
+        } catch(e) {
+          showToast(e.message || String(e), { type: 'error', title: '取り消しエラー' });
         } finally {
           setSubmitting(false);
         }
@@ -3781,6 +3845,14 @@
                     }`} disabled={submitting}>
                       <CheckCircle size={18} /> 完了報告
                     </button>
+                    {(selectedCase.supportCount || 1) >= 2 && (
+                      <button onClick={() => showConfirm(
+                        `${selectedCase.supportCount}回目の対応を取り消して、${(selectedCase.supportCount || 1) - 1}回目の完了状態に戻しますか？\n現在の回の入力内容は破棄されます。`,
+                        handleRollbackRound
+                      )} disabled={submitting} className="px-5 py-3 bg-amber-500 text-white rounded-xl text-sm font-black flex items-center gap-2 hover:bg-amber-600 transition-all active:scale-95 cursor-pointer disabled:opacity-60">
+                        <RotateCcw size={18} /> {selectedCase.supportCount}回目を取消
+                      </button>
+                    )}
                   </>
                 )}
                 {selectedCase.status === 'completed' && (

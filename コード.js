@@ -650,6 +650,63 @@ function reopenCase(caseId, user) {
   return;
 }
 
+/**
+ * 間違って開始した現在の回（2回目以降）を取り消し、前回の完了状態に戻す。
+ * supportCount が1の場合はエラー（1回目は取り消せない）。
+ * 担当者本人・サブ担当・管理者が実行可能。
+ */
+function rollbackCurrentRound(caseId) {
+  var actor = getActor_();
+  ensureCaseEditableByActor_(caseId, actor, false);
+
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  var data = sheet.getDataRange().getValues();
+
+  var rowIndex = -1;
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][IDX.RECORDS.FK]) === String(caseId)) {
+      rowIndex = i + 1;
+      break;
+    }
+  }
+  if (rowIndex === -1) throw new Error('レコードが見つかりません: ' + caseId);
+
+  var row = data[rowIndex - 1];
+  var currentCount = Number(row[IDX.RECORDS.COUNT]) || 1;
+  if (currentCount <= 1) throw new Error('1回目の対応は取り消せません。');
+
+  // 履歴から直前の回を復元
+  var historyJson = row[IDX.RECORDS.HISTORY] ? String(row[IDX.RECORDS.HISTORY]) : '[]';
+  var history = [];
+  try { history = JSON.parse(historyJson); } catch(e) { history = []; }
+  if (history.length === 0) throw new Error('復元する履歴がありません。');
+
+  var prev = history.pop(); // 直前の回のデータ
+
+  // レコードを前回の完了状態に復元
+  var restoreRow = [];
+  restoreRow[IDX.RECORDS.STATUS] = 'completed';
+  restoreRow[IDX.RECORDS.STAFF_EMAIL] = prev.staffEmail || row[IDX.RECORDS.STAFF_EMAIL];
+  restoreRow[IDX.RECORDS.STAFF_NAME] = prev.staffName || row[IDX.RECORDS.STAFF_NAME];
+  restoreRow[IDX.RECORDS.DATE] = prev.scheduledDateTime ? new Date(prev.scheduledDateTime) : null;
+  restoreRow[IDX.RECORDS.COUNT] = currentCount - 1;
+  restoreRow[IDX.RECORDS.METHOD] = prev.method || null;
+  restoreRow[IDX.RECORDS.BUSINESS] = row[IDX.RECORDS.BUSINESS]; // 業種は現在値を保持
+  restoreRow[IDX.RECORDS.CONTENT] = prev.content || null;
+  restoreRow[IDX.RECORDS.REMARKS] = prev.remarks || null;
+  restoreRow[IDX.RECORDS.HISTORY] = JSON.stringify(history);
+  restoreRow[IDX.RECORDS.EVENT_ID] = null; // カレンダーイベントは復元不可
+  restoreRow[IDX.RECORDS.MEET_URL] = prev.meetUrl || null;
+  restoreRow[IDX.RECORDS.ATTACHMENTS] = prev.attachments ? JSON.stringify(prev.attachments) : '[]';
+
+  sheet.getRange(rowIndex, IDX.RECORDS.STATUS + 1, 1, IDX.RECORDS.ATTACHMENTS - IDX.RECORDS.STATUS + 1)
+    .setValues([restoreRow.slice(IDX.RECORDS.STATUS, IDX.RECORDS.ATTACHMENTS + 1)]);
+
+  appendAuditLog_(actor, 'rollback_round', 'case', caseId, { supportCount: currentCount, status: 'inProgress' }, { supportCount: currentCount - 1, status: 'completed' });
+  return;
+}
+
 // スキーマバージョン: マイグレーション追加時にインクリメントする
 var SCHEMA_VERSION_ = '5';
 
