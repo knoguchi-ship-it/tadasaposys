@@ -707,6 +707,31 @@ function rollbackCurrentRound(caseId) {
   return;
 }
 
+// ======================================================================
+// 案件キャンセル（担当者・サブ担当・管理者が実行可能）
+// ======================================================================
+
+/**
+ * 案件をキャンセルする。担当者本人・サブ担当・管理者が実行可能。
+ * 未アサインの案件は管理者のみキャンセル可能。
+ */
+function cancelCase(caseId) {
+  var actor = getActor_();
+  ensureCaseEditableByActor_(caseId, actor, false);
+
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  var rowIndex = getCaseRecordRowIndex_(caseId);
+  if (rowIndex === -1) throw new Error('レコードが見つかりません: ' + caseId);
+
+  var row = sheet.getRange(rowIndex, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var before = { status: String(row[IDX.RECORDS.STATUS] || '') };
+
+  sheet.getRange(rowIndex, IDX.RECORDS.STATUS + 1).setValue('cancelled');
+  appendAuditLog_(actor, 'cancel_case', 'case', caseId, before, { status: 'cancelled' });
+  return;
+}
+
 // スキーマバージョン: マイグレーション追加時にインクリメントする
 var SCHEMA_VERSION_ = '5';
 

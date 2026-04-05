@@ -445,6 +445,17 @@
           google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).rollbackCurrentRound(caseId);
         });
       },
+      cancelCase: (caseId) => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            mockCases = mockCases.map(c => c.id === caseId ? { ...c, status: 'cancelled' } : c);
+            resolve();
+          }, 250));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).cancelCase(caseId);
+        });
+      },
       assignAndSendEmail: (caseId, user, subject, body, cc, bcc, tools) => {
         if (IS_LOCAL) {
           return new Promise(resolve => setTimeout(() => {
@@ -3873,13 +3884,17 @@
                     )}
                   </>
                 )}
-                {/* キャンセルボタン（管理モード・管理者のみ・非キャンセル案件） */}
-                {isAdminMode && user?.isAdmin && selectedCase.status !== 'cancelled' && (
+                {/* キャンセルボタン（担当者・サブ担当・管理者・非キャンセル案件） */}
+                {selectedCase.status !== 'cancelled' && selectedCase.status !== 'rejected' && (
+                  selectedCase.staffEmail === user?.email ||
+                  (Array.isArray(selectedCase.subStaff) && selectedCase.subStaff.some(s => s.email === user?.email)) ||
+                  (isAdminMode && user?.isAdmin)
+                ) && (
                   <button
                     onClick={() => showConfirm('この案件をキャンセルしますか？\n元に戻すには管理者がステータスを変更してください。', async () => {
                       startSubmit('キャンセル中...');
                       try {
-                        await Api.setCaseStatusAdmin(selectedCase.timestamp, 'cancelled');
+                        await Api.cancelCase(selectedCase.timestamp);
                         var cancelCaseId = selectedCase.id;
                         setCases(prev => recalcFiscalYearCounts(prev.map(c => c.id === cancelCaseId ? { ...c, status: 'cancelled' } : c), cancelCaseId));
                         setSelectedCaseId(null);
