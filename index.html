@@ -1701,7 +1701,9 @@
                 duration: payload.duration || c.duration || '60',
                 content: payload.content !== undefined ? payload.content : c.content,
                 scheduledDateTime: payload.scheduledDateTime !== undefined ? payload.scheduledDateTime : c.scheduledDateTime,
-                tools: Array.isArray(payload.tools) ? payload.tools : c.tools
+                tools: Array.isArray(payload.tools) ? payload.tools : c.tools,
+                prefecture: payload.prefecture || c.prefecture,
+                serviceType: payload.serviceType || c.serviceType
               };
               if (result?.meetUrl) { p.meetUrl = result.meetUrl; p.eventId = result.eventId; }
               if (result?.attachments != null) p.attachments = result.attachments;
@@ -1935,7 +1937,9 @@
           method: selectedCase.method || 'GoogleMeet',
           content: mode === 'cancel' ? '' : (selectedCase.content || ''),
           tools: Array.isArray(selectedCase.tools) ? selectedCase.tools : [],
-          status: selectedCase.status
+          status: selectedCase.status,
+          prefecture: selectedCase.prefecture || '',
+          serviceType: selectedCase.serviceType || ''
         });
         setExistingAttachments(Array.isArray(selectedCase.attachments) ? selectedCase.attachments : []);
         setPendingFiles([]);
@@ -4022,8 +4026,8 @@
               });
             };
             return (
-              <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-sm p-4 flex items-center justify-center">
-                <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden">
+              <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-sm p-4 flex items-center justify-center overflow-y-auto">
+                <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden my-auto max-h-[calc(100vh-2rem)] overflow-y-auto">
                   <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                     <div>
                       <h3 className="text-sm font-black text-slate-800 flex items-center gap-2"><ClipboardList size={14}/> データ抽出</h3>
@@ -4062,8 +4066,8 @@
           })()}
 
           {adminRoleDialogOpen && (
-            <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-sm p-4 flex items-center justify-center">
-              <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden">
+            <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-sm p-4 flex items-center justify-center overflow-y-auto">
+              <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden my-auto max-h-[calc(100vh-2rem)] overflow-y-auto">
                 <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                   <div>
                     <h3 className="text-sm font-black text-slate-800 flex items-center gap-2"><Shield size={16}/> 権限管理</h3>
@@ -4126,8 +4130,8 @@
           )}
 
           {adminSettingsDialogOpen && (
-            <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-sm p-4 flex items-center justify-center">
-              <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden">
+            <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-sm p-4 flex items-center justify-center overflow-y-auto">
+              <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden my-auto max-h-[calc(100vh-2rem)] overflow-y-auto">
                 <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
                   <div>
                     <h3 className="text-sm font-black text-slate-800 flex items-center gap-2"><Settings2 size={16}/> 設定管理</h3>
@@ -4257,8 +4261,8 @@
 
           {/* Email Compose Modal */}
           {emailModal && (
-            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[110] p-4">
-              <div className="bg-white w-full max-w-lg rounded-[2rem] p-8 shadow-2xl animate-in zoom-in duration-200">
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[110] p-4 overflow-y-auto">
+              <div className="bg-white w-full max-w-lg rounded-[2rem] p-8 shadow-2xl animate-in zoom-in duration-200 my-auto max-h-[calc(100vh-2rem)] overflow-y-auto">
                 <div className="flex justify-between items-center mb-6">
                   <div>
                     <h3 className="font-black text-lg text-slate-800 flex items-center gap-2">
@@ -4355,8 +4359,8 @@
 
           {/* Unified Modal */}
           {modalMode && (
-            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[110] p-4">
-              <div className="bg-white w-full max-w-lg rounded-[2rem] p-8 shadow-2xl animate-in zoom-in duration-200">
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[110] p-4 overflow-y-auto">
+              <div className="bg-white w-full max-w-lg rounded-[2rem] p-8 shadow-2xl animate-in zoom-in duration-200 my-auto max-h-[calc(100vh-2rem)] overflow-y-auto">
                 <div className="flex justify-between items-center mb-6">
                   <div>
                     <h3 className="font-black text-lg text-slate-800">
@@ -4438,6 +4442,31 @@
                     const current = editFormData.tools || [];
                     setEditFormData({...editFormData, tools: current.includes(tool) ? current.filter(t => t !== tool) : [...current, tool]});
                   }, true)}
+                  {modalMode === 'report' && (!selectedCase.prefecture || !selectedCase.serviceType) && (
+                    <div className="bg-amber-50/50 p-4 rounded-2xl border border-amber-100 space-y-3">
+                      <p className="text-[10px] font-black text-amber-600 uppercase flex items-center gap-1"><AlertTriangle size={10}/> 未入力の案件情報</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        {!selectedCase.serviceType && (
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-amber-500 flex items-center gap-1"><Activity size={10}/> サービス種別</label>
+                            <select value={editFormData.serviceType || ''} onChange={e => setEditFormData({...editFormData, serviceType: e.target.value})} className="w-full border-2 border-white bg-white rounded-xl p-3 text-xs font-bold outline-none focus:border-amber-500 shadow-sm">
+                              <option value="">選択してください</option>
+                              {(masters?.businessTypes || []).map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                          </div>
+                        )}
+                        {!selectedCase.prefecture && (
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-black text-amber-500 flex items-center gap-1"><MapPin size={10}/> 都道府県</label>
+                            <select value={editFormData.prefecture || ''} onChange={e => setEditFormData({...editFormData, prefecture: e.target.value})} className="w-full border-2 border-white bg-white rounded-xl p-3 text-xs font-bold outline-none focus:border-amber-500 shadow-sm">
+                              <option value="">選択してください</option>
+                              {(masters?.prefectures || []).map(p => <option key={p} value={p}>{p}</option>)}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                   {(modalMode === 'report' || modalMode === 'edit' || modalMode === 'cancel') && (
                     <div className="space-y-1">
                       <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><FileText size={10}/> {modalMode === 'cancel' ? 'キャンセル理由・対応内容' : '実施記録・メモ'}</label>
@@ -4595,8 +4624,8 @@
       const labelCls = 'block text-[10px] font-black text-slate-500 uppercase tracking-wider mb-1';
 
       return (
-        <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-sm p-4 flex items-center justify-center">
-          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-sm p-4 flex items-center justify-center overflow-y-auto">
+          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden my-auto max-h-[calc(100vh-2rem)] overflow-y-auto">
             <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-black text-slate-800 flex items-center gap-2"><Plus size={16}/> 新規案件追加</h3>

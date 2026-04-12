@@ -1680,6 +1680,42 @@ function updateSupportRecord(recordData) {
   ];
   sheet.getRange(rowIndex, IDX.RECORDS.STATUS + 1, 1, batchRow.length).setValues([batchRow]);
 
+  // ── 都道府県・サービス種別の案件情報更新（完了報告時など） ──
+  var hasCaseInfoUpdate = (recordData.prefecture !== undefined && recordData.prefecture !== null) ||
+                          (recordData.serviceType !== undefined && recordData.serviceType !== null);
+  if (hasCaseInfoUpdate) {
+    var caseId = recordData.timestamp;
+    var caseSheet = ss.getSheetByName(SHEET_NAMES.CASES);
+    var caseRowIdx = getCaseRowIndex_(caseSheet, caseId);
+    var isManual = false;
+    var manualSh = null;
+    var manualRowIdx = -1;
+    if (caseRowIdx === -1) {
+      manualSh = ss.getSheetByName(SHEET_NAMES.CASES_MANUAL);
+      if (manualSh) manualRowIdx = getCaseRowIndex_(manualSh, caseId);
+      if (manualRowIdx !== -1) isManual = true;
+    }
+    if (isManual && manualSh) {
+      // 手動案件: CASES_MANUAL シートに直接書き込み
+      if (recordData.prefecture !== undefined && recordData.prefecture !== null) {
+        manualSh.getRange(manualRowIdx, IDX.CASES.PREFECTURE + 1).setValue(String(recordData.prefecture).trim());
+      }
+      if (recordData.serviceType !== undefined && recordData.serviceType !== null) {
+        manualSh.getRange(manualRowIdx, IDX.CASES.SERVICE + 1).setValue(String(recordData.serviceType).trim());
+      }
+    } else if (caseRowIdx !== -1) {
+      // 通常案件: 案件補正シートに書き込み
+      var ovrSheet = ensureCasesOverrideSheet_(ss);
+      var ovrRowIdx = getOrCreateOverrideRowIndex_(ovrSheet, caseId);
+      if (recordData.prefecture !== undefined && recordData.prefecture !== null) {
+        ovrSheet.getRange(ovrRowIdx, IDX.CASES_OVERRIDE.PREFECTURE + 1).setValue(String(recordData.prefecture).trim());
+      }
+      if (recordData.serviceType !== undefined && recordData.serviceType !== null) {
+        ovrSheet.getRange(ovrRowIdx, IDX.CASES_OVERRIDE.SERVICE + 1).setValue(String(recordData.serviceType).trim());
+      }
+    }
+  }
+
   appendAuditLog_(actor, 'update_support_record', 'case', recordData.timestamp, before, {
     status: recordData.status,
     scheduledDateTime: recordData.scheduledDateTime || null,
