@@ -1395,10 +1395,14 @@ function createGoogleMeetEvent(title, startTime, description, durationMinutes) {
   var end = new Date(start.getTime() + dur * 60 * 1000);
   var apiCalId = getApiCalendarId_();
 
+  // アプリURLをdescriptionに追記
+  var appUrl = ScriptApp.getService().getUrl();
+  var descWithApp = (description || '') + (appUrl ? '\n\nタダサポ管理: ' + appUrl : '');
+
   // Calendar Advanced Service で直接イベント+Meet を作成
   var eventResource = {
     summary: title,
-    description: description || '',
+    description: descWithApp,
     start: {
       dateTime: Utilities.formatDate(start, 'Asia/Tokyo', "yyyy-MM-dd'T'HH:mm:ss"),
       timeZone: 'Asia/Tokyo'
@@ -1425,7 +1429,7 @@ function createGoogleMeetEvent(title, startTime, description, durationMinutes) {
     if (meetUrl) {
       // descriptionにもMeet URLを記載（カレンダーの説明欄からもアクセス可能に）
       Calendar.Events.patch({
-        description: 'Google Meet URL: ' + meetUrl + '\n\n' + (description || '')
+        description: 'Google Meet URL: ' + meetUrl + '\n\n' + (description || '') + (appUrl ? '\n\nタダサポ管理: ' + appUrl : '')
       }, apiCalId, created.id);
       console.log('Google Meet作成成功: ' + meetUrl + ' eventId=' + created.id);
     } else {
@@ -1439,7 +1443,7 @@ function createGoogleMeetEvent(title, startTime, description, durationMinutes) {
       var sharedCalId = getSetting_('SHARED_CALENDAR_ID', '');
       var cal = (sharedCalId && sharedCalId !== 'primary') ? CalendarApp.getCalendarById(sharedCalId) : null;
       if (!cal) cal = CalendarApp.getDefaultCalendar();
-      var fallback = cal.createEvent(title, start, end, { description: description || '' });
+      var fallback = cal.createEvent(title, start, end, { description: descWithApp });
       console.log('フォールバック: CalendarAppでイベント作成 eventId=' + fallback.getId());
       return { meetUrl: '', eventId: fallback.getId() };
     } catch(e2) {
@@ -1624,7 +1628,7 @@ function updateSupportRecord(recordData) {
         var zCal = (zSharedCalId && zSharedCalId !== 'primary') ? CalendarApp.getCalendarById(zSharedCalId) : null;
         if (!zCal) zCal = CalendarApp.getDefaultCalendar();
         zCal.createEvent(eventTitle, zStart, zEnd, {
-          description: 'Zoom URL: ' + zoomResult.joinUrl + '\n\n' + (recordData.details || '')
+          description: 'Zoom URL: ' + zoomResult.joinUrl + '\n\n' + (recordData.details || '') + '\n\nタダサポ管理: ' + (ScriptApp.getService().getUrl() || '')
         });
       } catch(e) { console.error('Zoom作成エラー: ' + e.message); }
     }
