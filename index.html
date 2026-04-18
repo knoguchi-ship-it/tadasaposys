@@ -4434,6 +4434,12 @@
                                 : 'カレンダーに予定を登録します。'}
                             </p>
                           )}
+                          {editFormData.method === 'Zoom' && (
+                            <p className="text-[10px] text-red-500 font-bold flex items-start gap-1 pl-6">
+                              <AlertTriangle size={12} className="shrink-0 mt-0.5"/>
+                              Zoomを利用する際は、タダスクなどで使用予定がないか必ず確認して下さい
+                            </p>
+                          )}
                         </div>
                       )}
                     </div>
