@@ -1617,20 +1617,26 @@ function updateSupportRecord(recordData) {
       } catch(e) { console.error('Google Meet作成エラー: ' + e.message); }
 
     } else if (recordData.method === 'Zoom') {
+      var zDur = (recordData.duration && Number(recordData.duration) > 0) ? Number(recordData.duration) : 60;
+      var zStart = new Date(recordData.scheduledDateTime);
+      var zEnd = new Date(zStart.getTime() + zDur * 60 * 1000);
+      var appUrl = ScriptApp.getService().getUrl() || '';
+
+      // Zoom会議作成を試みる（API設定が不完全でも後続のカレンダー作成には影響させない）
       try {
-        var zDur = (recordData.duration && Number(recordData.duration) > 0) ? Number(recordData.duration) : 60;
         var zoomResult = createZoomMeeting(eventTitle, recordData.scheduledDateTime, zDur);
-        newEventId = String(zoomResult.meetingId);
         newMeetUrl = zoomResult.joinUrl;
-        var zStart = new Date(recordData.scheduledDateTime);
-        var zEnd = new Date(zStart.getTime() + zDur * 60 * 1000);
+      } catch(e) { console.error('Zoom会議作成エラー（カレンダーのみ作成します）: ' + e.message); }
+
+      // カレンダーイベントは Zoom 成否に関わらず作成する
+      try {
         var zSharedCalId = getSetting_('SHARED_CALENDAR_ID', '');
         var zCal = (zSharedCalId && zSharedCalId !== 'primary') ? CalendarApp.getCalendarById(zSharedCalId) : null;
         if (!zCal) zCal = CalendarApp.getDefaultCalendar();
-        zCal.createEvent(eventTitle, zStart, zEnd, {
-          description: 'Zoom URL: ' + zoomResult.joinUrl + '\n\n' + (recordData.details || '') + '\n\nタダサポ管理: ' + (ScriptApp.getService().getUrl() || '')
-        });
-      } catch(e) { console.error('Zoom作成エラー: ' + e.message); }
+        var zDesc = (newMeetUrl ? 'Zoom URL: ' + newMeetUrl + '\n\n' : '') + (recordData.details || '') + (appUrl ? '\n\nタダサポ管理: ' + appUrl : '');
+        var zEvent = zCal.createEvent(eventTitle, zStart, zEnd, { description: zDesc });
+        newEventId = zEvent.getId();
+      } catch(e) { console.error('カレンダーイベント作成エラー: ' + e.message); }
     }
   } else if (recordData.scheduledDateTime && currentEventId && !recordData.skipCalendar) {
     // 既存カレンダーイベントの日時を更新
