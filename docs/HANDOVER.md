@@ -1,8 +1,8 @@
 # 開発者向け引継ぎ資料 (HANDOVER.md)
 
 **Project:** タダサポ管理システム
-**Version:** 1.10.3（現行リリース）
-**Date:** 2026/04/18
+**Version:** 1.11.0（現行リリース）
+**Date:** 2026/04/20
 **Author:** Development Team
 
 ---
@@ -55,6 +55,9 @@
 | カレンダーイベント作成時にアプリURLを説明欄に追記 | ✅ | v1.10.1 |
 | Zoom会議作成とカレンダーイベント作成を分離（Zoom API失敗時もカレンダー作成） | ✅ | v1.10.2 |
 | Zoom選択時にタダスク利用確認の注意メッセージ表示 | ✅ | v1.10.3 |
+| メール下書き保存（手動保存、モード/スレッド別、自動復元プロンプト） | ✅ | v1.11.0 |
+| メール予約送信（日時指定、5分間隔トリガで自動送信、取消可能） | ✅ | v1.11.0 |
+| 案件一覧に「下書きあり」「予約あり」バッジ表示 | ✅ | v1.11.0 |
 | 過去対応記録の編集機能 | ✅ | v1.9.72 |
 | 対応記録・備考内のURL自動リンク化 | ✅ | v1.9.15 |
 | 操作中のグレーアウト＋スピナー表示 | ✅ | v1.9.69 |
@@ -120,6 +123,8 @@ tadasaposys/
 | タダメンマスタ | スタッフ一覧（認証・権限管理） |
 | メール履歴 | 送信メールの履歴 |
 | 監査ログ | 管理者操作の監査ログ |
+| メール下書き | 送信前メール下書き（v1.11.0、自動生成） |
+| 予約送信キュー | 予約送信待機メール（v1.11.0、自動生成） |
 
 ### IDX定数（コード.js 約31行目）
 ```javascript
@@ -133,7 +138,13 @@ var IDX = {
              TOOLS: 17, SUB_STAFF: 18 },  // 19列
   STAFF:   { NAME: 1, EMAIL: 2, ROLE: 3, IS_ACTIVE: 4 },
   EMAIL:   { CASE_ID: 0, SEND_DATE: 1, SENDER_EMAIL: 2, SENDER_NAME: 3,
-             RECIPIENT_EMAIL: 4, SUBJECT: 5, BODY: 6 }
+             RECIPIENT_EMAIL: 4, SUBJECT: 5, BODY: 6 },
+  // v1.11.0 追加
+  DRAFT:   { DRAFT_ID: 0, CASE_ID: 1, STAFF_EMAIL: 2, MODE: 3, THREAD_ID: 4,
+             SUBJECT: 5, BODY: 6, CC: 7, BCC: 8, TOOLS: 9, UPDATED_AT: 10 },
+  SCHEDULED: { QUEUE_ID: 0, CASE_ID: 1, STAFF_EMAIL: 2, STAFF_NAME: 3, MODE: 4,
+               THREAD_ID: 5, SUBJECT: 6, BODY: 7, CC: 8, BCC: 9, TOOLS: 10,
+               SEND_AT: 11, STATUS: 12, ERROR: 13, CREATED_AT: 14, SENT_AT: 15 }
 };
 ```
 
@@ -191,6 +202,17 @@ completed → cancelled（完了後キャンセル）
 | `createGoogleMeetEvent(title, startTime, description, durationMinutes)` | Google Meetイベント作成 |
 | `createZoomMeeting(title, startTime, durationMinutes)` | Zoomミーティング作成 |
 | `verifyCcDryRun()` | CC設定のドライラン検証 |
+| `saveDraft(payload)` | メール下書き保存（v1.11.0、case/mode/thread 単位で上書き） |
+| `loadDraft(caseId, mode, threadId)` | 下書き読み込み（v1.11.0） |
+| `deleteDraft(caseId, mode, threadId)` | 下書き削除（v1.11.0） |
+| `listDraftsForCase(caseId)` | 案件の下書き一覧（v1.11.0） |
+| `scheduleEmail(payload)` | メール予約送信登録（v1.11.0、sendAt は1分以上先） |
+| `cancelScheduledEmail(queueId)` | 予約送信キャンセル（v1.11.0、pending のみ） |
+| `listScheduledForCase(caseId)` | 案件の予約一覧（v1.11.0、pending/sending のみ） |
+| `processScheduledEmails_()` | 予約送信トリガハンドラ（v1.11.0、5分間隔で起動） |
+| `setupScheduledEmailTrigger()` | 予約送信トリガのセットアップ（v1.11.0、初回手動実行） |
+| `removeScheduledEmailTrigger()` | 予約送信トリガ削除（v1.11.0） |
+| `getScheduledEmailTriggerStatus()` | 予約送信トリガの状態確認（v1.11.0） |
 
 ### 内部ヘルパー関数（主要なもの）
 | 関数 | 説明 |
@@ -223,6 +245,7 @@ completed → cancelled（完了後キャンセル）
 | `addToolsColumnToRecords()` | 対応ツール列追加 |
 | `addSubStaffColumnToRecords()` | サブ担当列追加 |
 | `fixSettingsSheet()` | 設定シート修復 |
+| `setupScheduledEmailTrigger()` | 予約送信トリガ登録（v1.11.0、本番デプロイ後に1回手動実行） |
 
 ---
 
@@ -259,6 +282,8 @@ completed → cancelled（完了後キャンセル）
 | ファビコン | GAS制限で本番反映不可 | SVGデータURIで「T」アイコンを設定（v1.9.99で元に戻し） |
 | 新着バッジ | localStorage依存 | ブラウザをまたいだ既読状態は同期されない |
 | ドキュメント | v1.9.0時点 | SDD.md / Manual.md は v1.9.0 から未更新 |
+| 予約送信トリガ | 手動登録必要 | v1.11.0 で追加。GASエディタで `setupScheduledEmailTrigger()` を1回実行（5分間隔） |
+| 予約送信の送信者 | 常にデプロイユーザー | `executeAs: USER_DEPLOYING` のため、トリガ実行時も送信元は固定。キューに `staffEmail`/`staffName` を保存して From 表示に反映 |
 
 ---
 
@@ -296,7 +321,7 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 
 ### バージョン管理ルール
 - `コード.js` 先頭コメント・`setTitle`・SDD・HANDOVER のバージョンは常に一致させること
-- 現行: **v1.10.3**（全ファイルで統一すべき）
+- 現行: **v1.11.0**（全ファイルで統一すべき）
 
 ---
 
@@ -327,3 +352,4 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 | **v1.10.1** | — | カレンダーイベント作成時にアプリURLを説明欄に追記 |
 | **v1.10.2** | 2026/04/18 | Zoom会議作成とカレンダーイベント作成を分離（Zoom API失敗時もカレンダー作成）、eventIdにカレンダーイベントIDを使用、Zoom選択時のUIメッセージを実態に合わせて修正 |
 | **v1.10.3** | 2026/04/18 | Zoom選択時にタダスク利用確認の注意メッセージを追加 |
+| **v1.11.0** | 2026/04/20 | メール下書き保存＋予約送信機能を追加。下書きはcase/mode/thread 単位で上書き、モーダル開時に自動復元プロンプト。予約送信はスプレッドシートキュー＋5分間隔トリガで自動配信、`LockService` で並行実行防止、sending 状態の復旧対応（10分以上ロック時）。案件一覧に「下書きあり」「予約あり」バッジ表示。**本番デプロイ後 `setupScheduledEmailTrigger()` を1回手動実行必要。** |

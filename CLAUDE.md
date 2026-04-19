@@ -43,11 +43,14 @@ clasp push --force && clasp deploy -i <DEPLOY_ID> -d "vX.X.X"
 ```
 - `clasp push` は `--force` 必須（なしだとサイレントにスキップされることがある）
 - `clasp pull` はローカルファイルを上書きするため、必ず先に `git commit` すること
+- v1.11.0 以降：本番初回デプロイ後、GASエディタで `setupScheduledEmailTrigger()` を1回手動実行して5分間隔トリガを登録する（予約送信機能の動作条件）
 
 ## データモデル（IDX定数 — コード.js 30行目付近）
 - 全シート左詰め、ギャップなし
-- RECORDS: FK=0 〜 ATTACHMENTS=14, CASE_LIMIT_OVERRIDE=15, ANNUAL_LIMIT_OVERRIDE=16（**17列**）
+- RECORDS: FK=0 〜 ATTACHMENTS=14, CASE_LIMIT_OVERRIDE=15, ANNUAL_LIMIT_OVERRIDE=16, TOOLS=17, SUB_STAFF=18（**19列**）
 - STAFF: NAME=1, EMAIL=2, ROLE=3, IS_ACTIVE=4（A=ID, B=氏名, C=メール）
+- DRAFT (v1.11.0): DRAFT_ID=0 〜 UPDATED_AT=10（11列、case/mode/thread 単位で上書き）
+- SCHEDULED (v1.11.0): QUEUE_ID=0 〜 SENT_AT=15（16列、status: pending/sending/sent/failed/cancelled）
 - 年度計算: 4月開始。inProgress/completed の supportCount 合算
 
 ## ビジネスルール
@@ -64,7 +67,7 @@ clasp push --force && clasp deploy -i <DEPLOY_ID> -d "vX.X.X"
 - Webapp: `executeAs: USER_DEPLOYING`, `access: ANYONE`
 
 ## ドキュメント
-- `docs/HANDOVER.md` — 引き継ぎ書 v1.9.0
+- `docs/HANDOVER.md` — 引き継ぎ書 v1.11.0
 - `docs/SDD.md` — 設計書 v1.9.0
 - `docs/RD.md` — 要件定義
 - `docs/ADR.md` — アーキテクチャ判断記録

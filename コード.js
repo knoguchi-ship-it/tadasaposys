@@ -26,6 +26,7 @@ var SHEET_NAMES = {
   STAFF: 'タダメンマスタ',
   EMAIL_HISTORY: 'メール履歴',
   EMAIL_DRAFTS: 'メール下書き',  // v1.11.0: 送信前メール一時保存（担当者ごと）
+  EMAIL_SCHEDULED: '予約送信キュー',  // v1.11.0: 予約送信メールのキュー
   AUDIT_LOG: '監査ログ'
 };
 
@@ -37,7 +38,9 @@ var IDX = {
   STAFF: { NAME: 1, EMAIL: 2, ROLE: 3, IS_ACTIVE: 4 },
   EMAIL: { CASE_ID: 0, SEND_DATE: 1, SENDER_EMAIL: 2, SENDER_NAME: 3, RECIPIENT_EMAIL: 4, SUBJECT: 5, BODY: 6 },
   // v1.11.0: メール下書きシート（複合キー: CASE_ID + STAFF_EMAIL + MODE + THREAD_ID）
-  DRAFT: { DRAFT_ID: 0, CASE_ID: 1, STAFF_EMAIL: 2, MODE: 3, THREAD_ID: 4, SUBJECT: 5, BODY: 6, CC: 7, BCC: 8, TOOLS: 9, UPDATED_AT: 10 }
+  DRAFT: { DRAFT_ID: 0, CASE_ID: 1, STAFF_EMAIL: 2, MODE: 3, THREAD_ID: 4, SUBJECT: 5, BODY: 6, CC: 7, BCC: 8, TOOLS: 9, UPDATED_AT: 10 },
+  // v1.11.0: 予約送信キュー（PK: QUEUE_ID）
+  SCHEDULED: { QUEUE_ID: 0, CASE_ID: 1, STAFF_EMAIL: 2, STAFF_NAME: 3, MODE: 4, THREAD_ID: 5, SUBJECT: 6, BODY: 7, CC: 8, BCC: 9, TOOLS: 10, SEND_AT: 11, STATUS: 12, ERROR: 13, CREATED_AT: 14, SENT_AT: 15 }
 };
 
 // ======================================================================
@@ -347,12 +350,15 @@ function getInitialData() {
   var masters = getMasters();
   // v1.11.0: 下書きを持つ案件IDの一覧（バッジ表示用）
   var draftCaseIds = listDraftCaseIdsForUser_(userEmail);
+  // v1.11.0: 予約送信のペンディング案件IDの一覧（バッジ表示用）
+  var scheduledCaseIds = listScheduledCaseIdsForUser_(userEmail);
 
   return {
     user: { name: staff.name, email: userEmail, isAdmin: isAdmin, role: role },
     cases: cases,
     masters: masters,
-    draftCaseIds: draftCaseIds
+    draftCaseIds: draftCaseIds,
+    scheduledCaseIds: scheduledCaseIds
   };
 }
 
@@ -3638,5 +3644,377 @@ function listDraftCaseIdsForUser_(userEmail) {
     seen[String(data[i][IDX.DRAFT.CASE_ID])] = true;
   }
   return Object.keys(seen);
+}
+
+
+// ======================================================================
+// v1.11.0: 予約送信機能
+// ======================================================================
+// PK: QUEUE_ID（UUID）
+// MODE: 'initial' | 'new' | 'reply' | 'schedule' | 'decline'
+// STATUS: 'pending' | 'sending' | 'sent' | 'failed' | 'cancelled' | 'skipped'
+// 時間主導トリガーで processScheduledEmails_ が5分おきに実行され、
+// SEND_AT <= now のペンディング行を処理する。
+// ======================================================================
+
+var SCHEDULED_STUCK_MINUTES = 10;       // 'sending' でこの分数を超えたらスタック扱い
+var SCHEDULED_BATCH_LIMIT = 20;         // 1回のトリガーで処理する最大件数
+var SCHEDULED_VALID_MODES = { initial: 1, 'new': 1, reply: 1, schedule: 1, decline: 1 };
+
+function ensureScheduledSheet_() {
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_SCHEDULED);
+  if (sheet) return sheet;
+
+  sheet = ss.insertSheet(SHEET_NAMES.EMAIL_SCHEDULED);
+  var headers = ['キューID', '案件ID', '担当者メール', '担当者名', 'モード', 'スレッドID', '件名', '本文', 'CC', 'BCC', '対応ツール(JSON)', '送信予定時刻', 'ステータス', 'エラー', '作成日時', '送信完了日時'];
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  sheet.getRange(1, 1, 1, headers.length).setBackground('#be185d').setFontColor('#ffffff').setFontWeight('bold').setFontSize(10);
+  sheet.setFrozenRows(1);
+  sheet.setTabColor('#f472b6');
+  sheet.setColumnWidth(1, 200);  // QUEUE_ID
+  sheet.setColumnWidth(2, 140);  // CASE_ID
+  sheet.setColumnWidth(3, 180);  // STAFF_EMAIL
+  sheet.setColumnWidth(4, 120);  // STAFF_NAME
+  sheet.setColumnWidth(5, 80);   // MODE
+  sheet.setColumnWidth(6, 140);  // THREAD_ID
+  sheet.setColumnWidth(7, 220);  // SUBJECT
+  sheet.setColumnWidth(8, 400);  // BODY
+  sheet.setColumnWidth(9, 180);  // CC
+  sheet.setColumnWidth(10, 180); // BCC
+  sheet.setColumnWidth(11, 160); // TOOLS
+  sheet.setColumnWidth(12, 140); // SEND_AT
+  sheet.setColumnWidth(13, 80);  // STATUS
+  sheet.setColumnWidth(14, 300); // ERROR
+  sheet.setColumnWidth(15, 140); // CREATED_AT
+  sheet.setColumnWidth(16, 140); // SENT_AT
+  return sheet;
+}
+
+/**
+ * 予約送信を登録する。
+ * payload: { caseId, mode, threadId, subject, body, cc, bcc, tools, sendAt (ISO string) }
+ */
+function scheduleEmail(payload) {
+  if (!payload) throw new Error('payload が不正です');
+  if (!payload.caseId) throw new Error('caseId が必要です');
+  if (!payload.mode || !SCHEDULED_VALID_MODES[payload.mode]) throw new Error('mode が不正です: ' + payload.mode);
+  if (!payload.sendAt) throw new Error('送信予定時刻が必要です');
+
+  var sendAt = new Date(payload.sendAt);
+  if (isNaN(sendAt.getTime())) throw new Error('送信予定時刻の形式が不正です');
+  var now = new Date();
+  // 1分未満の予約は不可（トリガー間隔との衝突防止）
+  if (sendAt.getTime() - now.getTime() < 60 * 1000) {
+    throw new Error('送信予定時刻は現在時刻より1分以上先を指定してください');
+  }
+
+  var actor = getActor_();
+  var sheet = ensureScheduledSheet_();
+  var queueId = 'sch-' + Utilities.getUuid();
+
+  sheet.appendRow([
+    queueId,
+    String(payload.caseId),
+    actor.email,
+    actor.name,
+    String(payload.mode),
+    String(payload.threadId || ''),
+    String(payload.subject || ''),
+    String(payload.body || ''),
+    String(payload.cc || ''),
+    String(payload.bcc || ''),
+    (payload.tools && Array.isArray(payload.tools)) ? JSON.stringify(payload.tools) : '',
+    sendAt,
+    'pending',
+    '',
+    now,
+    ''
+  ]);
+
+  return {
+    queueId: queueId,
+    sendAt: sendAt.toISOString(),
+    status: 'pending'
+  };
+}
+
+/**
+ * 予約送信をキャンセルする（pending のみ可）。
+ */
+function cancelScheduledEmail(queueId) {
+  if (!queueId) throw new Error('queueId が必要です');
+  var actor = getActor_();
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_SCHEDULED);
+  if (!sheet || sheet.getLastRow() < 2) throw new Error('予約送信が見つかりません');
+
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][IDX.SCHEDULED.QUEUE_ID]) !== String(queueId)) continue;
+
+    // 本人または管理者のみキャンセル可
+    var ownerEmail = normalizeEmail_(data[i][IDX.SCHEDULED.STAFF_EMAIL]);
+    if (ownerEmail !== normalizeEmail_(actor.email) && !actor.isAdmin) {
+      throw new Error('この予約送信をキャンセルする権限がありません');
+    }
+    var status = String(data[i][IDX.SCHEDULED.STATUS] || '');
+    if (status !== 'pending') {
+      throw new Error('このステータスの予約はキャンセルできません: ' + status);
+    }
+    var rowNum = i + 1;
+    sheet.getRange(rowNum, IDX.SCHEDULED.STATUS + 1).setValue('cancelled');
+    return { cancelled: true };
+  }
+  throw new Error('予約送信が見つかりません: ' + queueId);
+}
+
+/**
+ * 指定案件に紐づく予約送信（pending/sending のみ）を返す。
+ */
+function listScheduledForCase(caseId) {
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_SCHEDULED);
+  if (!sheet || sheet.getLastRow() < 2) return [];
+
+  var data = sheet.getDataRange().getValues();
+  var out = [];
+  var target = String(caseId || '');
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][IDX.SCHEDULED.CASE_ID]) !== target) continue;
+    var status = String(data[i][IDX.SCHEDULED.STATUS] || '');
+    if (status !== 'pending' && status !== 'sending') continue;
+    out.push(mapScheduledRow_(data[i]));
+  }
+  return out;
+}
+
+/**
+ * 現在ユーザーのペンディング予約案件ID一覧（バッジ表示用）
+ */
+function listScheduledCaseIdsForUser_(userEmail) {
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_SCHEDULED);
+  if (!sheet || sheet.getLastRow() < 2) return [];
+  var data = sheet.getDataRange().getValues();
+  var target = normalizeEmail_(userEmail);
+  var seen = {};
+  for (var i = 1; i < data.length; i++) {
+    if (normalizeEmail_(data[i][IDX.SCHEDULED.STAFF_EMAIL]) !== target) continue;
+    var status = String(data[i][IDX.SCHEDULED.STATUS] || '');
+    if (status !== 'pending' && status !== 'sending') continue;
+    seen[String(data[i][IDX.SCHEDULED.CASE_ID])] = true;
+  }
+  return Object.keys(seen);
+}
+
+function mapScheduledRow_(row) {
+  var toolsJson = String(row[IDX.SCHEDULED.TOOLS] || '');
+  var tools = [];
+  if (toolsJson) { try { tools = JSON.parse(toolsJson); } catch (e) {} }
+  return {
+    queueId: String(row[IDX.SCHEDULED.QUEUE_ID]),
+    caseId: String(row[IDX.SCHEDULED.CASE_ID]),
+    staffEmail: String(row[IDX.SCHEDULED.STAFF_EMAIL]),
+    staffName: String(row[IDX.SCHEDULED.STAFF_NAME]),
+    mode: String(row[IDX.SCHEDULED.MODE]),
+    threadId: String(row[IDX.SCHEDULED.THREAD_ID] || ''),
+    subject: String(row[IDX.SCHEDULED.SUBJECT] || ''),
+    body: String(row[IDX.SCHEDULED.BODY] || ''),
+    cc: String(row[IDX.SCHEDULED.CC] || ''),
+    bcc: String(row[IDX.SCHEDULED.BCC] || ''),
+    tools: tools,
+    sendAt: row[IDX.SCHEDULED.SEND_AT] ? new Date(row[IDX.SCHEDULED.SEND_AT]).toISOString() : null,
+    status: String(row[IDX.SCHEDULED.STATUS] || ''),
+    error: String(row[IDX.SCHEDULED.ERROR] || ''),
+    createdAt: row[IDX.SCHEDULED.CREATED_AT] ? new Date(row[IDX.SCHEDULED.CREATED_AT]).toISOString() : null,
+    sentAt: row[IDX.SCHEDULED.SENT_AT] ? new Date(row[IDX.SCHEDULED.SENT_AT]).toISOString() : null
+  };
+}
+
+/**
+ * トリガーから5分おきに呼ばれる。
+ * 送信時刻を過ぎた pending 行をバッチ処理する。
+ */
+function processScheduledEmails_() {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(1000)) {
+    Logger.log('processScheduledEmails_: 他の実行中のためスキップ');
+    return;
+  }
+
+  try {
+    var ss = getSpreadsheet_();
+    var sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_SCHEDULED);
+    if (!sheet || sheet.getLastRow() < 2) return;
+
+    var data = sheet.getDataRange().getValues();
+    var now = new Date();
+    var stuckCutoff = new Date(now.getTime() - SCHEDULED_STUCK_MINUTES * 60 * 1000);
+
+    // 1. 処理対象行を抽出（pending で期限到来、または sending でスタック）
+    var targets = [];
+    for (var i = 1; i < data.length; i++) {
+      var row = data[i];
+      var status = String(row[IDX.SCHEDULED.STATUS] || '');
+      var sendAt = row[IDX.SCHEDULED.SEND_AT] ? new Date(row[IDX.SCHEDULED.SEND_AT]) : null;
+      if (!sendAt) continue;
+      var isDue = sendAt.getTime() <= now.getTime();
+      if (status === 'pending' && isDue) {
+        targets.push({ rowNum: i + 1, row: row });
+      } else if (status === 'sending' && sendAt.getTime() < stuckCutoff.getTime()) {
+        // スタック行を再処理
+        targets.push({ rowNum: i + 1, row: row });
+      }
+      if (targets.length >= SCHEDULED_BATCH_LIMIT) break;
+    }
+
+    if (targets.length === 0) return;
+
+    // 2. 'sending' に一括マーク（ロック解放前）
+    targets.forEach(function(t) {
+      sheet.getRange(t.rowNum, IDX.SCHEDULED.STATUS + 1).setValue('sending');
+    });
+    SpreadsheetApp.flush();
+  } finally {
+    lock.releaseLock();
+  }
+
+  // 3. 各行を順次送信（ロック外で実行）
+  // 再取得してクレーム済み行を処理
+  var ss2 = getSpreadsheet_();
+  var sheet2 = ss2.getSheetByName(SHEET_NAMES.EMAIL_SCHEDULED);
+  var data2 = sheet2.getDataRange().getValues();
+  for (var j = 1; j < data2.length; j++) {
+    if (String(data2[j][IDX.SCHEDULED.STATUS]) !== 'sending') continue;
+    var rowNum = j + 1;
+    var scheduled = mapScheduledRow_(data2[j]);
+    try {
+      var result = sendScheduledRow_(scheduled);
+      sheet2.getRange(rowNum, IDX.SCHEDULED.STATUS + 1).setValue(result.status || 'sent');
+      sheet2.getRange(rowNum, IDX.SCHEDULED.ERROR + 1).setValue(result.note || '');
+      sheet2.getRange(rowNum, IDX.SCHEDULED.SENT_AT + 1).setValue(new Date());
+    } catch (e) {
+      sheet2.getRange(rowNum, IDX.SCHEDULED.STATUS + 1).setValue('failed');
+      sheet2.getRange(rowNum, IDX.SCHEDULED.ERROR + 1).setValue(String(e && e.message ? e.message : e));
+    }
+  }
+}
+
+/**
+ * 予約送信キューの1行を送信する。
+ * 戻り値: { status: 'sent'|'skipped', note?: string }
+ */
+function sendScheduledRow_(s) {
+  // 案件の宛先取得
+  var recipientEmail = getRecipientEmail_(s.caseId);
+  if (!recipientEmail) {
+    return { status: 'skipped', note: '案件が見つかりません' };
+  }
+
+  // 予約時のスタッフをactorとして扱う（トリガー実行者ではない）
+  var scheduledActor = { email: s.staffEmail, name: s.staffName, isAdmin: false };
+
+  var ss = getSpreadsheet_();
+  var recordSheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  var recordData = recordSheet.getDataRange().getValues();
+  var caseRow = -1;
+  var currentStatus = '';
+  for (var i = 1; i < recordData.length; i++) {
+    if (String(recordData[i][IDX.RECORDS.FK]) === String(s.caseId)) {
+      caseRow = i + 1;
+      currentStatus = String(recordData[i][IDX.RECORDS.STATUS] || '');
+      break;
+    }
+  }
+
+  // キャンセル済/対応不可になった案件は送信しない
+  if (currentStatus === 'cancelled' || currentStatus === 'rejected') {
+    return { status: 'skipped', note: '案件ステータスが ' + currentStatus + ' のため送信を中止' };
+  }
+
+  // 実送信
+  var sendResult = sendInThread_(
+    recipientEmail,
+    s.subject,
+    s.body,
+    s.threadId || null,
+    s.threadId ? getLastMessageId_(s.threadId) : null,
+    s.cc || null,
+    s.bcc || null
+  );
+
+  // 新規スレッドの場合は保存
+  if (!s.threadId && sendResult.threadId) {
+    storeThreadId_(s.caseId, sendResult.threadId);
+  }
+
+  // モード固有の後処理
+  if (s.mode === 'initial' && currentStatus === 'unhandled') {
+    // 担当アサイン（ステータスとスタッフ情報を更新）
+    var toolsVal = (s.tools && s.tools.length > 0) ? JSON.stringify(s.tools) : '[]';
+    if (caseRow === -1) {
+      recordSheet.appendRow([
+        s.caseId, 'inProgress', scheduledActor.email, scheduledActor.name,
+        null, 1, null, null, null, null, null, null, null, null, '[]', '', '', toolsVal, '[]'
+      ]);
+    } else {
+      recordSheet.getRange(caseRow, IDX.RECORDS.STATUS + 1).setValue('inProgress');
+      recordSheet.getRange(caseRow, IDX.RECORDS.STAFF_EMAIL + 1).setValue(scheduledActor.email);
+      recordSheet.getRange(caseRow, IDX.RECORDS.STAFF_NAME + 1).setValue(scheduledActor.name);
+      if (toolsVal !== '[]') {
+        recordSheet.getRange(caseRow, IDX.RECORDS.TOOLS + 1).setValue(toolsVal);
+      }
+    }
+  } else if (s.mode === 'decline') {
+    // 対応不可にステータス変更
+    if (caseRow === -1) {
+      recordSheet.appendRow([
+        s.caseId, 'rejected', scheduledActor.email, scheduledActor.name,
+        null, 1, null, null, null, null, null, null, null, null, '[]', '', '', '[]', '[]'
+      ]);
+    } else {
+      recordSheet.getRange(caseRow, IDX.RECORDS.STATUS + 1).setValue('rejected');
+    }
+  }
+
+  // メール履歴に記録
+  recordEmail_(s.caseId, scheduledActor, recipientEmail, s.subject, s.body);
+  return { status: 'sent' };
+}
+
+/**
+ * 予約送信トリガーをセットアップする（GASエディタから手動実行）。
+ * 既存のトリガーがあれば削除して再作成。5分間隔。
+ */
+function setupScheduledEmailTrigger() {
+  removeScheduledEmailTrigger();
+  ScriptApp.newTrigger('processScheduledEmails_')
+    .timeBased()
+    .everyMinutes(5)
+    .create();
+  Logger.log('予約送信トリガーを設定しました（5分間隔）');
+}
+
+function removeScheduledEmailTrigger() {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'processScheduledEmails_') {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+}
+
+/**
+ * 予約送信トリガーの稼働状態を確認する（管理者UI用）。
+ */
+function getScheduledEmailTriggerStatus() {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'processScheduledEmails_') {
+      return { active: true, triggerId: triggers[i].getUniqueId() };
+    }
+  }
+  return { active: false };
 }
 
