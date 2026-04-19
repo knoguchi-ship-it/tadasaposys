@@ -180,6 +180,9 @@
         scheduleBody: '{{名前}} 様\n\nいつもお世話になっております。\nタダサポ担当の{{担当者名}}です。\n\nサポート日程が決まりましたのでご連絡いたします。\n\n----------------\n【サポート日程】\n日時：{{日程}}\n方法：{{対応方法}}\n{{URL}}\n----------------\n\n当日はどうぞよろしくお願いいたします。\nご不明な点がございましたらお気軽にご連絡ください。'
       }
     };
+    // v1.11.0: メール下書きのローカル保管（キー: caseId|mode|threadId）
+    let mockDrafts = {};
+
     let mockCases = [
       // ── パターン1: 未対応（通常） ──
       { id: '2026-01-15T10:30:00', timestamp: '2026-01-15T10:30:00', email: 'yamada@kaigo.jp', officeName: 'やまだ訪問介護ステーション', requesterName: '山田一郎', prefecture: '東京都', details: 'パソコンの操作方法について教えてほしい。利用者記録の入力方法がわからず困っている。', serviceType: '訪問介護', status: 'unhandled', staffEmail: null, staffName: null, scheduledDateTime: null, supportCount: 1, method: null, businessType: '訪問介護', content: null, remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 3, subStaff: [], supportHistory: [], emails: [] },
@@ -345,11 +348,64 @@
       getInitialData: () => {
         if (IS_LOCAL) {
           return new Promise(resolve => setTimeout(() => {
-            resolve({ user: MOCK_USER, cases: buildMockCaseList(), masters: MOCK_MASTERS });
+            var draftCaseIds = Object.keys(mockDrafts).map(k => k.split('|')[0]);
+            var uniqueDraftCaseIds = [...new Set(draftCaseIds)];
+            resolve({ user: MOCK_USER, cases: buildMockCaseList(), masters: MOCK_MASTERS, draftCaseIds: uniqueDraftCaseIds });
           }, 300));
         }
         return new Promise((resolve, reject) => {
           google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message || "Unknown error"))).getInitialData();
+        });
+      },
+      saveDraft: (payload) => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            var key = payload.caseId + '|' + (payload.mode || '') + '|' + (payload.threadId || '');
+            mockDrafts[key] = { ...payload, draftId: mockDrafts[key]?.draftId || ('draft-' + Date.now()), updatedAt: new Date().toISOString() };
+            console.log('=== 下書き保存（モック） ===', key);
+            resolve({ draftId: mockDrafts[key].draftId, updatedAt: mockDrafts[key].updatedAt });
+          }, 200));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).saveDraft(payload);
+        });
+      },
+      loadDraft: (caseId, mode, threadId) => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            var key = caseId + '|' + (mode || '') + '|' + (threadId || '');
+            resolve(mockDrafts[key] || null);
+          }, 150));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).loadDraft(caseId, mode, threadId || '');
+        });
+      },
+      deleteDraft: (caseId, mode, threadId) => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            var key = caseId + '|' + (mode || '') + '|' + (threadId || '');
+            delete mockDrafts[key];
+            resolve({ deleted: true });
+          }, 150));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).deleteDraft(caseId, mode, threadId || '');
+        });
+      },
+      listDraftsForCase: (caseId) => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            var out = [];
+            Object.keys(mockDrafts).forEach(k => {
+              var d = mockDrafts[k];
+              if (d.caseId === caseId) out.push(d);
+            });
+            resolve(out);
+          }, 150));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).listDraftsForCase(caseId);
         });
       },
       getAllCases: () => {
@@ -872,6 +928,9 @@
       const [user, setUser] = useState(null);
       const [cases, setCases] = useState([]);
       const [masters, setMasters] = useState(null);
+      // v1.11.0: 下書きがある案件ID集合（バッジ表示用）
+      const [draftCaseIds, setDraftCaseIds] = useState([]);
+      const draftCaseIdSet = useMemo(() => new Set(draftCaseIds), [draftCaseIds]);
 
       const [activeTab, setActiveTab] = useState('unhandled');
       const [selectedCaseId, setSelectedCaseId] = useState(null);
@@ -1005,6 +1064,7 @@
           setUser(data.user);
           setCases(data.cases);
           setMasters(data.masters);
+          setDraftCaseIds(data.draftCaseIds || []);
           setLoading(false);
           if (data.user?.email) restoreSeen(data.user.email);
           return;
@@ -1014,6 +1074,7 @@
             setUser(data.user);
             setCases(data.cases);
             setMasters(data.masters);
+            setDraftCaseIds(data.draftCaseIds || []);
             setLoading(false);
             if (data.user?.email) restoreSeen(data.user.email);
           })
@@ -1598,6 +1659,69 @@
         });
       };
 
+      // v1.11.0: 下書き関連
+      // メールモーダルが開かれた直後に、該当キーの下書きがあれば読み込み確認
+      const [draftChecked, setDraftChecked] = useState(null); // 最後にチェック済みの "caseId|mode|threadId"
+      useEffect(() => {
+        if (!emailModal || !emailModal.caseId) { setDraftChecked(null); return; }
+        var key = emailModal.caseId + '|' + (emailModal.mode || '') + '|' + (emailModal.threadId || '');
+        if (draftChecked === key) return; // 同じキーで重複チェックしない
+        setDraftChecked(key);
+        Api.loadDraft(emailModal.caseId, emailModal.mode, emailModal.threadId || '')
+          .then(draft => {
+            if (!draft) return;
+            showConfirm(
+              '保存済みの下書きがあります。読み込みますか？\n（「いいえ」で現在の内容を維持、「はい」で下書きの内容に置き換え）',
+              () => {
+                setEmailModal(prev => prev ? {
+                  ...prev,
+                  subject: draft.subject || prev.subject,
+                  body: draft.body || prev.body,
+                  cc: draft.cc || prev.cc,
+                  bcc: draft.bcc || prev.bcc,
+                  tools: (prev.mode === 'initial' && Array.isArray(draft.tools)) ? draft.tools : prev.tools
+                } : prev);
+                showToast('下書きを読み込みました。', { type: 'success', title: '下書き読込' });
+              },
+              { title: '下書きの復元', confirmLabel: 'はい、読み込む' }
+            );
+          })
+          .catch(() => {});
+      }, [emailModal?.caseId, emailModal?.mode, emailModal?.threadId]);
+
+      const handleSaveDraft = async () => {
+        if (!emailModal || !user) return;
+        try {
+          var payload = {
+            caseId: emailModal.caseId,
+            mode: emailModal.mode,
+            threadId: emailModal.threadId || '',
+            subject: emailModal.subject || '',
+            body: emailModal.body || '',
+            cc: emailModal.cc || '',
+            bcc: emailModal.bcc || '',
+            tools: emailModal.mode === 'initial' ? (emailModal.tools || []) : undefined
+          };
+          await Api.saveDraft(payload);
+          setDraftCaseIds(prev => prev.includes(emailModal.caseId) ? prev : [...prev, emailModal.caseId]);
+          showToast('下書きを保存しました。次回モーダルを開くと読み込めます。', { type: 'success', title: '下書き保存' });
+        } catch (e) {
+          showToast(e.message || String(e), { type: 'error', title: '下書き保存エラー' });
+        }
+      };
+
+      // 下書きを削除し、draftCaseIds を同期更新
+      const clearDraftAfterSend = async (caseId, mode, threadId) => {
+        try {
+          await Api.deleteDraft(caseId, mode, threadId || '');
+          // この案件に他の下書きが残っているか確認し、無ければ draftCaseIds から除外
+          var remaining = await Api.listDraftsForCase(caseId);
+          if (!remaining || remaining.length === 0) {
+            setDraftCaseIds(prev => prev.filter(id => id !== caseId));
+          }
+        } catch (e) { /* 下書き削除失敗はサイレント（送信は成功済み） */ }
+      };
+
       const handleSendEmail = async () => {
         if (!emailModal || !user) return;
         startSubmit('メール送信中...');
@@ -1638,6 +1762,8 @@
             });
             return recalcFiscalYearCounts(updated, caseId);
           });
+          // v1.11.0: 送信成功したら該当下書きを削除
+          clearDraftAfterSend(emailModal.caseId, emailModal.mode, emailModal.threadId);
           setEmailModal(null);
           if (emailModal.mode === 'initial') {
             setActiveTab('inProgress');
@@ -2859,11 +2985,19 @@
                       </div>
                       <h4 className="text-sm font-black text-slate-800 truncate">{c.officeName}</h4>
                       <p className="text-[10px] text-slate-500 font-bold mt-0.5 truncate">{c.requesterName} 様</p>
-                      {c.currentFiscalYearCount >= 10 && (
-                        <div className="mt-1 inline-flex items-center gap-1 bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded text-[9px] font-black">
-                           <AlertTriangle size={8} aria-hidden="true" /> 上限注意 ({c.currentFiscalYearCount}回)
-                        </div>
-                      )}
+                      <div className="flex flex-wrap items-center gap-1 mt-1">
+                        {c.currentFiscalYearCount >= 10 && (
+                          <span className="inline-flex items-center gap-1 bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded text-[9px] font-black">
+                            <AlertTriangle size={8} aria-hidden="true" /> 上限注意 ({c.currentFiscalYearCount}回)
+                          </span>
+                        )}
+                        {/* v1.11.0: 下書き保有バッジ */}
+                        {draftCaseIdSet.has(c.timestamp) && (
+                          <span className="inline-flex items-center gap-1 bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded text-[9px] font-black" title="送信前のメール下書きがあります">
+                            <Save size={8} aria-hidden="true" /> 下書きあり
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </button>
                 ))}
@@ -4351,6 +4485,16 @@
                               ? <><Reply size={16}/> 返信する</>
                               : <><Send size={16}/> 送信する</>
                     }
+                  </button>
+                  {/* v1.11.0: 下書き保存ボタン */}
+                  <button
+                    type="button"
+                    onClick={handleSaveDraft}
+                    disabled={submitting}
+                    className="w-full py-3 text-slate-600 bg-slate-50 hover:bg-slate-100 border-2 border-slate-200 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2"
+                    title="送信せずに下書きとして保存。次回モーダルを開いたときに復元できます。"
+                  >
+                    <Save size={14}/> 下書きとして保存
                   </button>
                 </div>
               </div>

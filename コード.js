@@ -1,5 +1,5 @@
 /**
- * タダサポ管理システム - Backend Logic (v1.9.0)
+ * タダサポ管理システム - Backend Logic (v1.11.0)
  *
  * 概要:
  * - Google Spreadsheets をデータベースとして利用
@@ -25,6 +25,7 @@ var SHEET_NAMES = {
   RECORDS: 'サポート記録',
   STAFF: 'タダメンマスタ',
   EMAIL_HISTORY: 'メール履歴',
+  EMAIL_DRAFTS: 'メール下書き',  // v1.11.0: 送信前メール一時保存（担当者ごと）
   AUDIT_LOG: '監査ログ'
 };
 
@@ -34,7 +35,9 @@ var IDX = {
   CASES_OVERRIDE: { PK: 0, EMAIL: 1, OFFICE: 2, NAME: 3, DETAILS: 4, PREFECTURE: 5, SERVICE: 6 },
   RECORDS: { FK: 0, STATUS: 1, STAFF_EMAIL: 2, STAFF_NAME: 3, DATE: 4, COUNT: 5, METHOD: 6, BUSINESS: 7, CONTENT: 8, REMARKS: 9, HISTORY: 10, EVENT_ID: 11, MEET_URL: 12, THREAD_ID: 13, ATTACHMENTS: 14, CASE_LIMIT_OVERRIDE: 15, ANNUAL_LIMIT_OVERRIDE: 16, TOOLS: 17, SUB_STAFF: 18 },
   STAFF: { NAME: 1, EMAIL: 2, ROLE: 3, IS_ACTIVE: 4 },
-  EMAIL: { CASE_ID: 0, SEND_DATE: 1, SENDER_EMAIL: 2, SENDER_NAME: 3, RECIPIENT_EMAIL: 4, SUBJECT: 5, BODY: 6 }
+  EMAIL: { CASE_ID: 0, SEND_DATE: 1, SENDER_EMAIL: 2, SENDER_NAME: 3, RECIPIENT_EMAIL: 4, SUBJECT: 5, BODY: 6 },
+  // v1.11.0: メール下書きシート（複合キー: CASE_ID + STAFF_EMAIL + MODE + THREAD_ID）
+  DRAFT: { DRAFT_ID: 0, CASE_ID: 1, STAFF_EMAIL: 2, MODE: 3, THREAD_ID: 4, SUBJECT: 5, BODY: 6, CC: 7, BCC: 8, TOOLS: 9, UPDATED_AT: 10 }
 };
 
 // ======================================================================
@@ -342,11 +345,14 @@ function getInitialData() {
   var isAdmin = role === 'admin';
   var cases = getAllCasesJoined();
   var masters = getMasters();
+  // v1.11.0: 下書きを持つ案件IDの一覧（バッジ表示用）
+  var draftCaseIds = listDraftCaseIdsForUser_(userEmail);
 
   return {
     user: { name: staff.name, email: userEmail, isAdmin: isAdmin, role: role },
     cases: cases,
-    masters: masters
+    masters: masters,
+    draftCaseIds: draftCaseIds
   };
 }
 
@@ -3434,4 +3440,203 @@ function setupAttachmentFeatureSchema() {
   Logger.log('添付機能向けスキーマ整備が完了しました。');
 }
 
+
+// ======================================================================
+// v1.11.0: メール下書き機能
+// ======================================================================
+// 複合キー: (CASE_ID, STAFF_EMAIL, MODE, THREAD_ID) で1レコード
+// MODE: 'initial' | 'new' | 'reply' | 'schedule' | 'decline'
+// THREAD_ID: reply モードの場合のみ値あり、それ以外は空文字
+// ======================================================================
+
+function ensureDraftsSheet_() {
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_DRAFTS);
+  if (sheet) return sheet;
+
+  sheet = ss.insertSheet(SHEET_NAMES.EMAIL_DRAFTS);
+  var headers = ['下書きID', '案件ID', '担当者メール', 'モード', 'スレッドID', '件名', '本文', 'CC', 'BCC', '対応ツール(JSON)', '更新日時'];
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  sheet.getRange(1, 1, 1, headers.length).setBackground('#7c3aed').setFontColor('#ffffff').setFontWeight('bold').setFontSize(10);
+  sheet.setFrozenRows(1);
+  sheet.setTabColor('#a78bfa');
+  sheet.setColumnWidth(1, 180); // DRAFT_ID
+  sheet.setColumnWidth(2, 140); // CASE_ID
+  sheet.setColumnWidth(3, 180); // STAFF_EMAIL
+  sheet.setColumnWidth(4, 80);  // MODE
+  sheet.setColumnWidth(5, 160); // THREAD_ID
+  sheet.setColumnWidth(6, 220); // SUBJECT
+  sheet.setColumnWidth(7, 400); // BODY
+  sheet.setColumnWidth(8, 180); // CC
+  sheet.setColumnWidth(9, 180); // BCC
+  sheet.setColumnWidth(10, 160);// TOOLS
+  sheet.setColumnWidth(11, 140);// UPDATED_AT
+  return sheet;
+}
+
+function normalizeDraftKey_(caseId, staffEmail, mode, threadId) {
+  return String(caseId || '') + '|' + normalizeEmail_(staffEmail || '') + '|' + String(mode || '') + '|' + String(threadId || '');
+}
+
+/**
+ * 下書きを保存（upsert）する。
+ * payload: { caseId, mode, threadId, subject, body, cc, bcc, tools }
+ * 既存の同キー下書きは上書き、なければ追記。
+ */
+function saveDraft(payload) {
+  if (!payload || !payload.caseId || !payload.mode) {
+    throw new Error('下書き保存には caseId と mode が必要です。');
+  }
+  var actor = getActor_();
+  var staffEmail = actor.email;
+  var sheet = ensureDraftsSheet_();
+
+  var caseId = String(payload.caseId);
+  var mode = String(payload.mode);
+  var threadId = String(payload.threadId || '');
+  var subject = String(payload.subject || '');
+  var body = String(payload.body || '');
+  var cc = String(payload.cc || '');
+  var bcc = String(payload.bcc || '');
+  var toolsJson = '';
+  if (payload.tools && Array.isArray(payload.tools)) {
+    toolsJson = JSON.stringify(payload.tools);
+  }
+  var now = new Date();
+  var targetKey = normalizeDraftKey_(caseId, staffEmail, mode, threadId);
+
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    var rowKey = normalizeDraftKey_(data[i][IDX.DRAFT.CASE_ID], data[i][IDX.DRAFT.STAFF_EMAIL], data[i][IDX.DRAFT.MODE], data[i][IDX.DRAFT.THREAD_ID]);
+    if (rowKey === targetKey) {
+      var rowNum = i + 1;
+      sheet.getRange(rowNum, IDX.DRAFT.SUBJECT + 1).setValue(subject);
+      sheet.getRange(rowNum, IDX.DRAFT.BODY + 1).setValue(body);
+      sheet.getRange(rowNum, IDX.DRAFT.CC + 1).setValue(cc);
+      sheet.getRange(rowNum, IDX.DRAFT.BCC + 1).setValue(bcc);
+      sheet.getRange(rowNum, IDX.DRAFT.TOOLS + 1).setValue(toolsJson);
+      sheet.getRange(rowNum, IDX.DRAFT.UPDATED_AT + 1).setValue(now);
+      return { draftId: String(data[i][IDX.DRAFT.DRAFT_ID]), updatedAt: now.toISOString() };
+    }
+  }
+
+  var draftId = 'draft-' + Utilities.getUuid();
+  sheet.appendRow([draftId, caseId, staffEmail, mode, threadId, subject, body, cc, bcc, toolsJson, now]);
+  return { draftId: draftId, updatedAt: now.toISOString() };
+}
+
+/**
+ * 指定キーの下書きを取得する。
+ * 戻り値: 下書きオブジェクト or null
+ */
+function loadDraft(caseId, mode, threadId) {
+  var actor = getActor_();
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_DRAFTS);
+  if (!sheet || sheet.getLastRow() < 2) return null;
+
+  var targetKey = normalizeDraftKey_(caseId, actor.email, mode, threadId);
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    var rowKey = normalizeDraftKey_(data[i][IDX.DRAFT.CASE_ID], data[i][IDX.DRAFT.STAFF_EMAIL], data[i][IDX.DRAFT.MODE], data[i][IDX.DRAFT.THREAD_ID]);
+    if (rowKey === targetKey) {
+      var toolsJson = String(data[i][IDX.DRAFT.TOOLS] || '');
+      var tools = [];
+      if (toolsJson) {
+        try { tools = JSON.parse(toolsJson); } catch (e) { tools = []; }
+      }
+      var updatedAt = data[i][IDX.DRAFT.UPDATED_AT];
+      return {
+        draftId: String(data[i][IDX.DRAFT.DRAFT_ID]),
+        caseId: String(data[i][IDX.DRAFT.CASE_ID]),
+        mode: String(data[i][IDX.DRAFT.MODE]),
+        threadId: String(data[i][IDX.DRAFT.THREAD_ID] || ''),
+        subject: String(data[i][IDX.DRAFT.SUBJECT] || ''),
+        body: String(data[i][IDX.DRAFT.BODY] || ''),
+        cc: String(data[i][IDX.DRAFT.CC] || ''),
+        bcc: String(data[i][IDX.DRAFT.BCC] || ''),
+        tools: tools,
+        updatedAt: updatedAt ? new Date(updatedAt).toISOString() : null
+      };
+    }
+  }
+  return null;
+}
+
+/**
+ * 指定キーの下書きを削除する。
+ */
+function deleteDraft(caseId, mode, threadId) {
+  var actor = getActor_();
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_DRAFTS);
+  if (!sheet || sheet.getLastRow() < 2) return { deleted: false };
+
+  var targetKey = normalizeDraftKey_(caseId, actor.email, mode, threadId);
+  var data = sheet.getDataRange().getValues();
+  for (var i = data.length - 1; i >= 1; i--) {
+    var rowKey = normalizeDraftKey_(data[i][IDX.DRAFT.CASE_ID], data[i][IDX.DRAFT.STAFF_EMAIL], data[i][IDX.DRAFT.MODE], data[i][IDX.DRAFT.THREAD_ID]);
+    if (rowKey === targetKey) {
+      sheet.deleteRow(i + 1);
+      return { deleted: true };
+    }
+  }
+  return { deleted: false };
+}
+
+/**
+ * 案件に紐づく現在ユーザーの全下書きを返す。
+ * 戻り値: [{ draftId, mode, threadId, subject, body, cc, bcc, tools, updatedAt }, ...]
+ */
+function listDraftsForCase(caseId) {
+  var actor = getActor_();
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_DRAFTS);
+  if (!sheet || sheet.getLastRow() < 2) return [];
+
+  var data = sheet.getDataRange().getValues();
+  var userEmail = normalizeEmail_(actor.email);
+  var target = String(caseId || '');
+  var out = [];
+  for (var i = 1; i < data.length; i++) {
+    if (normalizeEmail_(data[i][IDX.DRAFT.STAFF_EMAIL]) !== userEmail) continue;
+    if (String(data[i][IDX.DRAFT.CASE_ID]) !== target) continue;
+    var toolsJson = String(data[i][IDX.DRAFT.TOOLS] || '');
+    var tools = [];
+    if (toolsJson) { try { tools = JSON.parse(toolsJson); } catch (e) {} }
+    var updatedAt = data[i][IDX.DRAFT.UPDATED_AT];
+    out.push({
+      draftId: String(data[i][IDX.DRAFT.DRAFT_ID]),
+      caseId: String(data[i][IDX.DRAFT.CASE_ID]),
+      mode: String(data[i][IDX.DRAFT.MODE]),
+      threadId: String(data[i][IDX.DRAFT.THREAD_ID] || ''),
+      subject: String(data[i][IDX.DRAFT.SUBJECT] || ''),
+      body: String(data[i][IDX.DRAFT.BODY] || ''),
+      cc: String(data[i][IDX.DRAFT.CC] || ''),
+      bcc: String(data[i][IDX.DRAFT.BCC] || ''),
+      tools: tools,
+      updatedAt: updatedAt ? new Date(updatedAt).toISOString() : null
+    });
+  }
+  return out;
+}
+
+/**
+ * 下書きを持つ案件IDの一覧（現在ユーザー分）を返す。
+ * バッジ表示用の軽量クエリ。
+ */
+function listDraftCaseIdsForUser_(userEmail) {
+  var ss = getSpreadsheet_();
+  var sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_DRAFTS);
+  if (!sheet || sheet.getLastRow() < 2) return [];
+
+  var data = sheet.getDataRange().getValues();
+  var target = normalizeEmail_(userEmail);
+  var seen = {};
+  for (var i = 1; i < data.length; i++) {
+    if (normalizeEmail_(data[i][IDX.DRAFT.STAFF_EMAIL]) !== target) continue;
+    seen[String(data[i][IDX.DRAFT.CASE_ID])] = true;
+  }
+  return Object.keys(seen);
+}
 
