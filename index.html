@@ -5028,7 +5028,7 @@
               </div>
               <button onClick={onClose} className="p-2 rounded-lg hover:bg-slate-100"><X size={16}/></button>
             </div>
-            <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4 overflow-y-auto max-h-[70vh]">
+            <form onSubmit={handleSubmit} noValidate className="px-6 py-5 space-y-4 overflow-y-auto max-h-[70vh]">
               <div>
                 <label className={labelCls}>メールアドレス <span className="text-rose-500">*</span></label>
                 <input type="email" className={inputCls} value={form.email} onChange={e => set('email', e.target.value)} placeholder="example@kaigo.jp" />
