@@ -358,7 +358,8 @@ function getInitialData() {
     cases: cases,
     masters: masters,
     draftCaseIds: draftCaseIds,
-    scheduledCaseIds: scheduledCaseIds
+    scheduledCaseIds: scheduledCaseIds,
+    forcedCc: getForcedCc_() || ''
   };
 }
 

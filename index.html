@@ -353,7 +353,7 @@
             var draftCaseIds = Object.keys(mockDrafts).map(k => k.split('|')[0]);
             var uniqueDraftCaseIds = [...new Set(draftCaseIds)];
             var scheduledCaseIds = [...new Set(Object.values(mockScheduled).filter(s => s.status === 'pending' || s.status === 'sending').map(s => s.caseId))];
-            resolve({ user: MOCK_USER, cases: buildMockCaseList(), masters: MOCK_MASTERS, draftCaseIds: uniqueDraftCaseIds, scheduledCaseIds: scheduledCaseIds });
+            resolve({ user: MOCK_USER, cases: buildMockCaseList(), masters: MOCK_MASTERS, draftCaseIds: uniqueDraftCaseIds, scheduledCaseIds: scheduledCaseIds, forcedCc: 'tadasapo@tadakayo.jp' });
           }, 300));
         }
         return new Promise((resolve, reject) => {
@@ -991,6 +991,8 @@
       const [user, setUser] = useState(null);
       const [cases, setCases] = useState([]);
       const [masters, setMasters] = useState(null);
+      // v1.11.2: 管理設定で指定された自動CC（全メールに付与される）
+      const [forcedCc, setForcedCc] = useState('');
       // v1.11.0: 下書きがある案件ID集合（バッジ表示用）
       const [draftCaseIds, setDraftCaseIds] = useState([]);
       const draftCaseIdSet = useMemo(() => new Set(draftCaseIds), [draftCaseIds]);
@@ -1134,6 +1136,7 @@
           setMasters(data.masters);
           setDraftCaseIds(data.draftCaseIds || []);
           setScheduledCaseIds(data.scheduledCaseIds || []);
+          setForcedCc(data.forcedCc || '');
           setLoading(false);
           if (data.user?.email) restoreSeen(data.user.email);
           return;
@@ -1145,6 +1148,7 @@
             setMasters(data.masters);
             setDraftCaseIds(data.draftCaseIds || []);
             setScheduledCaseIds(data.scheduledCaseIds || []);
+            setForcedCc(data.forcedCc || '');
             setLoading(false);
             if (data.user?.email) restoreSeen(data.user.email);
           })
@@ -2458,6 +2462,7 @@
           await refreshAdminPanelData();
           const refreshed = await Api.getInitialData();
           setMasters(refreshed.masters);
+          setForcedCc(refreshed.forcedCc || '');
           showToast('設定を保存しました。', { type: 'success', title: '設定管理' });
         } catch (e) {
           showToast(e.message || String(e), { type: 'error', title: '設定更新エラー' });
@@ -4646,6 +4651,11 @@
                         placeholder="カンマ区切りで複数指定可"
                         className="w-full border-2 border-slate-100 rounded-xl p-3 text-xs font-bold outline-none focus:border-teal-500 placeholder:text-slate-300"
                       />
+                      {forcedCc && (
+                        <p className="text-[10px] font-bold text-slate-500 leading-snug pt-0.5">
+                          ※ <span className="text-teal-600">{forcedCc}</span> は自動的にCCへ追加されます
+                        </p>
+                      )}
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><Mail size={10}/> BCC（任意）</label>
