@@ -1764,8 +1764,10 @@
           .catch(() => {});
       }, [emailModal?.caseId, emailModal?.mode, emailModal?.threadId]);
 
+      const [savingDraft, setSavingDraft] = useState(false);
       const handleSaveDraft = async () => {
-        if (!emailModal || !user) return;
+        if (!emailModal || !user || savingDraft) return;
+        setSavingDraft(true);
         try {
           var payload = {
             caseId: emailModal.caseId,
@@ -1782,6 +1784,8 @@
           showToast('下書きを保存しました。次回モーダルを開くと読み込めます。', { type: 'success', title: '下書き保存' });
         } catch (e) {
           showToast(e.message || String(e), { type: 'error', title: '下書き保存エラー' });
+        } finally {
+          setSavingDraft(false);
         }
       };
 
@@ -4705,11 +4709,13 @@
                     <button
                       type="button"
                       onClick={handleSaveDraft}
-                      disabled={submitting}
-                      className="py-3 text-slate-600 bg-slate-50 hover:bg-slate-100 border-2 border-slate-200 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2"
+                      disabled={submitting || savingDraft}
+                      className="py-3 text-slate-600 bg-slate-50 hover:bg-slate-100 border-2 border-slate-200 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 disabled:opacity-70"
                       title="送信せずに下書きとして保存。次回モーダルを開いたときに復元できます。"
                     >
-                      <Save size={14}/> 下書き保存
+                      {savingDraft
+                        ? <><Loader2 size={14} className="animate-spin"/> 保存中…</>
+                        : <><Save size={14}/> 下書き保存</>}
                     </button>
                     <button
                       type="button"
@@ -4735,9 +4741,11 @@
                         type="button"
                         onClick={handleScheduleSend}
                         disabled={submitting}
-                        className="w-full py-3 bg-fuchsia-600 hover:bg-fuchsia-700 text-white rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 shadow-md shadow-fuchsia-200"
+                        className="w-full py-3 bg-fuchsia-600 hover:bg-fuchsia-700 text-white rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 shadow-md shadow-fuchsia-200 disabled:opacity-70"
                       >
-                        <Clock size={14}/> この時刻で予約する
+                        {submitting
+                          ? <><Loader2 size={14} className="animate-spin"/> 予約登録中…</>
+                          : <><Clock size={14}/> この時刻で予約する</>}
                       </button>
                     </div>
                   )}
