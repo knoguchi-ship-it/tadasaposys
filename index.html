@@ -759,19 +759,36 @@
       reassignCaseAdmin: (caseId, staffEmail) => {
         if (IS_LOCAL) {
           return new Promise(resolve => setTimeout(() => {
+            const c = mockCases.find(x => x.id === caseId);
+            if (!c) { resolve({}); return; }
             if (!staffEmail) {
-              mockCases = mockCases.map(c => c.id === caseId
-                ? { ...c, status: 'unhandled', staffEmail: null, staffName: null }
-                : c
-              );
+              // 担当解除 → resetToUnhandled と同等（全フィールドクリア）
+              const result = { status: 'unhandled', staffEmail: '', staffName: '',
+                supportCount: 1, scheduledDateTime: null, content: null, remarks: null,
+                meetUrl: null, eventId: null, tools: [], subStaff: [], supportHistory: c.supportHistory || [] };
+              if (c.status === 'completed') {
+                // 現在回を履歴に追加
+                const hist = [...(c.supportHistory || [])];
+                hist.push({ round: c.supportCount || 1, scheduledDateTime: c.scheduledDateTime,
+                  method: c.method, content: c.content, remarks: c.remarks, meetUrl: c.meetUrl,
+                  tools: c.tools || [], staffName: c.staffName, staffEmail: c.staffEmail });
+                result.supportHistory = hist;
+              }
+              mockCases = mockCases.map(x => x.id === caseId ? { ...x, ...result } : x);
+              resolve(result);
             } else {
+              // 担当者変更: unhandled の場合のみ inProgress に変更
               const target = mockStaffMembers.find(x => x.email === String(staffEmail).toLowerCase());
-              mockCases = mockCases.map(c => c.id === caseId
-                ? { ...c, staffEmail: target?.email || '', staffName: target?.name || '' }
-                : c
-              );
+              const newStatus = c.status === 'unhandled' ? 'inProgress' : c.status;
+              const result = { ...c, status: newStatus,
+                staffEmail: target?.email || staffEmail, staffName: target?.name || '' };
+              mockCases = mockCases.map(x => x.id === caseId ? result : x);
+              resolve({ status: result.status, staffEmail: result.staffEmail, staffName: result.staffName,
+                supportCount: result.supportCount || 1, scheduledDateTime: result.scheduledDateTime,
+                content: result.content, remarks: result.remarks, meetUrl: result.meetUrl,
+                eventId: result.eventId, tools: result.tools || [], subStaff: result.subStaff || [],
+                caseLimitOverride: result.caseLimitOverride || null, supportHistory: result.supportHistory || [] });
             }
-            resolve();
           }, 250));
         }
         return new Promise((resolve, reject) => {
@@ -792,8 +809,56 @@
       setCaseStatusAdmin: (caseId, status) => {
         if (IS_LOCAL) {
           return new Promise(resolve => setTimeout(() => {
-            mockCases = mockCases.map(c => c.id === caseId ? { ...c, status } : c);
-            resolve();
+            const c = mockCases.find(x => x.id === caseId);
+            if (!c) { resolve({}); return; }
+            const from = c.status || 'unhandled';
+            const to   = status;
+            let result = { ...c };
+
+            if (from === to) { resolve(result); return; }
+
+            const getFY = ts => { const d = new Date(ts); return d.getMonth() < 3 ? d.getFullYear() - 1 : d.getFullYear(); };
+            const effectiveLimit = c.caseLimitOverride || 3;
+
+            if (from === 'completed' && to === 'inProgress') {
+              // reopenForAdmin: HISTORY保存 + count+1 + クリア + 上限自動補正
+              const hist = [...(c.supportHistory || [])];
+              hist.push({ round: c.supportCount || 1, scheduledDateTime: c.scheduledDateTime,
+                method: c.method, content: c.content, remarks: c.remarks, meetUrl: c.meetUrl,
+                tools: c.tools || [], staffName: c.staffName, staffEmail: c.staffEmail });
+              const newCount = (c.supportCount || 1) + 1;
+              const newLimit = newCount > effectiveLimit ? newCount : (c.caseLimitOverride || null);
+              result = { ...c, status: 'inProgress', supportCount: newCount,
+                scheduledDateTime: null, method: null, content: null, remarks: null,
+                meetUrl: null, eventId: null, attachments: [],
+                caseLimitOverride: newLimit, supportHistory: hist };
+            } else if (to === 'unhandled') {
+              // resetToUnhandled
+              const hist = [...(c.supportHistory || [])];
+              if (from === 'completed') {
+                hist.push({ round: c.supportCount || 1, scheduledDateTime: c.scheduledDateTime,
+                  method: c.method, content: c.content, remarks: c.remarks, meetUrl: c.meetUrl,
+                  tools: c.tools || [], staffName: c.staffName, staffEmail: c.staffEmail });
+              }
+              result = { ...c, status: 'unhandled', staffEmail: null, staffName: null,
+                supportCount: 1, scheduledDateTime: null, method: null, content: null,
+                remarks: null, meetUrl: null, eventId: null, attachments: [], tools: [], subStaff: [],
+                supportHistory: hist };
+            } else {
+              // 単純なステータス変更（completed/cancelled/rejected）
+              result = { ...c, status: to };
+            }
+
+            mockCases = mockCases.map(x => x.id === caseId ? result : x);
+            resolve({ status: result.status, staffEmail: result.staffEmail || '',
+              staffName: result.staffName || '', supportCount: result.supportCount || 1,
+              scheduledDateTime: result.scheduledDateTime || null,
+              content: result.content || null, remarks: result.remarks || null,
+              meetUrl: result.meetUrl || null, eventId: result.eventId || null,
+              attachments: result.attachments || [], tools: result.tools || [],
+              subStaff: result.subStaff || [],
+              caseLimitOverride: result.caseLimitOverride || null,
+              supportHistory: result.supportHistory || [] });
           }, 250));
         }
         return new Promise((resolve, reject) => {
@@ -2249,18 +2314,37 @@
         setDragOverAttachments(false);
       };
 
+      // API 戻り値で案件ステートを更新する共通ヘルパー
+      const applyCaseTransitionResult = (caseId, result) => {
+        if (!result || !result.status) return;
+        setCases(prev => recalcFiscalYearCounts(prev.map(c => {
+          if (c.id !== caseId) return c;
+          return {
+            ...c,
+            status:            result.status,
+            staffEmail:        result.staffEmail  ?? c.staffEmail,
+            staffName:         result.staffName   ?? c.staffName,
+            supportCount:      result.supportCount ?? c.supportCount,
+            scheduledDateTime: result.scheduledDateTime !== undefined ? result.scheduledDateTime : c.scheduledDateTime,
+            content:           result.content  !== undefined ? result.content  : c.content,
+            remarks:           result.remarks  !== undefined ? result.remarks  : c.remarks,
+            meetUrl:           result.meetUrl  !== undefined ? result.meetUrl  : c.meetUrl,
+            eventId:           result.eventId  !== undefined ? result.eventId  : c.eventId,
+            attachments:       result.attachments  ?? c.attachments,
+            tools:             result.tools        ?? c.tools,
+            subStaff:          result.subStaff     ?? c.subStaff,
+            caseLimitOverride: result.caseLimitOverride !== undefined ? result.caseLimitOverride : c.caseLimitOverride,
+            supportHistory:    result.supportHistory ?? c.supportHistory
+          };
+        }), caseId));
+      };
+
       const handleAdminReassign = async () => {
         if (!selectedCase || !adminReassignEmail || adminReassignEmail === (selectedCase.staffEmail || '')) return;
         startSubmit('担当者変更中...');
         try {
-          await Api.reassignCaseAdmin(selectedCase.timestamp, adminReassignEmail);
-          var reassignId = selectedCase.id;
-          var staff = activeStaffMembers.find(s => s.email === adminReassignEmail);
-          setCases(prev => {
-            var updated = prev.map(c => c.id !== reassignId ? c
-              : { ...c, status: 'inProgress', staffEmail: adminReassignEmail, staffName: staff?.name || '' });
-            return recalcFiscalYearCounts(updated, reassignId);
-          });
+          var result = await Api.reassignCaseAdmin(selectedCase.timestamp, adminReassignEmail);
+          applyCaseTransitionResult(selectedCase.id, result);
           showToast('担当者を変更しました。', { type: 'success', title: '管理者操作' });
         } catch (e) {
           showToast(e.message || String(e), { type: 'error', title: '担当者変更エラー' });
@@ -2273,9 +2357,8 @@
         if (!selectedCase || !adminStatusValue || adminStatusValue === selectedCase.status) return;
         startSubmit('ステータス変更中...');
         try {
-          await Api.setCaseStatusAdmin(selectedCase.timestamp, adminStatusValue);
-          var statusCaseId = selectedCase.id;
-          setCases(prev => recalcFiscalYearCounts(prev.map(c => c.id === statusCaseId ? { ...c, status: adminStatusValue } : c), statusCaseId));
+          var result = await Api.setCaseStatusAdmin(selectedCase.timestamp, adminStatusValue);
+          applyCaseTransitionResult(selectedCase.id, result);
           setActiveTab(adminStatusValue);
           showToast('案件ステータスを更新しました。', { type: 'success', title: '管理者操作' });
         } catch (e) {
@@ -2304,9 +2387,8 @@
         if (!selectedCase || newStatus === selectedCase.status) return;
         startSubmit('ステータス変更中...');
         try {
-          await Api.setCaseStatusAdmin(selectedCase.timestamp, newStatus);
-          var inlineCaseId = selectedCase.id;
-          setCases(prev => recalcFiscalYearCounts(prev.map(c => c.id === inlineCaseId ? { ...c, status: newStatus } : c), inlineCaseId));
+          var result = await Api.setCaseStatusAdmin(selectedCase.timestamp, newStatus);
+          applyCaseTransitionResult(selectedCase.id, result);
           setActiveTab(newStatus);
           showToast('ステータスを変更しました。', { type: 'success', title: '管理者操作' });
         } catch (e) {
@@ -2361,8 +2443,7 @@
           setCases(prev => {
             var updated = prev.map(c => {
               if (c.id !== inlineReassignId) return c;
-              if (!staffEmail) return { ...c, status: 'unhandled', staffEmail: '', staffName: '' };
-              return { ...c, status: 'inProgress', staffEmail: staffEmail, staffName: inlineStaff?.name || '' };
+              return { ...c, ...result };
             });
             return recalcFiscalYearCounts(updated, inlineReassignId);
           });
@@ -2376,39 +2457,63 @@
 
       const handleAdminCaseEditSave = async () => {
         if (!selectedCase) return;
+
+        // recordPatch を慎重に組み立てる
+        // ① scheduledDateTime: 日付フィールドが空の場合は payload に含めない（null 上書きを防止）
+        // ② supportCount: 空欄の場合は payload に含めない（誤ったリセットを防止）
+        const recordPatch = {};
+        if (adminCaseEditDraft.status && adminCaseEditDraft.status !== selectedCase.status) {
+          recordPatch.status = adminCaseEditDraft.status;
+        }
+        if (adminCaseEditDraft.staffEmail !== undefined) {
+          recordPatch.staffEmail = adminCaseEditDraft.staffEmail;
+        }
+        // scheduledDateTime: 空欄ならキーごと除外（既存の日程を消さない）
+        if (adminCaseEditDraft.scheduledDate) {
+          recordPatch.scheduledDateTime = adminCaseEditDraft.scheduledDate +
+            (adminCaseEditDraft.scheduledTime ? 'T' + adminCaseEditDraft.scheduledTime : '');
+        }
+        if (adminCaseEditDraft.method !== undefined) {
+          recordPatch.method = adminCaseEditDraft.method || null;
+        }
+        // supportCount: 空欄ならキーごと除外
+        if (adminCaseEditDraft.supportCount !== '' && adminCaseEditDraft.supportCount !== undefined) {
+          const cnt = Number(adminCaseEditDraft.supportCount);
+          if (isFinite(cnt) && cnt >= 1) recordPatch.supportCount = Math.floor(cnt);
+        }
+        if (adminCaseEditDraft.caseLimitOverride !== undefined) {
+          recordPatch.caseLimitOverride = adminCaseEditDraft.caseLimitOverride === '' ? null : Number(adminCaseEditDraft.caseLimitOverride);
+        }
+        if (adminCaseEditDraft.annualLimitOverride !== undefined) {
+          recordPatch.annualLimitOverride = adminCaseEditDraft.annualLimitOverride === '' ? null : Number(adminCaseEditDraft.annualLimitOverride);
+        }
+        if (adminCaseEditDraft.content !== undefined) recordPatch.content = adminCaseEditDraft.content;
+        if (adminCaseEditDraft.remarks !== undefined) recordPatch.remarks = adminCaseEditDraft.remarks;
+        if (adminCaseEditDraft.tools   !== undefined) recordPatch.tools   = adminCaseEditDraft.tools || [];
+
         const payload = {
           casePatch: {
-            officeName: adminCaseEditDraft.officeName,
+            officeName:    adminCaseEditDraft.officeName,
             requesterName: adminCaseEditDraft.requesterName,
-            email: adminCaseEditDraft.email,
-            details: adminCaseEditDraft.details,
-            prefecture: adminCaseEditDraft.prefecture,
-            serviceType: adminCaseEditDraft.serviceType
+            email:         adminCaseEditDraft.email,
+            details:       adminCaseEditDraft.details,
+            prefecture:    adminCaseEditDraft.prefecture,
+            serviceType:   adminCaseEditDraft.serviceType
           },
-          recordPatch: {
-            status: adminCaseEditDraft.status,
-            staffEmail: adminCaseEditDraft.staffEmail,
-            scheduledDateTime: adminCaseEditDraft.scheduledDate ? (adminCaseEditDraft.scheduledDate + (adminCaseEditDraft.scheduledTime ? 'T' + adminCaseEditDraft.scheduledTime : '')) : null,
-            method: adminCaseEditDraft.method || null,
-            supportCount: Number(adminCaseEditDraft.supportCount || 1),
-            caseLimitOverride: adminCaseEditDraft.caseLimitOverride === '' ? null : Number(adminCaseEditDraft.caseLimitOverride),
-            annualLimitOverride: adminCaseEditDraft.annualLimitOverride === '' ? null : Number(adminCaseEditDraft.annualLimitOverride),
-            content: adminCaseEditDraft.content,
-            remarks: adminCaseEditDraft.remarks,
-            tools: adminCaseEditDraft.tools || []
-          }
+          recordPatch
         };
+
         startSubmit('案件データ保存中...');
         try {
           await Api.updateCaseDataAdmin(selectedCase.timestamp, payload);
           var editAdminCaseId = selectedCase.id;
-          var editStaff = payload.recordPatch?.staffEmail
-            ? activeStaffMembers.find(s => s.email === payload.recordPatch.staffEmail)
+          var editStaff = recordPatch.staffEmail
+            ? activeStaffMembers.find(s => s.email === recordPatch.staffEmail)
             : null;
           setCases(prev => {
             var updated = prev.map(c => {
               if (c.id !== editAdminCaseId) return c;
-              var p = { ...payload.casePatch, ...payload.recordPatch };
+              var p = { ...payload.casePatch, ...recordPatch };
               if (editStaff) p.staffName = editStaff.name;
               return { ...c, ...p };
             });

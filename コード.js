@@ -2175,71 +2175,80 @@ function reassignCaseAdmin(caseId, staffEmail) {
   let actor = requireAdmin_();
   ensureAdminSchema_();
   let targetEmail = normalizeEmail_(staffEmail);
+  let isUnassign  = !targetEmail;
 
-  // 未割当の場合（staffEmail が空）: 担当をクリアして unhandled に戻す
-  let isUnassign = !targetEmail;
   let targetStaff = null;
   if (!isUnassign) {
     targetStaff = getStaffByEmail(targetEmail);
     if (!targetStaff) throw new Error('対象スタッフが見つかりません。');
   }
 
-  let ss = getSpreadsheet_();
-  let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
-  let data = sheet.getDataRange().getValues();
-  let rowIndex = -1;
-  for (let i = 1; i < data.length; i++) {
-    if (String(data[i][IDX.RECORDS.FK]) === String(caseId)) {
-      rowIndex = i + 1;
-      break;
-    }
-  }
+  let ss     = getSpreadsheet_();
+  let sheet  = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  let rowIndex = getCaseRecordRowIndex_(caseId);
 
+  // ── 担当解除（staffEmail が空） ──────────────────────────
   if (isUnassign) {
-    // 未割当：レコード行がなければ何もしない（元々 unhandled）
-    if (rowIndex === -1) return;
-    let before = {
-      status: String(data[rowIndex - 1][IDX.RECORDS.STATUS] || ''),
-      staffEmail: String(data[rowIndex - 1][IDX.RECORDS.STAFF_EMAIL] || ''),
-      staffName: String(data[rowIndex - 1][IDX.RECORDS.STAFF_NAME] || '')
+    if (rowIndex === -1) return; // レコードなし = 元々 unhandled
+    let currentRow = sheet.getRange(rowIndex, 1, 1, IDX.RECORDS.SUB_STAFF + 1).getValues()[0];
+    let fromStatus = String(currentRow[IDX.RECORDS.STATUS] || 'unhandled');
+    let before     = {
+      status:     fromStatus,
+      staffEmail: String(currentRow[IDX.RECORDS.STAFF_EMAIL] || ''),
+      staffName:  String(currentRow[IDX.RECORDS.STAFF_NAME]  || '')
     };
-    sheet.getRange(rowIndex, IDX.RECORDS.STATUS + 1).setValue('unhandled');
-    sheet.getRange(rowIndex, IDX.RECORDS.STAFF_EMAIL + 1).setValue('');
-    sheet.getRange(rowIndex, IDX.RECORDS.STAFF_NAME + 1).setValue('');
+    // adminTransitionStatus_ で → unhandled（全フィールドクリア）
+    let result = adminTransitionStatus_(sheet, rowIndex, fromStatus, 'unhandled', actor);
     appendAuditLog_(actor, 'unassign_case', 'case', caseId, before, {
-      status: 'unhandled', staffEmail: '', staffName: ''
+      status: result.status, staffEmail: result.staffEmail
     });
-    return;
+    return result;
   }
 
+  // ── 担当者変更（staffEmail が非空） ──────────────────────
   if (rowIndex === -1) {
+    // レコード行なし → 新規作成して inProgress にする（unhandled 案件へのアサイン）
     sheet.appendRow([
       caseId, 'inProgress', targetEmail, targetStaff.name,
-      null, 1, null, null, null, null, null, null, null, null, '[]', '', '', '[]', '[]'
+      null, 1, null, null, null, null, '[]', null, null, null, '[]', '', '', '[]', '[]'
     ]);
     appendAuditLog_(actor, 'reassign_case', 'case', caseId, null, {
-      status: 'inProgress',
-      staffEmail: targetEmail,
-      staffName: targetStaff.name
+      status: 'inProgress', staffEmail: targetEmail, staffName: targetStaff.name
     });
-    return;
+    return {
+      status: 'inProgress', staffEmail: targetEmail, staffName: targetStaff.name,
+      supportCount: 1, scheduledDateTime: null, content: null, remarks: null,
+      meetUrl: null, eventId: null, attachments: [], tools: [], subStaff: [],
+      caseLimitOverride: null, supportHistory: []
+    };
   }
 
-  let before = {
-    status: String(data[rowIndex - 1][IDX.RECORDS.STATUS] || ''),
-    staffEmail: String(data[rowIndex - 1][IDX.RECORDS.STAFF_EMAIL] || ''),
-    staffName: String(data[rowIndex - 1][IDX.RECORDS.STAFF_NAME] || '')
+  let currentRow = sheet.getRange(rowIndex, 1, 1, IDX.RECORDS.SUB_STAFF + 1).getValues()[0];
+  let fromStatus  = String(currentRow[IDX.RECORDS.STATUS] || 'unhandled');
+  let before      = {
+    status:     fromStatus,
+    staffEmail: String(currentRow[IDX.RECORDS.STAFF_EMAIL] || ''),
+    staffName:  String(currentRow[IDX.RECORDS.STAFF_NAME]  || '')
   };
 
-  sheet.getRange(rowIndex, IDX.RECORDS.STATUS + 1).setValue('inProgress');
-  sheet.getRange(rowIndex, IDX.RECORDS.STAFF_EMAIL + 1).setValue(targetEmail);
-  sheet.getRange(rowIndex, IDX.RECORDS.STAFF_NAME + 1).setValue(targetStaff.name);
+  let updates = {};
+  updates[IDX.RECORDS.STAFF_EMAIL] = targetEmail;
+  updates[IDX.RECORDS.STAFF_NAME]  = targetStaff.name;
+
+  // STATUS の変更ルール:
+  //   unhandled → inProgress（担当が付いたので対応中に）
+  //   それ以外 → STATUS は変更しない（担当者変更のみ）
+  if (fromStatus === 'unhandled') {
+    updates[IDX.RECORDS.STATUS] = 'inProgress';
+  }
+
+  applyWriteUpdates_(sheet, rowIndex, updates);
+  let result = buildTransitionResult_(currentRow, updates, null);
+
   appendAuditLog_(actor, 'reassign_case', 'case', caseId, before, {
-    status: 'inProgress',
-    staffEmail: targetEmail,
-    staffName: targetStaff.name
+    status: result.status, staffEmail: targetEmail, staffName: targetStaff.name
   });
-  return;
+  return result;
 }
 
 // ======================================================================
@@ -2642,26 +2651,272 @@ function updateSupportHistory(caseId, roundIndex, patch) {
   return { supportHistory: history };
 }
 
+// ======================================================================
+// 管理者ステータス遷移 — 統一ゲートキーパー (v1.11.5)
+// すべての管理者経由の STATUS 変更はこの関数を通す。
+// fromStatus × toStatus の組み合わせに応じた正しい DB 操作を実行する。
+// ======================================================================
+
+/**
+ * 現在回のフィールドを HISTORY JSON エントリとして構築する（まだ書き込まない）。
+ */
+function buildHistoryEntry_(row) {
+  return {
+    round:             Number(row[IDX.RECORDS.COUNT]) || 1,
+    scheduledDateTime: row[IDX.RECORDS.DATE] ? new Date(row[IDX.RECORDS.DATE]).toISOString() : null,
+    method:            row[IDX.RECORDS.METHOD]  || null,
+    content:           row[IDX.RECORDS.CONTENT] || null,
+    remarks:           row[IDX.RECORDS.REMARKS] || null,
+    meetUrl:           row[IDX.RECORDS.MEET_URL] || null,
+    attachments:       parseJsonArray_(row[IDX.RECORDS.ATTACHMENTS]),
+    tools:             parseJsonArray_(row[IDX.RECORDS.TOOLS]),
+    staffName:         row[IDX.RECORDS.STAFF_NAME]  || null,
+    staffEmail:        row[IDX.RECORDS.STAFF_EMAIL] || null
+  };
+}
+
+/**
+ * updates オブジェクト（{IDX番号: 値}）を一括で書き込む。
+ */
+function applyWriteUpdates_(recordSheet, rowIndex, updates) {
+  let keys = Object.keys(updates);
+  for (let i = 0; i < keys.length; i++) {
+    let idx = Number(keys[i]);
+    let val = updates[idx];
+    // null は GAS の setValue で空欄（クリア）になる
+    recordSheet.getRange(rowIndex, idx + 1).setValue(val);
+  }
+}
+
+/**
+ * adminTransitionStatus_ の戻り値（楽観的更新用フィールドサマリ）を構築する。
+ */
+function buildTransitionResult_(row, updates, newHistoryArray) {
+  function v(idx) {
+    return updates.hasOwnProperty(String(idx)) ? updates[idx] : row[idx];
+  }
+  let rawDate = v(IDX.RECORDS.DATE);
+  let historyParsed = updates.hasOwnProperty(String(IDX.RECORDS.HISTORY))
+    ? (newHistoryArray || [])
+    : parseJsonArray_(row[IDX.RECORDS.HISTORY]);
+  let rawOverride = v(IDX.RECORDS.CASE_LIMIT_OVERRIDE);
+  let parsedOverride = (rawOverride !== '' && rawOverride !== null &&
+                        rawOverride !== undefined && !isNaN(Number(rawOverride)))
+    ? Number(rawOverride) : null;
+  return {
+    status:            v(IDX.RECORDS.STATUS) || 'unhandled',
+    staffEmail:        v(IDX.RECORDS.STAFF_EMAIL) || '',
+    staffName:         v(IDX.RECORDS.STAFF_NAME)  || '',
+    supportCount:      Number(v(IDX.RECORDS.COUNT)) || 1,
+    scheduledDateTime: (rawDate && rawDate !== '') ? new Date(rawDate).toISOString() : null,
+    method:            v(IDX.RECORDS.METHOD)      || null,
+    content:           v(IDX.RECORDS.CONTENT)     || null,
+    remarks:           v(IDX.RECORDS.REMARKS)     || null,
+    meetUrl:           v(IDX.RECORDS.MEET_URL)    || null,
+    eventId:           v(IDX.RECORDS.EVENT_ID)    || null,
+    attachments:       parseJsonArray_(v(IDX.RECORDS.ATTACHMENTS)),
+    tools:             parseJsonArray_(v(IDX.RECORDS.TOOLS)),
+    subStaff:          parseJsonArray_(v(IDX.RECORDS.SUB_STAFF)),
+    caseLimitOverride: parsedOverride,
+    supportHistory:    historyParsed
+  };
+}
+
+/**
+ * 管理者によるステータス遷移 — 全経路の統一実装。
+ * 設計書 §3 の遷移マトリックスに基づき、fromStatus × toStatus に応じた
+ * DB 操作セットを実行する。
+ *
+ * @param {Sheet}  recordSheet  サポート記録シート
+ * @param {number} rowIndex     対象行番号（1始まり）
+ * @param {string} fromStatus   現在のステータス
+ * @param {string} toStatus     変更後のステータス
+ * @param {Object} actor        requireAdmin_() の戻り値
+ * @param {Object} [options]
+ *   @param {string} [options.staffEmail]  遷移時に使用する担当者メール
+ *   @param {string} [options.staffName]   遷移時に使用する担当者名
+ * @returns {Object} 変更後のフィールドサマリ（楽観的更新用）
+ */
+function adminTransitionStatus_(recordSheet, rowIndex, fromStatus, toStatus, actor, options) {
+  options = options || {};
+  let row = recordSheet.getRange(rowIndex, 1, 1, IDX.RECORDS.SUB_STAFF + 1).getValues()[0];
+
+  if (fromStatus === toStatus) {
+    return buildTransitionResult_(row, {}, null);
+  }
+
+  let updates = {};       // { '列インデックス(文字列)': 値 }
+  let newHistoryArray = null;
+
+  // ── 共通操作: resetToUnhandled ──────────────────────────────
+  function applyResetToUnhandled() {
+    updates[IDX.RECORDS.STATUS]      = 'unhandled';
+    updates[IDX.RECORDS.STAFF_EMAIL] = '';
+    updates[IDX.RECORDS.STAFF_NAME]  = '';
+    updates[IDX.RECORDS.COUNT]       = 1;
+    updates[IDX.RECORDS.DATE]        = null;
+    updates[IDX.RECORDS.METHOD]      = null;
+    updates[IDX.RECORDS.CONTENT]     = null;
+    updates[IDX.RECORDS.REMARKS]     = null;
+    updates[IDX.RECORDS.EVENT_ID]    = null;
+    updates[IDX.RECORDS.MEET_URL]    = null;
+    updates[IDX.RECORDS.ATTACHMENTS] = '[]';
+    updates[IDX.RECORDS.TOOLS]       = '[]';
+    updates[IDX.RECORDS.SUB_STAFF]   = '[]';
+    // BUSINESS / THREAD_ID / HISTORY / CASE_LIMIT_OVERRIDE / ANNUAL_LIMIT_OVERRIDE は保持
+  }
+
+  // ── 共通操作: staff を options または既存値から設定 ─────────
+  function applyStaff() {
+    if (options.staffEmail) {
+      updates[IDX.RECORDS.STAFF_EMAIL] = options.staffEmail;
+      updates[IDX.RECORDS.STAFF_NAME]  = options.staffName || '';
+    }
+    // staffEmail が options にも行にもない場合、空のまま（管理者強制、監査ログで追跡）
+  }
+
+  // ── FROM: unhandled ──────────────────────────────────────────
+  if (fromStatus === 'unhandled') {
+    if (toStatus === 'inProgress') {
+      applyStaff();
+      updates[IDX.RECORDS.STATUS] = 'inProgress';
+    } else if (toStatus === 'completed') {
+      applyStaff();
+      updates[IDX.RECORDS.STATUS] = 'completed';
+    } else if (toStatus === 'cancelled' || toStatus === 'rejected') {
+      applyStaff();
+      updates[IDX.RECORDS.STATUS] = toStatus;
+    }
+  }
+
+  // ── FROM: inProgress ─────────────────────────────────────────
+  else if (fromStatus === 'inProgress') {
+    if (toStatus === 'completed') {
+      updates[IDX.RECORDS.STATUS] = 'completed';
+    } else if (toStatus === 'unhandled') {
+      applyResetToUnhandled();
+    } else if (toStatus === 'cancelled' || toStatus === 'rejected') {
+      updates[IDX.RECORDS.STATUS] = toStatus;
+    }
+  }
+
+  // ── FROM: completed ★最重要 ──────────────────────────────────
+  else if (fromStatus === 'completed') {
+    if (toStatus === 'inProgress') {
+      // reopenForAdmin: HISTORY保存 + supportCount+1 + フィールドクリア + 上限自動補正
+      let historyJson = row[IDX.RECORDS.HISTORY] ? String(row[IDX.RECORDS.HISTORY]) : '[]';
+      let history = [];
+      try { history = JSON.parse(historyJson); } catch(e) { history = []; }
+      history.push(buildHistoryEntry_(row));
+      newHistoryArray = history;
+
+      let currentCount = Number(row[IDX.RECORDS.COUNT]) || 1;
+      let newCount     = currentCount + 1;
+
+      // 上限超過チェック → caseLimitOverride を自動 +1
+      let rawOverride = row[IDX.RECORDS.CASE_LIMIT_OVERRIDE];
+      let parsedOverride = (rawOverride !== '' && rawOverride !== null &&
+                            rawOverride !== undefined && !isNaN(Number(rawOverride)))
+        ? Number(rawOverride) : null;
+      let currentLimit = parsedOverride || getCaseUsageLimit_();
+      if (newCount > currentLimit) {
+        updates[IDX.RECORDS.CASE_LIMIT_OVERRIDE] = newCount; // 上限を自動調整
+      }
+
+      updates[IDX.RECORDS.STATUS]      = 'inProgress';
+      updates[IDX.RECORDS.COUNT]       = newCount;
+      updates[IDX.RECORDS.HISTORY]     = JSON.stringify(history);
+      updates[IDX.RECORDS.DATE]        = null;
+      updates[IDX.RECORDS.METHOD]      = null;
+      updates[IDX.RECORDS.CONTENT]     = null;
+      updates[IDX.RECORDS.REMARKS]     = null;
+      updates[IDX.RECORDS.EVENT_ID]    = null;
+      updates[IDX.RECORDS.MEET_URL]    = null;
+      updates[IDX.RECORDS.ATTACHMENTS] = '[]';
+      // STAFF / BUSINESS / TOOLS / SUB_STAFF は保持
+
+    } else if (toStatus === 'unhandled') {
+      // 現在回を HISTORY に保存してから全クリア
+      let historyJson = row[IDX.RECORDS.HISTORY] ? String(row[IDX.RECORDS.HISTORY]) : '[]';
+      let history = [];
+      try { history = JSON.parse(historyJson); } catch(e) { history = []; }
+      history.push(buildHistoryEntry_(row));
+      newHistoryArray = history;
+
+      applyResetToUnhandled();
+      updates[IDX.RECORDS.HISTORY] = JSON.stringify(history); // HISTORY は上書き（保存済み）
+
+    } else if (toStatus === 'cancelled' || toStatus === 'rejected') {
+      updates[IDX.RECORDS.STATUS] = toStatus;
+    }
+  }
+
+  // ── FROM: cancelled ──────────────────────────────────────────
+  else if (fromStatus === 'cancelled') {
+    if (toStatus === 'unhandled') {
+      applyResetToUnhandled();
+    } else if (toStatus === 'inProgress') {
+      // 既存スタッフを優先、なければ options から
+      let staffEmail = options.staffEmail || String(row[IDX.RECORDS.STAFF_EMAIL] || '');
+      let staffName  = options.staffName  || String(row[IDX.RECORDS.STAFF_NAME]  || '');
+      updates[IDX.RECORDS.STATUS]      = 'inProgress';
+      updates[IDX.RECORDS.STAFF_EMAIL] = staffEmail;
+      updates[IDX.RECORDS.STAFF_NAME]  = staffName;
+    } else if (toStatus === 'completed' || toStatus === 'rejected') {
+      updates[IDX.RECORDS.STATUS] = toStatus;
+    }
+  }
+
+  // ── FROM: rejected ───────────────────────────────────────────
+  else if (fromStatus === 'rejected') {
+    if (toStatus === 'unhandled') {
+      applyResetToUnhandled();
+    } else if (toStatus === 'inProgress') {
+      applyStaff();
+      updates[IDX.RECORDS.STATUS] = 'inProgress';
+    } else if (toStatus === 'completed' || toStatus === 'cancelled') {
+      updates[IDX.RECORDS.STATUS] = toStatus;
+    }
+  }
+
+  // ── DB 書き込み ───────────────────────────────────────────────
+  applyWriteUpdates_(recordSheet, rowIndex, updates);
+
+  return buildTransitionResult_(row, updates, newHistoryArray);
+}
+
+// ======================================================================
+// setCaseStatusAdmin — adminTransitionStatus_ へ委譲
+// ======================================================================
 function setCaseStatusAdmin(caseId, status) {
   let actor = requireAdmin_();
   ensureAdminSchema_();
 
-  let normalizedStatus = normalizeAdminCaseStatus_(status);
+  let toStatus = normalizeAdminCaseStatus_(status);
   let ss = getSpreadsheet_();
   let recordSheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
   if (!recordSheet) throw new Error('サポート記録シートが見つかりません。');
 
   let rowIndex = ensureRecordRowForCase_(recordSheet, caseId);
-  let row = recordSheet.getRange(rowIndex, 1, 1, recordSheet.getLastColumn()).getValues()[0];
+  let currentRow = recordSheet.getRange(rowIndex, 1, 1, IDX.RECORDS.SUB_STAFF + 1).getValues()[0];
+  let fromStatus = normalizeAdminCaseStatus_(currentRow[IDX.RECORDS.STATUS] || 'unhandled');
+
   let before = {
-    status: String(row[IDX.RECORDS.STATUS] || ''),
-    staffEmail: String(row[IDX.RECORDS.STAFF_EMAIL] || ''),
-    staffName: String(row[IDX.RECORDS.STAFF_NAME] || '')
+    status:     fromStatus,
+    staffEmail: String(currentRow[IDX.RECORDS.STAFF_EMAIL] || ''),
+    staffName:  String(currentRow[IDX.RECORDS.STAFF_NAME]  || ''),
+    supportCount: Number(currentRow[IDX.RECORDS.COUNT]) || 1
   };
 
-  recordSheet.getRange(rowIndex, IDX.RECORDS.STATUS + 1).setValue(normalizedStatus);
-  appendAuditLog_(actor, 'admin_set_case_status', 'case', caseId, before, { status: normalizedStatus });
-  return;
+  let result = adminTransitionStatus_(recordSheet, rowIndex, fromStatus, toStatus, actor);
+
+  appendAuditLog_(actor, 'admin_set_case_status', 'case', caseId, before, {
+    status: toStatus,
+    supportCount: result.supportCount,
+    caseLimitOverride: result.caseLimitOverride
+  });
+
+  return result;
 }
 
 function deleteCaseAdmin(caseId) {
@@ -2834,9 +3089,23 @@ function updateCaseDataAdmin(caseId, payload) {
       }
     }
 
+    // ── STATUS: 遷移ロジック経由で変更（直接書き込み禁止） ──
     if (Object.prototype.hasOwnProperty.call(recordPatch, 'status')) {
-      recordSheet.getRange(recordRowIndex, IDX.RECORDS.STATUS + 1).setValue(normalizeAdminCaseStatus_(recordPatch.status));
+      let currentRow2 = recordSheet.getRange(recordRowIndex, 1, 1, IDX.RECORDS.SUB_STAFF + 1).getValues()[0];
+      let fromStatus2  = String(currentRow2[IDX.RECORDS.STATUS] || 'unhandled');
+      let toStatus2    = normalizeAdminCaseStatus_(recordPatch.status);
+      if (fromStatus2 !== toStatus2) {
+        let staffOpts = {};
+        if (recordPatch.staffEmail) staffOpts.staffEmail = normalizeEmail_(recordPatch.staffEmail);
+        if (recordPatch.staffName)  staffOpts.staffName  = String(recordPatch.staffName).trim();
+        adminTransitionStatus_(recordSheet, recordRowIndex, fromStatus2, toStatus2, actor, staffOpts);
+        // 遷移関数が STAFF_EMAIL / STAFF_NAME も書き込むため、後続の個別書き込みはスキップ
+        // （staffEmail / staffName キーは以降処理しない）
+        delete recordPatch.staffEmail;
+        delete recordPatch.staffName;
+      }
     }
+    // staffEmail: 遷移以外の単純な担当者変更
     if (Object.prototype.hasOwnProperty.call(recordPatch, 'staffEmail')) {
       let targetEmail = normalizeEmail_(recordPatch.staffEmail);
       let staff = targetEmail ? getStaffByEmail(targetEmail) : null;
@@ -2849,14 +3118,29 @@ function updateCaseDataAdmin(caseId, payload) {
     if (Object.prototype.hasOwnProperty.call(recordPatch, 'staffName')) {
       recordSheet.getRange(recordRowIndex, IDX.RECORDS.STAFF_NAME + 1).setValue(String(recordPatch.staffName || '').trim());
     }
+    // scheduledDateTime: null の場合はフロントエンドから除外される（空欄時は payload に含めない設計）
     if (Object.prototype.hasOwnProperty.call(recordPatch, 'scheduledDateTime')) {
       let dt = recordPatch.scheduledDateTime;
       recordSheet.getRange(recordRowIndex, IDX.RECORDS.DATE + 1).setValue(dt ? new Date(dt) : null);
     }
+    // supportCount: HISTORY との整合性をチェック
     if (Object.prototype.hasOwnProperty.call(recordPatch, 'supportCount')) {
       let count = Number(recordPatch.supportCount);
       if (!isFinite(count) || count < 1) throw new Error('supportCount は1以上の数値を指定してください。');
-      recordSheet.getRange(recordRowIndex, IDX.RECORDS.COUNT + 1).setValue(Math.floor(count));
+      let newCount  = Math.floor(count);
+      let historyJson2 = beforeRecordRow[IDX.RECORDS.HISTORY] ? String(beforeRecordRow[IDX.RECORDS.HISTORY]) : '[]';
+      let historyArr2  = [];
+      try { historyArr2 = JSON.parse(historyJson2); } catch(e) { historyArr2 = []; }
+      // 整合性チェック: 新 supportCount は HISTORY エントリ数 +1 であるべき
+      let expectedCount = historyArr2.length + 1;
+      if (newCount !== expectedCount) {
+        // 不整合は禁止せず監査ログに警告として記録
+        appendAuditLog_(actor, 'admin_supportcount_mismatch', 'case', caseId,
+          { historyEntries: historyArr2.length, expectedCount: expectedCount },
+          { newSupportCount: newCount }
+        );
+      }
+      recordSheet.getRange(recordRowIndex, IDX.RECORDS.COUNT + 1).setValue(newCount);
     }
     if (Object.prototype.hasOwnProperty.call(recordPatch, 'caseLimitOverride')) {
       let caseOverride = parseNullablePositiveInteger_(recordPatch.caseLimitOverride);
