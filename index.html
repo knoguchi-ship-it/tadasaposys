@@ -175,6 +175,7 @@
         'その他'
       ],
       attachmentFolderConfigured: true,
+      zoomFixedConfigured: true, // v1.12.0 ローカルモック: 固定Zoom設定済みとして扱う
       supportTools: SUPPORT_TOOLS,
       spreadsheetUrl: 'https://docs.google.com/spreadsheets/d/1hllLdETiK0sk0xW_y0V6vOmnlK7kIkHBjntYiCTom4w/edit',
       allStaff: [
@@ -1268,6 +1269,8 @@
       const [useCalendar, setUseCalendar] = useState(true);
       // v1.11.8: 日程重複検知状態
       const [conflictState, setConflictState] = useState({ status: 'idle', conflicts: [], bufferMin: 30, error: null });
+      // v1.12.0: Zoom URL 発行モード ('new' = 新規発行 / 'fixed' = いつものタダスクID）
+      const [zoomMode, setZoomMode] = useState('new');
       const [existingAttachments, setExistingAttachments] = useState([]);
       const [pendingFiles, setPendingFiles] = useState([]);
       const [dragOverAttachments, setDragOverAttachments] = useState(false);
@@ -2238,6 +2241,8 @@
             payload.user = user ? { name: user.name, email: user.email } : null;
           }
           if (modalMode === 'schedule' || modalMode === 'report') payload.skipCalendar = !useCalendar;
+          // v1.12.0: Zoom時のみ zoomMode をペイロードに含める
+          if (payload.method === 'Zoom') payload.zoomMode = zoomMode;
           const result = await Api.updateSupportRecord(payload);
           var editCaseId = selectedCase.id;
           setCases(prev => {
@@ -2478,6 +2483,7 @@
         setModalMode(mode);
         setUseCalendar(true); // 毎回デフォルトONでリセット
         setConflictState({ status: 'idle', conflicts: [], bufferMin: 30, error: null }); // v1.11.8: 重複状態リセット
+        setZoomMode('new'); // v1.12.0: Zoom発行モードを既定に
         setEditFormData({
           scheduledDateTime: selectedCase.scheduledDateTime ? (() => {
             var d = new Date(selectedCase.scheduledDateTime);
@@ -5166,8 +5172,36 @@
                               <AlertTriangle size={14} className="shrink-0 mt-0.5 text-rose-500"/>
                               <div className="space-y-1">
                                 <p className="font-black">Zoom時はチームタダカヨカレンダーへ自動登録（必須）</p>
-                                <p className="font-normal">重複防止のため、下のチェックの有無に関わらずチームカレンダーには必ず登録されます。Zoom URL も自動発行されます。</p>
+                                <p className="font-normal">重複防止のため、下のチェックの有無に関わらずチームカレンダーには必ず登録されます。</p>
                               </div>
+                            </div>
+                          )}
+                          {/* v1.12.0: Zoom URL 発行モード（新規 / 固定ID） */}
+                          {editFormData.method === 'Zoom' && (
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-black text-indigo-500 uppercase flex items-center gap-1"><Video size={10}/> Zoom URL の発行方法</label>
+                              <div className="grid grid-cols-2 gap-2">
+                                <label className={`flex items-center gap-2 p-2 rounded-xl cursor-pointer border-2 ${zoomMode === 'new' ? 'border-indigo-500 bg-indigo-50' : 'border-slate-100 bg-white'}`}>
+                                  <input type="radio" name="zoomMode" value="new" checked={zoomMode === 'new'} onChange={() => setZoomMode('new')} className="accent-indigo-600"/>
+                                  <span className="text-[10px] font-black text-slate-700">新規発行</span>
+                                </label>
+                                <label className={`flex items-center gap-2 p-2 rounded-xl cursor-pointer border-2 ${zoomMode === 'fixed' ? 'border-indigo-500 bg-indigo-50' : 'border-slate-100 bg-white'} ${!masters?.zoomFixedConfigured ? 'opacity-50 cursor-not-allowed' : ''}`} title={!masters?.zoomFixedConfigured ? '設定シートの ZOOM_FIXED_URL を入力すると有効になります' : ''}>
+                                  <input type="radio" name="zoomMode" value="fixed" checked={zoomMode === 'fixed'} onChange={() => setZoomMode('fixed')} disabled={!masters?.zoomFixedConfigured} className="accent-indigo-600"/>
+                                  <span className="text-[10px] font-black text-slate-700">いつものタダスクID</span>
+                                </label>
+                              </div>
+                              {zoomMode === 'new' && (
+                                <p className="text-[10px] text-indigo-500 font-bold pl-1">Zoom S2S OAuth で参加URLが自動発行されます。</p>
+                              )}
+                              {zoomMode === 'fixed' && masters?.zoomFixedConfigured && (
+                                <p className="text-[10px] text-indigo-500 font-bold pl-1">設定シートの ZOOM_FIXED_URL を再利用します（API呼び出しなし）。</p>
+                              )}
+                              {!masters?.zoomFixedConfigured && (
+                                <p className="text-[10px] text-amber-600 font-bold pl-1 flex items-start gap-1">
+                                  <AlertTriangle size={10} className="shrink-0 mt-0.5"/>
+                                  「いつものタダスクID」を有効にするには設定シートに ZOOM_FIXED_URL/ID/PASS を入力してください。
+                                </p>
+                              )}
                             </div>
                           )}
                           <label className="flex items-center gap-2 cursor-pointer select-none">

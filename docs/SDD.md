@@ -1,8 +1,16 @@
-# システム詳細設計書 (SDD) — タダサポ管理システム v1.11.3
+# システム詳細設計書 (SDD) — タダサポ管理システム v1.12.0
 
-**Version:** 1.11.3
-**Date:** 2026/05/10
+**Version:** 1.12.0
+**Date:** 2026/05/11
 **Status:** Released
+
+> **v1.12.0 追補（日程確定刷新 Phase 1〜4）**
+> - 設定シートに6キー追加: `TEAM_CALENDAR_ID` / `DISPLAY_CALENDARS_JSON` / `SCHEDULE_BUFFER_MIN` / `ZOOM_FIXED_URL` / `ZOOM_FIXED_ID` / `ZOOM_FIXED_PASS`
+> - バックエンド関数追加: `getScheduleAvailability(rangeStart, rangeEnd)` / `checkScheduleConflict(start, dur, excludeId)` / `createTeamCalendarEvent_()` / 純粋関数 `eventsOverlap_()` / `computeBufferedWindow_()` / `parseDisplayCalendarsJson_()`
+> - 自動マイグレーション: `addScheduleZoomSettings()` を `ensureAttachmentSchema_()` から自動呼出し（SCHEMA_VERSION_=6）
+> - フロント: `ScheduleAvailabilityCalendar` コンポーネント新設（FullCalendar 6.1.18 グローバルバンドル）。`conflictState` / `zoomMode` ステート追加。
+> - 仕様変更: 方法=Zoom 時はチームカレンダー（TEAM_CALENDAR_ID）への登録が必須化（重複防止）。重複検知は方法=Zoom 時のみ発動し、検知時は送信ブロック。固定Zoomモード（zoomMode='fixed'）で `ZOOM_FIXED_URL` を再利用可能。
+> - getMasters 戻り値: `zoomFixedConfigured: boolean` 追加
 
 本ドキュメントは、システムが準拠すべき**仕様（Specification）**を定義する。実装およびテストは、本仕様を満たすことを目的とする。
 

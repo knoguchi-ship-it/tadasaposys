@@ -1,5 +1,5 @@
 /**
- * タダサポ管理システム - Backend Logic (v1.11.9)
+ * タダサポ管理システム - Backend Logic (v1.12.0)
  *
  * 概要:
  * - Google Spreadsheets をデータベースとして利用
@@ -1871,17 +1871,40 @@ function updateSupportRecord(recordData) {
   if (recordData.scheduledDateTime && !currentMeetUrl) {
     if (recordData.method === 'Zoom') {
       // v1.11.8: チームカレンダーへ強制登録 + 個人カレンダーは useCalendar に従う
+      // v1.12.0: zoomMode = 'new'（既定 / 新規発行）または 'fixed'（固定ZoomID使用）
       let zDur = (recordData.duration && Number(recordData.duration) > 0) ? Number(recordData.duration) : 60;
       let zStart = new Date(recordData.scheduledDateTime);
       let appUrl = ScriptApp.getService().getUrl() || '';
+      let zoomMode = String(recordData.zoomMode || 'new').toLowerCase();
 
-      // Zoom URL 発行（API 失敗時もカレンダー登録は継続）
-      try {
-        let zoomResult = createZoomMeeting(eventTitle, recordData.scheduledDateTime, zDur);
-        newMeetUrl = zoomResult.joinUrl;
-      } catch(e) { console.error('Zoom会議作成エラー（カレンダーのみ作成します）: ' + e.message); }
+      if (zoomMode === 'fixed') {
+        // 固定Zoom: ZOOM_FIXED_URL を使用（API 呼び出しなし）
+        let fixedUrl = String(getSetting_('ZOOM_FIXED_URL', '') || '').trim();
+        let fixedId = String(getSetting_('ZOOM_FIXED_ID', '') || '').trim();
+        let fixedPass = String(getSetting_('ZOOM_FIXED_PASS', '') || '').trim();
+        if (fixedUrl) {
+          newMeetUrl = fixedUrl;
+        } else {
+          throw new Error('「いつものタダスクID」が設定されていません。設定シートの ZOOM_FIXED_URL を入力するか、新規発行モードに切替えてください。');
+        }
+        // ID/PASS は description に追記
+        var fixedExtra = [];
+        if (fixedId) fixedExtra.push('ID: ' + fixedId);
+        if (fixedPass) fixedExtra.push('PASS: ' + fixedPass);
+        var fixedSuffix = fixedExtra.length ? '（' + fixedExtra.join(' / ') + '）' : '';
+        var fixedHeader = '【いつものタダスクID】 ' + fixedUrl + fixedSuffix + '\n\n';
+        // zDesc は下で組み立てるので、ここで先行ヘッダだけ保持
+        var zoomLeadingDesc = fixedHeader;
+      } else {
+        // 新規発行: 既存ロジック維持
+        try {
+          let zoomResult = createZoomMeeting(eventTitle, recordData.scheduledDateTime, zDur);
+          newMeetUrl = zoomResult.joinUrl;
+        } catch(e) { console.error('Zoom会議作成エラー（カレンダーのみ作成します）: ' + e.message); }
+        var zoomLeadingDesc = newMeetUrl ? 'Zoom URL: ' + newMeetUrl + '\n\n' : '';
+      }
 
-      let zDesc = (newMeetUrl ? 'Zoom URL: ' + newMeetUrl + '\n\n' : '') +
+      let zDesc = zoomLeadingDesc +
                   (recordData.details || '') +
                   (appUrl ? '\n\nタダサポ管理: ' + appUrl : '');
 
@@ -2041,6 +2064,7 @@ function getStaffByEmail(email) {
 
 function getMasters() {
   let zoomEnabled = !!getSetting_('ZOOM_ACCOUNT_ID');
+  let zoomFixedConfigured = !!getSetting_('ZOOM_FIXED_URL'); // v1.12.0: 固定ID使用可能フラグ
   let attachmentFolderConfigured = !!getSetting_('ATTACHMENT_FOLDER_ID');
   let methods = ['GoogleMeet', 'メール等', '電話等', '対面'];
   if (zoomEnabled) methods.splice(1, 0, 'Zoom');
@@ -2087,6 +2111,7 @@ function getMasters() {
       caseSupport: getCaseUsageLimit_()
     },
     attachmentFolderConfigured: attachmentFolderConfigured,
+    zoomFixedConfigured: zoomFixedConfigured,
     supportTools: (function() {
       let raw = getSetting_('SUPPORT_TOOLS', '');
       if (!raw) return null; // nullのときフロントエンドでデフォルトにフォールバック

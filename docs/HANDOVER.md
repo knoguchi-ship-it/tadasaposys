@@ -1,8 +1,8 @@
 # 開発者向け引継ぎ資料 (HANDOVER.md)
 
 **Project:** タダサポ管理システム
-**Version:** 1.11.6（現行リリース）
-**Date:** 2026/05/10
+**Version:** 1.12.0（現行リリース）
+**Date:** 2026/05/11
 **Author:** Development Team
 
 ---
@@ -12,7 +12,7 @@
 ### 本番稼働中
 
 - **URL**: `https://script.google.com/a/macros/tadakayo.jp/s/AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ/exec`
-- **デプロイバージョン**: @135
+- **デプロイバージョン**: @142（v1.12.0）
 - **Webapp 設定**: `executeAs: USER_ACCESSING` / `access: DOMAIN`（tadakayo.jp ドメインのみ）
 - **認証**: タダメンマスタ（B列=氏名, C列=メール, D列=ROLE）で認証
 
@@ -48,8 +48,12 @@
 | 楽観的更新・初期データHTML埋め込みによる高速化 | ✅ | v1.9.67 |
 | **管理機能ステータス遷移の完全修正** | ✅ | **v1.11.6** |
 | **Playwright E2E テストスイート（49テスト）** | ✅ | **v1.11.5** |
-| **Jest 単体テスト（34テスト）** | ✅ | **v1.11.5** |
+| **Jest 単体テスト（55テスト）** | ✅ | **v1.12.0** |
 | **WCAG 2.1 AA color-contrast 全違反修正** | ✅ | **v1.11.5** |
+| **日程の重複検知（バッファ込み・Zoom時のみ）** | ✅ | **v1.12.0** |
+| **Zoom時のチームカレンダー強制登録（重複防止）** | ✅ | **v1.11.8** |
+| **FullCalendar 埋込み（週/月ビュー・ドラッグ選択）** | ✅ | **v1.11.9** |
+| **「いつものタダスクID」（固定Zoom）モード** | ✅ | **v1.12.0** |
 
 ---
 
@@ -376,3 +380,7 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 | **v1.11.4** | 2026/05/10 | セキュリティ修正（数式インジェクション対策・Babel SRI）|
 | **v1.11.5** | 2026/05/10 | 残課題全対応（GitHub Actions CI・単体テスト34件・WCAG 2.1 AA修正・var→let・複雑度ロードマップ） |
 | **v1.11.6** | 2026/05/10 | **管理機能ステータス遷移バグ完全修正**（adminTransitionStatus_() 新設、全11件の致命的・重大バグ修正）|
+| **v1.11.7** | 2026/05/10 | 日程確定刷新 Phase 1: バックエンド土台 + 設定キー6個追加 + 自動マイグレーション |
+| **v1.11.8** | 2026/05/10 | Phase 2: 重複検知 + Zoom時チームカレンダー強制登録 |
+| **v1.11.9** | 2026/05/11 | Phase 3: FullCalendar 埋込み（ドラッグ選択 + バッファ可視化） |
+| **v1.12.0** | 2026/05/11 | Phase 4: 「いつものタダスクID」モード追加・ドキュメント完全更新 |
