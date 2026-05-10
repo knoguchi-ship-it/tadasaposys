@@ -21,6 +21,7 @@
 ### Notes
 - Phase 1 では Zoom 発行ロジックは未変更。Phase 2 で `createZoomMeeting_()` を強化し、固定IDモードと統合予定
 - 既存運用の影響なし（新キーは未参照、新関数は未呼出し）
+- **自動マイグレーション**: SCHEMA_VERSION_ を 5→6 にアップ、`ensureAttachmentSchema_()` から `addScheduleZoomSettings()` を自動呼出し。次回アプリ起動時に設定シートへ自動追加される（手動実行不要）
 
 ---
 

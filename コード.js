@@ -796,7 +796,8 @@ function cancelCase(caseId) {
 }
 
 // スキーマバージョン: マイグレーション追加時にインクリメントする
-var SCHEMA_VERSION_ = '5';
+// v1.11.7 で 6 に更新（addScheduleZoomSettings を自動実行）
+var SCHEMA_VERSION_ = '6';
 
 function ensureAttachmentSchema_() {
   // CacheService でスキーマ確認済みなら全スキップ（6時間有効）
@@ -816,6 +817,7 @@ function ensureAttachmentSchema_() {
     addToolsColumnToRecords();
     addSubStaffColumnToRecords();
     addMissingEmailSettings_();
+    addScheduleZoomSettings();  // v1.11.7: 日程・Zoom予約関連の設定キー追加
   } catch (e) {
     throw new Error('添付機能の初期化に失敗しました。管理者に連絡してください。詳細: ' + e.message);
   }
