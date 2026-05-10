@@ -9,11 +9,16 @@
     "test:headed":   "playwright test --headed",
     "test:debug":    "playwright test --debug",
     "test:report":   "playwright show-report",
-    "test:a11y":     "playwright test tests/e2e/07-a11y.spec.ts"
+    "test:a11y":     "playwright test tests/e2e/07-a11y.spec.ts",
+    "test:unit":     "jest",
+    "test:unit:cov": "jest --coverage",
+    "test:all":      "jest && playwright test"
   },
   "devDependencies": {
     "@playwright/test":    "^1.52.0",
     "@axe-core/playwright": "^4.10.2",
+    "jest":                "^29.7.0",
+    "@types/jest":         "^29.5.14",
     "typescript":          "^5.8.3",
     "@types/node":         "^22.0.0"
   }

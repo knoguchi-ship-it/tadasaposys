@@ -977,7 +977,7 @@
             className="w-full flex items-center gap-3 px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors text-left">
             <span className="text-teal-600">{icon}</span>
             <span className="flex-1 text-sm font-black text-slate-800">{title}</span>
-            {open ? <ChevronUp size={14} className="text-slate-400"/> : <ChevronDown size={14} className="text-slate-400"/>}
+            {open ? <ChevronUp size={14} className="text-slate-500"/> : <ChevronDown size={14} className="text-slate-500"/>}
           </button>
           {open && <div className="px-4 py-3 space-y-3 text-xs leading-relaxed text-slate-600">{children}</div>}
         </div>
@@ -1503,7 +1503,7 @@
         const canOverride = allowAdminOverride && isAdminMode && user?.isAdmin;
         return (
           <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><CheckCircle2 size={10}/> 対応ツール（複数選択可・任意）</label>
+            <label className="text-[10px] font-black text-slate-500 uppercase flex items-center gap-1"><CheckCircle2 size={10}/> 対応ツール（複数選択可・任意）</label>
             <div className="flex flex-wrap gap-2">
               {(masters?.supportTools || SUPPORT_TOOLS).map(tool => {
                 const checked = (selectedTools || []).includes(tool);
@@ -1525,7 +1525,7 @@
                     />
                     {tool}
                     {monthlyLabel && (
-                      <span className={`text-[9px] font-black ml-0.5 ${limitReached ? 'text-rose-500' : 'text-slate-400'}`}>
+                      <span className={`text-[9px] font-black ml-0.5 ${limitReached ? 'text-rose-500' : 'text-slate-500'}`}>
                         ({monthlyLabel})
                       </span>
                     )}
@@ -2555,10 +2555,10 @@
                       <div className="bg-teal-100 p-2 rounded-xl"><BookOpen size={18} className="text-teal-600"/></div>
                       <div>
                         <h2 className="text-base font-black text-slate-800">操作マニュアル</h2>
-                        <p className="text-[10px] font-bold text-slate-400">タダサポ管理システムの使い方</p>
+                        <p className="text-[10px] font-bold text-slate-500">タダサポ管理システムの使い方</p>
                       </div>
                     </div>
-                    <button onClick={() => setHelpOpen(false)} className="p-2 rounded-xl hover:bg-slate-100 transition-colors"><X size={18} className="text-slate-400"/></button>
+                    <button onClick={() => setHelpOpen(false)} className="p-2 rounded-xl hover:bg-slate-100 transition-colors"><X size={18} className="text-slate-500"/></button>
                   </div>
                   <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
 
@@ -2707,7 +2707,7 @@
 
                   </div>
                   <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
-                    <p className="text-[10px] text-slate-400 text-center font-bold">ご不明な点は管理者にお問い合わせください</p>
+                    <p className="text-[10px] text-slate-500 text-center font-bold">ご不明な点は管理者にお問い合わせください</p>
                   </div>
                 </div>
               </div>
@@ -2722,15 +2722,15 @@
             </div>
             <div className="flex items-center gap-2">
               <button onClick={() => setHelpOpen(true)} title="操作マニュアル"
-                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-slate-100 transition-colors text-slate-400 hover:text-teal-600">
+                className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-slate-100 transition-colors text-slate-500 hover:text-teal-600">
                 <HelpCircle size={18} />
               </button>
               <div className="text-right hidden sm:block">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ログイン中</p>
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">ログイン中</p>
                 <p className="text-xs font-bold text-slate-700">{user?.name}</p>
               </div>
               <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
-                <UserIcon size={16} className="text-slate-400" />
+                <UserIcon size={16} className="text-slate-500" />
               </div>
             </div>
           </header>
@@ -2837,7 +2837,7 @@
                     className={`p-1.5 rounded-lg text-[10px] font-black border flex items-center gap-1.5 transition-all ${
                       showNewBadge
                         ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100'
-                        : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-slate-100'
+                        : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'
                     }`}
                   >
                     {showNewBadge ? <Bell size={13} /> : <BellOff size={13} />}
@@ -2861,11 +2861,11 @@
                       return (
                         <button key={s} role="tab" aria-selected={activeTab === s} aria-controls="case-list-panel"
                           onClick={() => handleTabClick(s)}
-                          className={`relative px-3 py-2 rounded-lg text-[10px] font-black whitespace-nowrap transition-all ${activeTab === s ? TAB_COLORS[s].active : 'text-slate-400 ' + TAB_COLORS[s].hover}`}>
+                          className={`relative px-3 py-2 rounded-lg text-[10px] font-black whitespace-nowrap transition-all ${activeTab === s ? TAB_COLORS[s].active : 'text-slate-500 ' + TAB_COLORS[s].hover}`}>
                           {STATUS_LABELS[s]}
                           <span className="ml-1 opacity-50">({tabCount})</span>
                           {newCount > 0 && (
-                            <span className="ml-1 inline-flex items-center justify-center px-1.5 py-0.5 bg-rose-500 text-white rounded-full text-[9px] font-black leading-none">
+                            <span className="ml-1 inline-flex items-center justify-center px-1.5 py-0.5 bg-rose-600 text-white rounded-full text-[9px] font-black leading-none">
                               +{newCount}
                             </span>
                           )}
@@ -2877,10 +2877,10 @@
                   <button
                     onClick={() => setSearchOpen(!searchOpen)}
                     aria-expanded={searchOpen} aria-controls="search-panel" aria-label="詳細フィルタを開く"
-                    className={`relative shrink-0 p-2 rounded-lg transition-all ${searchOpen || advancedFilterCount > 0 ? 'bg-teal-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600 hover:bg-slate-100'}`}>
+                    className={`relative shrink-0 p-2 rounded-lg transition-all ${searchOpen || advancedFilterCount > 0 ? 'bg-teal-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-600 hover:bg-slate-100'}`}>
                     <Filter size={14} />
                     {advancedFilterCount > 0 && (
-                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white rounded-full text-[9px] font-black flex items-center justify-center">
+                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-600 text-white rounded-full text-[9px] font-black flex items-center justify-center">
                         {advancedFilterCount}
                       </span>
                     )}
@@ -2888,17 +2888,17 @@
                 </div>
                 {/* キーワード検索（常時表示） */}
                 <div className="relative">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" aria-hidden="true" />
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" aria-hidden="true" />
                   <input
                     ref={searchInputRef} type="search" autoComplete="off"
                     value={searchWord} onChange={e => setSearchWord(e.target.value)}
                     placeholder="事業所名・担当者名・内容を検索..."
                     aria-label="キーワードで案件を検索"
-                    className="w-full pl-9 pr-8 py-2 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all placeholder:text-slate-300 bg-white"
+                    className="w-full pl-9 pr-8 py-2 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-500/20 transition-all placeholder:text-slate-500 bg-white"
                   />
                   {searchWord && (
                     <button onClick={() => setSearchWord('')} aria-label="キーワードをクリア"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-slate-300 hover:text-slate-500 transition-colors">
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-slate-500 hover:text-teal-600 transition-colors">
                       <XCircle size={14} />
                     </button>
                   )}
@@ -2918,7 +2918,7 @@
                   ))}
                   {activeChips.length > 1 && (
                     <button onClick={clearSearch} aria-label="検索条件をすべてクリア"
-                      className="text-[10px] font-black text-slate-400 hover:text-rose-500 transition-colors ml-0.5">
+                      className="text-[10px] font-black text-slate-500 hover:text-rose-500 transition-colors ml-0.5">
                       すべてクリア
                     </button>
                   )}
@@ -2997,7 +2997,7 @@
                             <button
                               type="button"
                               onMouseDown={() => { setSearchPrefecture(''); setFilterPrefOpen(false); }}
-                              className="w-full text-left px-3 py-2 text-xs text-slate-400 font-bold hover:bg-slate-50"
+                              className="w-full text-left px-3 py-2 text-xs text-slate-500 font-bold hover:bg-slate-50"
                             >すべて</button>
                             {(masters?.prefectures || [])
                               .filter(p => !filterPrefWord.trim() || p.includes(filterPrefWord.trim()))
@@ -3056,7 +3056,7 @@
                               <button
                                 type="button"
                                 onMouseDown={() => { setSearchStaffEmail(''); setFilterStaffOpen(false); }}
-                                className="w-full text-left px-3 py-2 text-xs text-slate-400 font-bold hover:bg-slate-50"
+                                className="w-full text-left px-3 py-2 text-xs text-slate-500 font-bold hover:bg-slate-50"
                               >すべて</button>
                               {activeStaffMembers
                                 .filter(s => !filterStaffWord.trim() || s.name.toLowerCase().includes(filterStaffWord.trim().toLowerCase()) || s.email.toLowerCase().includes(filterStaffWord.trim().toLowerCase()))
@@ -3092,12 +3092,12 @@
                       <div className="flex gap-0.5 bg-slate-100 rounded-lg p-0.5">
                         <button
                           onClick={() => setSearchSortOrder('newest')}
-                          className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all ${searchSortOrder === 'newest' ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                          className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all ${searchSortOrder === 'newest' ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-500 hover:text-slate-600'}`}>
                           新しい順
                         </button>
                         <button
                           onClick={() => setSearchSortOrder('oldest')}
-                          className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all ${searchSortOrder === 'oldest' ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>
+                          className={`px-3 py-1 rounded-md text-[10px] font-bold transition-all ${searchSortOrder === 'oldest' ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-500 hover:text-slate-600'}`}>
                           古い順
                         </button>
                       </div>
@@ -3116,7 +3116,7 @@
                   <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200">
                     <ClipboardList size={10}/>
                     <span>今月の依頼</span>
-                    <span className="font-black text-indigo-500">{monthlyCaseCount}件</span>
+                    <span className="font-black text-indigo-700">{monthlyCaseCount}件</span>
                   </div>
                   {Object.entries(toolMonthlyLimits).map(([tool, limit]) => {
                     const used = toolMonthlyUsage[tool] || 0;
@@ -3125,7 +3125,7 @@
                       <div key={tool} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black ${reached ? 'bg-rose-50 text-rose-600 ring-1 ring-rose-200' : 'bg-teal-50 text-teal-700 ring-1 ring-teal-200'}`}>
                         {reached ? <AlertTriangle size={10}/> : <CheckCircle2 size={10}/>}
                         <span className="truncate max-w-[140px]">{tool}</span>
-                        <span className={`font-black ${reached ? 'text-rose-500' : 'text-teal-500'}`}>{used}/{limit}</span>
+                        <span className={`font-black ${reached ? 'text-rose-600' : 'text-teal-700'}`}>{used}/{limit}</span>
                       </div>
                     );
                   })}
@@ -3143,7 +3143,7 @@
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex justify-between items-center mb-1">
-                        <span className="text-[9px] font-black text-slate-400">{(() => {
+                        <span className="text-[9px] font-black text-slate-500">{(() => {
                           const base = c.dateLabel || (() => {
                             if (typeof c.timestamp === 'string' && c.timestamp.indexOf('manual_') === 0) {
                               var ep = Number(c.timestamp.replace('manual_', ''));
@@ -3186,7 +3186,7 @@
                   </button>
                 ))}
                 {filteredCases.length === 0 && (
-                  <div className="py-20 text-center text-slate-300" role="status">
+                  <div className="py-20 text-center text-slate-500" role="status">
                     <p className="text-xs font-bold">{hasActiveSearch ? '検索条件に一致する案件がありません' : '案件はありません'}</p>
                     {hasActiveSearch && <p className="text-[10px] mt-2">条件を変更してお試しください</p>}
                     {!hasActiveSearch && !isDashboardMode && activeTab !== 'unhandled' && activeTab !== 'all' && <p className="text-[10px] mt-2">※自分の担当分のみ表示中</p>}
@@ -3264,7 +3264,7 @@
                               disabled={submitting}
                               title="クリックして担当者を変更"
                               className={`flex items-center gap-1.5 text-xs font-black px-2 py-1 rounded-lg transition-all ${
-                                selectedCase.staffName ? 'text-indigo-600 hover:bg-indigo-50' : 'text-slate-400 hover:bg-slate-100'
+                                selectedCase.staffName ? 'text-indigo-600 hover:bg-indigo-50' : 'text-slate-500 hover:bg-slate-100'
                               } ${inlineEditField === 'staff' ? 'ring-2 ring-amber-400 bg-indigo-50' : ''}`}>
                               <UserIcon size={14}/>
                               {selectedCase.staffName || '担当者未設定'}
@@ -3275,7 +3275,7 @@
                                 {/* 検索入力（100名以上対応） */}
                                 <div className="p-2 border-b border-slate-100">
                                   <div className="relative">
-                                    <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                    <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
                                     <input
                                       type="text" autoFocus
                                       value={staffDropdownSearch}
@@ -3285,7 +3285,7 @@
                                     />
                                   </div>
                                   {staffDropdownSearch && (
-                                    <p className="text-[10px] text-slate-400 mt-1 pl-1">{filteredStaffForDropdown.length} 件</p>
+                                    <p className="text-[10px] text-slate-500 mt-1 pl-1">{filteredStaffForDropdown.length} 件</p>
                                   )}
                                 </div>
                                 <div className="overflow-y-auto max-h-52 py-1">
@@ -3302,7 +3302,7 @@
                                     </button>
                                   )}
                                   {filteredStaffForDropdown.length === 0 && (
-                                    <p className="text-xs text-slate-400 text-center py-4">一致なし</p>
+                                    <p className="text-xs text-slate-500 text-center py-4">一致なし</p>
                                   )}
                                   {filteredStaffForDropdown.map(s => (
                                     <button key={s.email}
@@ -3333,7 +3333,7 @@
                           if (!canEditSub && subs.length === 0) return null;
                           return (
                             <div className="mt-1.5 flex flex-wrap items-center gap-1">
-                              <span className="text-[9px] font-black text-slate-400 mr-0.5">サブ:</span>
+                              <span className="text-[9px] font-black text-slate-500 mr-0.5">サブ:</span>
                               {subs.map(s => (
                                 <span key={s.email} className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-violet-50 text-violet-700 rounded-full text-[10px] font-bold border border-violet-100">
                                   <UserIcon size={9}/> {s.name}
@@ -3366,7 +3366,7 @@
                                           <input type="text" value={subStaffSearch} onChange={e => setSubStaffSearch(e.target.value)} placeholder="名前で検索..." autoFocus className="w-full px-2 py-1 text-xs border border-slate-200 rounded-lg outline-none focus:border-violet-400" />
                                         </div>
                                         <div className="overflow-y-auto py-1">
-                                          {filtered.length === 0 && <p className="px-3 py-2 text-[10px] text-slate-400">該当なし</p>}
+                                          {filtered.length === 0 && <p className="px-3 py-2 text-[10px] text-slate-500">該当なし</p>}
                                           {filtered.map(s => (
                                             <button key={s.email} onClick={async () => {
                                               const next = [...subs, { email: s.email, name: s.name }];
@@ -3402,7 +3402,7 @@
                                 <div className="fixed inset-0 z-40" onClick={() => setInlineEditField(null)} />
                               )}
                               <div className="flex items-center justify-end gap-1">
-                                <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase">案件回数</p>
+                                <p className="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase">案件回数</p>
                                 {selectedCase.caseLimitOverride && <span className="text-[8px] font-black text-amber-500 bg-amber-50 px-1 rounded">特例</span>}
                               </div>
                               <button
@@ -3422,7 +3422,7 @@
                               {inlineEditField === 'caseLimit' && (
                                 <div className="absolute top-full right-0 mt-1 bg-white shadow-xl rounded-2xl border border-slate-200 z-50 p-3 w-52 text-left">
                                   <p className="text-[10px] font-black text-slate-500 mb-1.5">案件ごとの最大回数</p>
-                                  <p className="text-[9px] text-slate-400 mb-2">デフォルト: {masters?.limits?.caseSupport || 3}回　空欄でリセット</p>
+                                  <p className="text-[9px] text-slate-500 mb-2">デフォルト: {masters?.limits?.caseSupport || 3}回　空欄でリセット</p>
                                   <input
                                     type="number" min="1" max="20" autoFocus
                                     value={inlineLimitDraft}
@@ -3446,7 +3446,7 @@
                             </div>
                           ) : (
                             <div className="text-right">
-                              <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase">案件回数</p>
+                              <p className="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase">案件回数</p>
                               <div className={`text-lg sm:text-xl font-black flex items-center justify-end gap-1 ${(selectedCase.supportCount || 1) >= effectiveCaseLimit ? 'text-rose-600' : 'text-slate-800'}`}>
                                 {(selectedCase.supportCount || 1) >= effectiveCaseLimit && <AlertTriangle size={16}/>}
                                 {selectedCase.supportCount || 1} / {effectiveCaseLimit}
@@ -3461,7 +3461,7 @@
                               <div className="fixed inset-0 z-40" onClick={() => setInlineEditField(null)} />
                             )}
                             <div className="flex items-center justify-end gap-1">
-                              <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase">今年度利用数</p>
+                              <p className="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase">今年度利用数</p>
                               {selectedCase.annualLimitOverride && <span className="text-[8px] font-black text-amber-500 bg-amber-50 px-1 rounded">特例</span>}
                             </div>
                             <button
@@ -3481,7 +3481,7 @@
                             {inlineEditField === 'annualLimit' && (
                               <div className="absolute top-full right-0 mt-1 bg-white shadow-xl rounded-2xl border border-slate-200 z-50 p-3 w-52 text-left">
                                 <p className="text-[10px] font-black text-slate-500 mb-1.5">今年度の最大利用回数</p>
-                                <p className="text-[9px] text-slate-400 mb-2">デフォルト: {masters?.limits?.annual || 10}回　空欄でリセット</p>
+                                <p className="text-[9px] text-slate-500 mb-2">デフォルト: {masters?.limits?.annual || 10}回　空欄でリセット</p>
                                 <input
                                   type="number" min="1" max="100" autoFocus
                                   value={inlineLimitDraft}
@@ -3505,7 +3505,7 @@
                           </div>
                         ) : (
                           <div className="text-right">
-                            <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase">今年度利用数</p>
+                            <p className="text-[9px] sm:text-[10px] font-black text-slate-500 uppercase">今年度利用数</p>
                             <div className={`text-lg sm:text-xl font-black flex items-center justify-end gap-1 ${selectedCase.currentFiscalYearCount >= effectiveAnnualLimit ? 'text-rose-600' : 'text-slate-800'}`}>
                               {selectedCase.currentFiscalYearCount >= effectiveAnnualLimit && <AlertTriangle size={16}/>}
                               {selectedCase.currentFiscalYearCount} / {effectiveAnnualLimit}
@@ -3518,7 +3518,7 @@
                     <p className="text-base font-black text-slate-600 mt-1 mb-4">{selectedCase.requesterName} 様</p>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                        <div className={`p-3 rounded-xl ${selectedCase.serviceType ? 'bg-slate-50' : 'bg-amber-50 ring-1 ring-amber-200'}`}>
-                         <span className={`text-[9px] font-black uppercase flex items-center gap-1 mb-1 ${selectedCase.serviceType ? 'text-slate-400' : 'text-amber-500'}`}><Activity size={10}/> サービス種別</span>
+                         <span className={`text-[9px] font-black uppercase flex items-center gap-1 mb-1 ${selectedCase.serviceType ? 'text-slate-500' : 'text-amber-500'}`}><Activity size={10}/> サービス種別</span>
                          <span className={`text-xs font-black ${selectedCase.serviceType ? 'text-slate-700' : 'text-amber-600'}`}>{selectedCase.serviceType || '未入力'}</span>
                        </div>
                        <div className="bg-slate-50 p-3 rounded-xl cursor-pointer hover:bg-indigo-50 transition-colors"
@@ -3529,11 +3529,11 @@
                              handleComposeNewEmail();
                            }
                          }}>
-                         <span className="text-[9px] font-black text-slate-400 uppercase flex items-center gap-1 mb-1"><Mail size={10}/> メールアドレス</span>
+                         <span className="text-[9px] font-black text-slate-500 uppercase flex items-center gap-1 mb-1"><Mail size={10}/> メールアドレス</span>
                          <span className="text-xs font-black text-indigo-600 flex items-center gap-1">{selectedCase.email} <Send size={10}/></span>
                        </div>
                        <div className={`p-3 rounded-xl ${selectedCase.prefecture ? 'bg-slate-50' : 'bg-amber-50 ring-1 ring-amber-200'}`}>
-                         <span className={`text-[9px] font-black uppercase flex items-center gap-1 mb-1 ${selectedCase.prefecture ? 'text-slate-400' : 'text-amber-500'}`}><MapPin size={10}/> 都道府県</span>
+                         <span className={`text-[9px] font-black uppercase flex items-center gap-1 mb-1 ${selectedCase.prefecture ? 'text-slate-500' : 'text-amber-500'}`}><MapPin size={10}/> 都道府県</span>
                          <span className={`text-xs font-black ${selectedCase.prefecture ? 'text-slate-700' : 'text-amber-600'}`}>{selectedCase.prefecture || '未入力'}</span>
                        </div>
                     </div>
@@ -3550,12 +3550,12 @@
                       </div>
                     )}
                     <section className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-4">
-                      <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><MessageSquare size={12} /> 相談内容</h3>
+                      <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2"><MessageSquare size={12} /> 相談内容</h3>
                       <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap bg-slate-50 p-4 rounded-2xl border border-slate-50">{selectedCase.details}</div>
                     </section>
                     {selectedCase.status !== 'unhandled' && (
                     <section className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-4">
-                      <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                      <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
                         <Calendar size={12} />
                         {(selectedCase.supportCount || 1) > 1
                           ? `${selectedCase.supportCount || 1}回目の実施情報（現在）`
@@ -3564,15 +3564,15 @@
                       <div className="grid grid-cols-3 gap-4">
                         <div className="p-4 bg-slate-50 rounded-2xl">
                           <span className="text-xs font-bold text-slate-500 block mb-1">日時</span>
-                          <span className="text-sm font-black">{selectedCase.scheduledDateTime ? new Date(selectedCase.scheduledDateTime).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : <span className="text-slate-400">未定</span>}</span>
+                          <span className="text-sm font-black">{selectedCase.scheduledDateTime ? new Date(selectedCase.scheduledDateTime).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : <span className="text-slate-500">未定</span>}</span>
                         </div>
                         <div className="p-4 bg-slate-50 rounded-2xl">
                           <span className="text-xs font-bold text-slate-500 block mb-1">時間</span>
-                          <span className="text-sm font-black">{selectedCase.duration ? (Number(selectedCase.duration) >= 60 ? '1時間' : selectedCase.duration + '分') : <span className="text-slate-400">未定</span>}</span>
+                          <span className="text-sm font-black">{selectedCase.duration ? (Number(selectedCase.duration) >= 60 ? '1時間' : selectedCase.duration + '分') : <span className="text-slate-500">未定</span>}</span>
                         </div>
                         <div className="p-4 bg-slate-50 rounded-2xl">
                           <span className="text-xs font-bold text-slate-500 block mb-1">方法</span>
-                          <span className="text-sm font-black">{selectedCase.method || <span className="text-slate-400">未定</span>}</span>
+                          <span className="text-sm font-black">{selectedCase.method || <span className="text-slate-500">未定</span>}</span>
                         </div>
                       </div>
                       {selectedCase.meetUrl && !meetUrlEditing && (() => {
@@ -3654,7 +3654,7 @@
                     {/* 過去の対応記録 */}
                     {selectedCase.supportHistory && selectedCase.supportHistory.length > 0 && (
                     <section className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-4">
-                      <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                      <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
                         <Clock size={12} /> 過去の対応記録（{selectedCase.supportHistory.length}件）
                       </h3>
                       <div className="space-y-3">
@@ -3672,7 +3672,7 @@
                                 <div className="flex items-center gap-2 flex-wrap">
                                   <span className="text-xs font-black text-slate-700">{hist.round}回目</span>
                                   {hist.method && <span className="text-[9px] font-black px-2 py-0.5 rounded bg-indigo-50 text-indigo-600">{hist.method}</span>}
-                                  {hist.scheduledDateTime && <span className="text-[9px] font-bold text-slate-400">{new Date(hist.scheduledDateTime).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })}</span>}
+                                  {hist.scheduledDateTime && <span className="text-[9px] font-bold text-slate-500">{new Date(hist.scheduledDateTime).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' })}</span>}
                                   {hist.staffName && <span className="text-[9px] font-bold text-indigo-500 flex items-center gap-0.5"><UserIcon size={8}/> {hist.staffName}</span>}
                                 </div>
                                 {hist.content && <p className="text-[10px] text-slate-500 mt-0.5 truncate">{hist.content}</p>}
@@ -3685,7 +3685,7 @@
                                 <div className="space-y-3 mt-3">
                                   <div className="grid grid-cols-2 gap-3">
                                     <div>
-                                      <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">実施日時</label>
+                                      <label className="text-[9px] font-black text-slate-500 uppercase block mb-1">実施日時</label>
                                       <input type="datetime-local"
                                         value={historyEditDraft.scheduledDateTime || ''}
                                         onChange={e => setHistoryEditDraft(d => ({ ...d, scheduledDateTime: e.target.value }))}
@@ -3693,7 +3693,7 @@
                                       />
                                     </div>
                                     <div>
-                                      <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">方法</label>
+                                      <label className="text-[9px] font-black text-slate-500 uppercase block mb-1">方法</label>
                                       <select
                                         value={historyEditDraft.method || ''}
                                         onChange={e => setHistoryEditDraft(d => ({ ...d, method: e.target.value }))}
@@ -3705,7 +3705,7 @@
                                     </div>
                                   </div>
                                   <div>
-                                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">対応ツール</label>
+                                    <label className="text-[9px] font-black text-slate-500 uppercase block mb-1">対応ツール</label>
                                     <div className="flex flex-wrap gap-1.5">
                                       {(masters?.supportTools || SUPPORT_TOOLS).map(tool => {
                                         var checked = (historyEditDraft.tools || []).includes(tool);
@@ -3726,7 +3726,7 @@
                                     </div>
                                   </div>
                                   <div>
-                                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">実施記録</label>
+                                    <label className="text-[9px] font-black text-slate-500 uppercase block mb-1">実施記録</label>
                                     <textarea
                                       value={historyEditDraft.content || ''}
                                       onChange={e => setHistoryEditDraft(d => ({ ...d, content: e.target.value }))}
@@ -3735,7 +3735,7 @@
                                     />
                                   </div>
                                   <div>
-                                    <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">備考</label>
+                                    <label className="text-[9px] font-black text-slate-500 uppercase block mb-1">備考</label>
                                     <textarea
                                       value={historyEditDraft.remarks || ''}
                                       onChange={e => setHistoryEditDraft(d => ({ ...d, remarks: e.target.value }))}
@@ -3751,7 +3751,7 @@
                                   )}
                                   {hist.attachments && hist.attachments.length > 0 && (
                                     <div className="p-3 bg-slate-50 rounded-xl space-y-1.5">
-                                      <span className="text-[9px] font-black text-slate-400 uppercase block mb-1">添付ファイル（変更不可）</span>
+                                      <span className="text-[9px] font-black text-slate-500 uppercase block mb-1">添付ファイル（変更不可）</span>
                                       {hist.attachments.map((att, aIdx) => (
                                         <a key={(att.fileId || 'hist-att') + '-' + aIdx} href={att.url || '#'} target="_blank" rel="noreferrer"
                                           className="flex items-center gap-1.5 text-xs font-bold text-sky-700 hover:underline">
@@ -3762,7 +3762,7 @@
                                   )}
                                   {hist.staffName && (
                                     <div className="flex items-center gap-1.5 px-1">
-                                      <UserIcon size={10} className="text-slate-400"/>
+                                      <UserIcon size={10} className="text-slate-500"/>
                                       <span className="text-[10px] font-bold text-slate-500">担当: {hist.staffName}</span>
                                     </div>
                                   )}
@@ -3792,11 +3792,11 @@
                                   )}
                                   <div className="grid grid-cols-2 gap-3 mt-3">
                                     <div className="p-3 bg-slate-50 rounded-xl">
-                                      <span className="text-[9px] font-black text-slate-400 uppercase block mb-1">実施日時</span>
+                                      <span className="text-[9px] font-black text-slate-500 uppercase block mb-1">実施日時</span>
                                       <span className="text-xs font-black text-slate-700">{hist.scheduledDateTime ? new Date(hist.scheduledDateTime).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : '—'}</span>
                                     </div>
                                     <div className="p-3 bg-slate-50 rounded-xl">
-                                      <span className="text-[9px] font-black text-slate-400 uppercase block mb-1">方法</span>
+                                      <span className="text-[9px] font-black text-slate-500 uppercase block mb-1">方法</span>
                                       <span className="text-xs font-black text-slate-700">{hist.method || '—'}</span>
                                     </div>
                                   </div>
@@ -3808,7 +3808,7 @@
                                   )}
                                   {hist.tools && hist.tools.length > 0 && (
                                     <div className="p-3 bg-slate-50 rounded-xl">
-                                      <span className="text-[9px] font-black text-slate-400 uppercase block mb-1">対応ツール</span>
+                                      <span className="text-[9px] font-black text-slate-500 uppercase block mb-1">対応ツール</span>
                                       <div className="flex flex-wrap gap-1">
                                         {hist.tools.map(t => <span key={t} className="px-2 py-0.5 rounded-lg bg-teal-100 text-teal-700 text-[9px] font-black">{t}</span>)}
                                       </div>
@@ -3822,7 +3822,7 @@
                                   )}
                                   {hist.attachments && hist.attachments.length > 0 && (
                                     <div className="p-3 bg-slate-50 rounded-xl space-y-1.5">
-                                      <span className="text-[9px] font-black text-slate-400 uppercase block mb-1">添付ファイル</span>
+                                      <span className="text-[9px] font-black text-slate-500 uppercase block mb-1">添付ファイル</span>
                                       {hist.attachments.map((att, aIdx) => (
                                         <a
                                           key={(att.fileId || 'hist-att') + '-' + aIdx}
@@ -3845,7 +3845,7 @@
                                   )}
                                   {hist.staffName && (
                                     <div className="flex items-center gap-1.5 px-1">
-                                      <UserIcon size={10} className="text-slate-400"/>
+                                      <UserIcon size={10} className="text-slate-500"/>
                                       <span className="text-[10px] font-bold text-slate-500">担当: {hist.staffName}</span>
                                     </div>
                                   )}
@@ -3881,8 +3881,8 @@
                                     {isSending && <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 animate-pulse">送信中</span>}
                                   </div>
                                   <p className="text-xs font-black text-slate-700 truncate">{s.subject || '(件名なし)'}</p>
-                                  <p className="text-[10px] text-slate-400 truncate">{(s.body || '').slice(0, 80)}{s.body && s.body.length > 80 ? '...' : ''}</p>
-                                  <p className="text-[9px] font-bold text-slate-400">担当: {s.staffName || s.staffEmail}</p>
+                                  <p className="text-[10px] text-slate-500 truncate">{(s.body || '').slice(0, 80)}{s.body && s.body.length > 80 ? '...' : ''}</p>
+                                  <p className="text-[9px] font-bold text-slate-500">担当: {s.staffName || s.staffEmail}</p>
                                 </div>
                                 {!isSending && (
                                   <button
@@ -3903,12 +3903,12 @@
                     {threadLoading && (
                       <section className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center justify-center gap-2">
                         <Loader2 size={18} className="animate-spin text-teal-500"/>
-                        <span className="text-xs font-bold text-slate-400">メールスレッドを読み込み中...</span>
+                        <span className="text-xs font-bold text-slate-500">メールスレッドを読み込み中...</span>
                       </section>
                     )}
                     {!threadLoading && threadGroups.length > 0 && (
                       <section className="space-y-3">
-                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                        <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
                           <Mail size={12} /> メール ({threadGroups.length}スレッド)
                         </h3>
                         {threadGroups.map((tg, tIdx) => {
@@ -3934,12 +3934,12 @@
                                     <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${
                                       latest.isStaff ? 'bg-teal-50 text-teal-600' : 'bg-amber-50 text-amber-600'
                                     }`}>{latest.isStaff ? '最新: 送信' : '最新: 受信'}</span>
-                                    <span className="text-[9px] font-black text-slate-400">
+                                    <span className="text-[9px] font-black text-slate-500">
                                       {latest.sendDate ? new Date(latest.sendDate).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : ''}
                                     </span>
                                   </div>
                                   <p className="text-xs font-black text-slate-700 truncate">{tg.subject || 'メールスレッド'}</p>
-                                  <p className="text-[10px] text-slate-400 truncate mt-0.5">{latest.senderName}: {(latest.body || '').slice(0, 60)}{latest.body && latest.body.length > 60 ? '...' : ''}</p>
+                                  <p className="text-[10px] text-slate-500 truncate mt-0.5">{latest.senderName}: {(latest.body || '').slice(0, 60)}{latest.body && latest.body.length > 60 ? '...' : ''}</p>
                                 </div>
                                 <ChevronRight size={16} className={`text-slate-300 transition-transform shrink-0 ${isOpen ? 'rotate-90' : ''}`}/>
                               </button>
@@ -3970,7 +3970,7 @@
                                               <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${
                                                 em.isStaff ? 'bg-teal-50 text-teal-600' : 'bg-amber-50 text-amber-600'
                                               }`}>{em.isStaff ? '送信' : '受信'}</span>
-                                              <span className="text-[9px] font-black text-slate-400">
+                                              <span className="text-[9px] font-black text-slate-500">
                                                 {em.sendDate ? new Date(em.sendDate).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : ''}
                                               </span>
                                               <span className="text-[9px] font-bold text-slate-500">{em.senderName}</span>
@@ -4026,7 +4026,7 @@
                             <div className="text-[10px] font-black text-slate-500">担当者
                               <div className="relative mt-1">
                                 <div className="relative">
-                                  <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                                  <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
                                   <input
                                     type="text"
                                     value={adminEditStaffOpen ? adminEditStaffSearch : (() => {
@@ -4047,7 +4047,7 @@
                                 {adminEditStaffOpen && (
                                   <div className="absolute top-full left-0 right-0 mt-1 bg-white shadow-xl rounded-2xl border border-slate-200 z-50 overflow-hidden">
                                     {adminEditStaffSearch && (
-                                      <p className="text-[10px] text-slate-400 px-3 pt-1.5">{
+                                      <p className="text-[10px] text-slate-500 px-3 pt-1.5">{
                                         activeStaffMembers.filter(s => {
                                           const kw = adminEditStaffSearch.trim().toLowerCase();
                                           return s.name.toLowerCase().includes(kw) || (s.email || '').toLowerCase().includes(kw);
@@ -4080,14 +4080,14 @@
                                           }`}>
                                           {s.email === adminCaseEditDraft.staffEmail && <CheckCircle size={10}/>}
                                           {s.email !== adminCaseEditDraft.staffEmail && <span className="w-[10px]"/>}
-                                          <span className="flex-1">{s.name}<span className="text-slate-400 ml-1">({s.email})</span></span>
+                                          <span className="flex-1">{s.name}<span className="text-slate-500 ml-1">({s.email})</span></span>
                                         </button>
                                       ))}
                                       {adminEditStaffSearch.trim() && activeStaffMembers.filter(s => {
                                         const kw = adminEditStaffSearch.trim().toLowerCase();
                                         return s.name.toLowerCase().includes(kw) || (s.email || '').toLowerCase().includes(kw);
                                       }).length === 0 && (
-                                        <p className="text-xs text-slate-400 text-center py-4">一致なし</p>
+                                        <p className="text-xs text-slate-500 text-center py-4">一致なし</p>
                                       )}
                                     </div>
                                   </div>
@@ -4124,7 +4124,7 @@
                                 <input type="time" value={adminCaseEditDraft.scheduledTime || ''} onChange={e => setAdminCaseEditDraft(prev => ({ ...prev, scheduledTime: e.target.value }))} placeholder="時間（任意）" className="w-28 py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold" />
                               </div>
                               {adminCaseEditDraft.scheduledDate && !adminCaseEditDraft.scheduledTime && (
-                                <p className="text-[9px] text-slate-400 mt-1">時間未入力の場合、日付のみ保存されます</p>
+                                <p className="text-[9px] text-slate-500 mt-1">時間未入力の場合、日付のみ保存されます</p>
                               )}
                             </div>
                             <div className="grid grid-cols-2 gap-2">
@@ -4171,7 +4171,7 @@
                   </div>
                 </div>
               ) : (
-                <div className="h-full flex flex-col items-center justify-center text-slate-300">
+                <div className="h-full flex flex-col items-center justify-center text-slate-500">
                   <Activity size={48} className="mb-4 opacity-20" />
                   <p className="text-sm font-black uppercase tracking-widest">案件を選択してください</p>
                 </div>
@@ -4411,7 +4411,7 @@
                     </div>
                     <div className="flex gap-2">
                       <button onClick={() => setExtractFields(EXTRACT_FIELD_DEFS.map(d => d.key))} className="text-[10px] font-bold text-violet-600 hover:underline">全選択</button>
-                      <button onClick={() => setExtractFields([])} className="text-[10px] font-bold text-slate-400 hover:underline">全解除</button>
+                      <button onClick={() => setExtractFields([])} className="text-[10px] font-bold text-slate-500 hover:underline">全解除</button>
                     </div>
                   </div>
                   <div className="px-6 py-4 border-t border-slate-100 flex justify-end">
@@ -4453,7 +4453,7 @@
                       <option value="staff">タダメン</option>
                       <option value="disabled">無効</option>
                     </select>
-                    <p className="text-[11px] font-black text-slate-400 flex items-center">{roleMembers.length} 件</p>
+                    <p className="text-[11px] font-black text-slate-500 flex items-center">{roleMembers.length} 件</p>
                   </div>
                   <div className="max-h-[52vh] overflow-auto border border-slate-100 rounded-2xl">
                     {roleMembers.map(staff => {
@@ -4463,10 +4463,10 @@
                         <div key={staff.email} className="px-3 py-2 border-b border-slate-50 last:border-b-0 flex flex-col md:flex-row md:items-center gap-2">
                           <div className="flex-1 min-w-0">
                             <p className="text-xs font-black text-slate-700 truncate">{staff.name || '(名称未設定)'}</p>
-                            <p className="text-[10px] text-slate-400 truncate">{staff.email}</p>
+                            <p className="text-[10px] text-slate-500 truncate">{staff.email}</p>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-black text-slate-400">現在: {ADMIN_ROLE_LABELS[current]}</span>
+                            <span className="text-[10px] font-black text-slate-500">現在: {ADMIN_ROLE_LABELS[current]}</span>
                             <select
                               defaultValue={current}
                               disabled={isSelf || submitting}
@@ -4481,7 +4481,7 @@
                         </div>
                       );
                     })}
-                    {roleMembers.length === 0 && <p className="text-xs text-slate-400 p-5">該当するメンバーがいません。</p>}
+                    {roleMembers.length === 0 && <p className="text-xs text-slate-500 p-5">該当するメンバーがいません。</p>}
                   </div>
                 </div>
               </div>
@@ -4534,17 +4534,17 @@
                         <React.Fragment key={key}>
                         {groupHeader && (
                           <div className="px-4 pt-5 pb-1 bg-slate-50/80 border-t border-slate-200 first:border-t-0">
-                            <p className="text-[11px] font-black text-slate-500 tracking-wide flex items-center gap-1.5"><Mail size={12} className="text-slate-400"/>{groupHeader}</p>
+                            <p className="text-[11px] font-black text-slate-500 tracking-wide flex items-center gap-1.5"><Mail size={12} className="text-slate-500"/>{groupHeader}</p>
                           </div>
                         )}
                         <div className="p-4 space-y-1">
                           <p className="text-xs font-black text-slate-700">{meta.label}</p>
-                          <p className="text-[10px] text-slate-400">{meta.desc}</p>
+                          <p className="text-[10px] text-slate-500">{meta.desc}</p>
                           {isTools ? (
                             <div className="space-y-1.5 mt-2">
                               {toolsArr.map((tool, idx) => (
                                 <div key={idx} className="flex items-center gap-2">
-                                  <span className="text-[10px] text-slate-400 w-5 text-right shrink-0">{idx + 1}</span>
+                                  <span className="text-[10px] text-slate-500 w-5 text-right shrink-0">{idx + 1}</span>
                                   <input
                                     value={tool}
                                     onChange={e => { const arr = [...toolsArr]; arr[idx] = e.target.value; updateTools(arr); }}
@@ -4554,14 +4554,14 @@
                                     type="button"
                                     onClick={() => { const arr = [...toolsArr]; arr[idx] = toolsArr[idx - 1]; arr[idx - 1] = tool; updateTools(arr); }}
                                     disabled={idx === 0}
-                                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-20"
+                                    className="p-1.5 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-20"
                                     title="上へ"
                                   >↑</button>
                                   <button
                                     type="button"
                                     onClick={() => { const arr = [...toolsArr]; arr[idx] = toolsArr[idx + 1]; arr[idx + 1] = tool; updateTools(arr); }}
                                     disabled={idx === toolsArr.length - 1}
-                                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-20"
+                                    className="p-1.5 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 disabled:opacity-20"
                                     title="下へ"
                                   >↓</button>
                                   <button
@@ -4628,30 +4628,30 @@
                       <Mail size={20} className={emailModal.mode === 'initial' ? 'text-teal-500' : emailModal.mode === 'decline' ? 'text-rose-500' : emailModal.mode === 'schedule' ? 'text-indigo-500' : emailModal.mode === 'reply' ? 'text-amber-500' : 'text-sky-500'}/>
                       {emailModal.mode === 'initial' ? '初回メール送信' : emailModal.mode === 'decline' ? '回数超過の連絡' : emailModal.mode === 'schedule' ? '日程確定メール送信' : emailModal.mode === 'reply' ? 'スレッド返信' : '新規メール送信'}
                     </h3>
-                    <p className="text-[10px] font-bold text-slate-400 mt-0.5">
+                    <p className="text-[10px] font-bold text-slate-500 mt-0.5">
                       {emailModal.mode === 'initial' ? 'メール送信と同時に担当が確定します' : emailModal.mode === 'decline' ? '回数超過のメールを送信し、対応不可に設定します' : emailModal.mode === 'schedule' ? '日程確定の連絡メールを送信します（送信しない場合は×で閉じてください）' : emailModal.mode === 'reply' ? '既存スレッドに返信します' : '新しいスレッドでメールを送信します'}
                     </p>
                   </div>
                   <button onClick={() => setEmailModal(null)}>
-                    <X size={20} className="text-slate-400 hover:text-slate-600"/>
+                    <X size={20} className="text-slate-500 hover:text-slate-600"/>
                   </button>
                 </div>
                 <div className="space-y-4">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><Mail size={10}/> 送信先</label>
+                    <label className="text-[10px] font-black text-slate-500 uppercase flex items-center gap-1"><Mail size={10}/> 送信先</label>
                     <div className="bg-slate-50 border border-slate-100 rounded-xl p-3 text-xs font-bold text-slate-600">
                       {emailModal.to}
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><Mail size={10}/> CC（任意）</label>
+                      <label className="text-[10px] font-black text-slate-500 uppercase flex items-center gap-1"><Mail size={10}/> CC（任意）</label>
                       <input
                         type="text"
                         value={emailModal.cc}
                         onChange={e => setEmailModal({...emailModal, cc: e.target.value})}
                         placeholder="カンマ区切りで複数指定可"
-                        className="w-full border-2 border-slate-100 rounded-xl p-3 text-xs font-bold outline-none focus:border-teal-500 placeholder:text-slate-300"
+                        className="w-full border-2 border-slate-100 rounded-xl p-3 text-xs font-bold outline-none focus:border-teal-500 placeholder:text-slate-500"
                       />
                       {forcedCc && (
                         <p className="text-[10px] font-bold text-slate-500 leading-snug pt-0.5">
@@ -4660,18 +4660,18 @@
                       )}
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><Mail size={10}/> BCC（任意）</label>
+                      <label className="text-[10px] font-black text-slate-500 uppercase flex items-center gap-1"><Mail size={10}/> BCC（任意）</label>
                       <input
                         type="text"
                         value={emailModal.bcc}
                         onChange={e => setEmailModal({...emailModal, bcc: e.target.value})}
                         placeholder="カンマ区切りで複数指定可"
-                        className="w-full border-2 border-slate-100 rounded-xl p-3 text-xs font-bold outline-none focus:border-teal-500 placeholder:text-slate-300"
+                        className="w-full border-2 border-slate-100 rounded-xl p-3 text-xs font-bold outline-none focus:border-teal-500 placeholder:text-slate-500"
                       />
                     </div>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><FileText size={10}/> 件名</label>
+                    <label className="text-[10px] font-black text-slate-500 uppercase flex items-center gap-1"><FileText size={10}/> 件名</label>
                     <input
                       type="text"
                       value={emailModal.subject}
@@ -4680,7 +4680,7 @@
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><MessageSquare size={10}/> 本文</label>
+                    <label className="text-[10px] font-black text-slate-500 uppercase flex items-center gap-1"><MessageSquare size={10}/> 本文</label>
                     <textarea
                       rows={10}
                       value={emailModal.body}
@@ -4775,11 +4775,11 @@
                     <h3 className="font-black text-lg text-slate-800">
                       {modalMode === 'assignOnly' ? '担当設定（メールなし）' : modalMode === 'schedule' ? '日程の確定・変更' : modalMode === 'report' ? '実施記録・完了報告' : modalMode === 'cancel' ? '案件キャンセル' : '記録の修正'}
                     </h3>
-                    <p className="text-[10px] font-bold text-slate-400 mt-0.5">
+                    <p className="text-[10px] font-bold text-slate-500 mt-0.5">
                       {modalMode === 'assignOnly' ? 'メールを送信せずに担当します。対応ツールが分かっていれば選択してください。' : modalMode === 'schedule' ? '対応日時を設定します（カレンダー登録は任意）' : modalMode === 'report' ? 'ステータスを「完了」に変更します' : modalMode === 'cancel' ? 'キャンセル理由を記録してステータスを変更します' : 'データを上書き保存します'}
                     </p>
                   </div>
-                  <button onClick={() => { setModalMode(null); setPendingFiles([]); setExistingAttachments([]); setDragOverAttachments(false); }}><X size={20} className="text-slate-400 hover:text-slate-600"/></button>
+                  <button onClick={() => { setModalMode(null); setPendingFiles([]); setExistingAttachments([]); setDragOverAttachments(false); }}><X size={20} className="text-slate-500 hover:text-slate-600"/></button>
                 </div>
                 {modalMode === 'assignOnly' && (
                   <div className="space-y-6">
@@ -4884,15 +4884,15 @@
                   )}
                   {(modalMode === 'report' || modalMode === 'edit' || modalMode === 'cancel') && (
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><FileText size={10}/> {modalMode === 'cancel' ? 'キャンセル理由・対応内容' : '実施記録・メモ'}</label>
+                      <label className="text-[10px] font-black text-slate-500 uppercase flex items-center gap-1"><FileText size={10}/> {modalMode === 'cancel' ? 'キャンセル理由・対応内容' : '実施記録・メモ'}</label>
                       <textarea rows={6} required={modalMode === 'report' || modalMode === 'cancel'} value={editFormData.content || ''} onChange={e => setEditFormData({...editFormData, content: e.target.value})} className="w-full border-2 border-slate-100 rounded-xl p-3 text-xs font-bold outline-none focus:border-teal-500" placeholder={modalMode === 'cancel' ? 'キャンセルの理由や経緯を記録してください...' : '実施したサポート内容や、次回の引継ぎ事項を入力してください...'} />
                     </div>
                   )}
                   {(modalMode === 'report' || modalMode === 'edit') && (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <label className="text-[10px] font-black text-slate-400 uppercase flex items-center gap-1"><Paperclip size={10}/> 添付ファイル</label>
-                        <span className="text-[10px] font-bold text-slate-400">{getAttachmentCount()} / {MAX_ATTACHMENTS_PER_REPORT}</span>
+                        <label className="text-[10px] font-black text-slate-500 uppercase flex items-center gap-1"><Paperclip size={10}/> 添付ファイル</label>
+                        <span className="text-[10px] font-bold text-slate-500">{getAttachmentCount()} / {MAX_ATTACHMENTS_PER_REPORT}</span>
                       </div>
                       {!masters?.attachmentFolderConfigured && (
                         <p className="text-[10px] text-rose-600 font-bold">
@@ -4963,10 +4963,10 @@
                   )}
                   {modalMode === 'edit' && (
                     <div className="space-y-1 pt-4 border-t border-slate-100">
-                      <label className="text-[10px] font-black text-slate-400 uppercase">ステータス (手動変更)</label>
+                      <label className="text-[10px] font-black text-slate-500 uppercase">ステータス (手動変更)</label>
                       <div className="flex gap-2">
-                        <button type="button" onClick={() => setEditFormData({...editFormData, status: 'inProgress'})} className={`flex-1 py-3 rounded-xl text-xs font-black border-2 ${editFormData.status !== 'completed' ? 'border-sky-500 bg-sky-50 text-sky-600' : 'border-slate-100 text-slate-400'}`}>対応中</button>
-                        <button type="button" onClick={() => setEditFormData({...editFormData, status: 'completed'})} className={`flex-1 py-3 rounded-xl text-xs font-black border-2 ${editFormData.status === 'completed' ? 'border-emerald-500 bg-emerald-50 text-emerald-600' : 'border-slate-100 text-slate-400'}`}>完了</button>
+                        <button type="button" onClick={() => setEditFormData({...editFormData, status: 'inProgress'})} className={`flex-1 py-3 rounded-xl text-xs font-black border-2 ${editFormData.status !== 'completed' ? 'border-sky-500 bg-sky-50 text-sky-600' : 'border-slate-100 text-slate-500'}`}>対応中</button>
+                        <button type="button" onClick={() => setEditFormData({...editFormData, status: 'completed'})} className={`flex-1 py-3 rounded-xl text-xs font-black border-2 ${editFormData.status === 'completed' ? 'border-emerald-500 bg-emerald-50 text-emerald-600' : 'border-slate-100 text-slate-500'}`}>完了</button>
                       </div>
                     </div>
                   )}
@@ -5062,7 +5062,7 @@
                 <input type="text" className={inputCls} value={form.requesterName} onChange={e => set('requesterName', e.target.value)} placeholder="山田 太郎" />
               </div>
               <div>
-                <label className={labelCls}>申込日 <span className="text-[9px] text-slate-400 normal-case tracking-normal font-bold">（空欄の場合は本日）</span></label>
+                <label className={labelCls}>申込日 <span className="text-[9px] text-slate-500 normal-case tracking-normal font-bold">（空欄の場合は本日）</span></label>
                 <input type="date" className={inputCls} value={form.applicationDate} onChange={e => set('applicationDate', e.target.value)} />
               </div>
               <div className="flex gap-3">

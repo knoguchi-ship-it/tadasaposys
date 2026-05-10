@@ -10,13 +10,11 @@
 import { test, expect } from '../fixtures';
 import AxeBuilder from '@axe-core/playwright';
 
-/** axe 実行の共通ヘルパー: critical/serious のうち color-contrast 以外を報告 */
+/** axe 実行の共通ヘルパー: critical/serious 違反を報告（color-contrast 含む） */
 async function checkA11y(page: Parameters<typeof AxeBuilder>[0]['page']) {
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
     .exclude('[aria-hidden="true"]')
-    // 既知の color-contrast 違反はデザイン改善で別途対応（Issue: Tailwind 薄色テキスト対比不足）
-    .disableRules(['color-contrast'])
     .analyze();
 
   const critical = results.violations.filter(

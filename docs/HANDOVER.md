@@ -267,7 +267,21 @@ completed  → cancelled
 
 ---
 
-## 8. 開発の進め方
+## 8. リファクタリングロードマップ（#5 関数複雑度削減）
+
+以下の関数は循環複雑度（CC）が推奨値（10）を超えている。**単体テスト整備後に**段階的にリファクタリングすること。
+
+| 関数 | 推定 CC | 推奨分割方針 |
+|------|:-------:|------------|
+| `getAllCasesJoined()` | ≈18 | `buildRecordMap_()` / `buildFiscalYearCounts_()` / `mergeCase_()` に分割 |
+| `updateSupportRecord()` | ≈15 | カレンダー処理 / 添付処理 / バッチ書き込みの3ブロックに分割 |
+| `processScheduledEmails_()` | ≈12 | `extractPendingTargets_()` / `markAsSending_()` の責務分離 |
+
+**注意:** これらの関数は現在正常動作しており、`tests/unit/` の単体テストが充実してから着手すること。
+
+---
+
+## 9. 開発の進め方
 
 ### ローカル開発
 

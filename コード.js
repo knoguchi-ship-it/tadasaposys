@@ -70,18 +70,18 @@ function getSpreadsheet_() {
 function loadSettings_() {
   if (_settingsCache) return _settingsCache;
 
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
   if (!sheet) {
     throw new Error('「設定」シートが見つかりません。GASエディタで setupSettingsSheet 関数を実行してください。');
   }
 
-  var data = sheet.getDataRange().getValues();
-  var settings = {};
-  for (var i = 1; i < data.length; i++) {
-    var key = String(data[i][0]).trim();
+  let data = sheet.getDataRange().getValues();
+  let settings = {};
+  for (let i = 1; i < data.length; i++) {
+    let key = String(data[i][0]).trim();
     if (!key || key.charAt(0) === '#') continue;
-    var val = String(data[i][2]).trim(); // C列（3列目）が設定値
+    let val = String(data[i][2]).trim(); // C列（3列目）が設定値
     settings[key] = val;
   }
 
@@ -93,17 +93,17 @@ function loadSettings_() {
  * 設定値を取得（キーが無い場合はデフォルト値を返す）
  */
 function getSetting_(key, defaultValue) {
-  var settings = loadSettings_();
-  var val = settings[key];
+  let settings = loadSettings_();
+  let val = settings[key];
   return (val !== undefined && val !== '') ? val : (defaultValue || '');
 }
 
 function saveSetting_(key, value) {
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
   if (!sheet) return;
-  var data = sheet.getDataRange().getValues();
-  for (var i = 1; i < data.length; i++) {
+  let data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]).trim() === key) {
       sheet.getRange(i + 1, 3).setValue(value);
       _settingsCache = null;
@@ -119,7 +119,7 @@ function saveSetting_(key, value) {
  * ADMIN_EMAILS をカンマ区切りで配列として取得
  */
 function getAdminEmails_() {
-  var raw = getSetting_('ADMIN_EMAILS', '');
+  let raw = getSetting_('ADMIN_EMAILS', '');
   if (!raw) return [];
   return raw.split(',').map(function(e) { return e.trim().toLowerCase(); });
 }
@@ -128,7 +128,7 @@ function getAdminEmails_() {
  * MAIL_FORCE_CC の設定値（空欄ならnull）を返す。
  */
 function getForcedCc_() {
-  var raw = getSetting_('MAIL_FORCE_CC', '').trim();
+  let raw = getSetting_('MAIL_FORCE_CC', '').trim();
   return raw ? raw : null;
 }
 
@@ -137,15 +137,15 @@ function getForcedCc_() {
  * true / 1 / yes / on を有効として扱う。
  */
 function isMailDryRun_() {
-  var raw = String(getSetting_('MAIL_DRY_RUN', '') || '').trim().toLowerCase();
+  let raw = String(getSetting_('MAIL_DRY_RUN', '') || '').trim().toLowerCase();
   return raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on';
 }
 
 function parsePositiveIntegerSetting_(key, defaultValue) {
-  var raw = String(getSetting_(key, String(defaultValue)) || '').trim();
-  var num = Number(raw);
+  let raw = String(getSetting_(key, String(defaultValue)) || '').trim();
+  let num = Number(raw);
   if (!isFinite(num)) return Number(defaultValue);
-  var intNum = Math.floor(num);
+  let intNum = Math.floor(num);
   return intNum > 0 ? intNum : Number(defaultValue);
 }
 
@@ -159,9 +159,9 @@ function getCaseUsageLimit_() {
 
 function parseNullablePositiveInteger_(value) {
   if (value === null || value === undefined || String(value).trim() === '') return null;
-  var num = Number(value);
+  let num = Number(value);
   if (!isFinite(num)) throw new Error('上限値は1以上の整数で入力してください。');
-  var intNum = Math.floor(num);
+  let intNum = Math.floor(num);
   if (intNum < 1) throw new Error('上限値は1以上の整数で入力してください。');
   return intNum;
 }
@@ -172,7 +172,7 @@ function normalizeEmail_(email) {
 
 function parseBoolean_(v, defaultValue) {
   if (v === true || v === false) return v;
-  var raw = String(v || '').trim().toLowerCase();
+  let raw = String(v || '').trim().toLowerCase();
   if (!raw) return !!defaultValue;
   return raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on';
 }
@@ -194,48 +194,48 @@ function sanitizeForSheet_(value) {
 }
 
 function getStaffRoleByEmail_(email) {
-  var target = normalizeEmail_(email);
+  let target = normalizeEmail_(email);
   if (!target) return null;
 
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
   if (!sheet || sheet.getLastRow() <= 1) return null;
 
-  var data = sheet.getDataRange().getValues();
-  for (var i = 1; i < data.length; i++) {
-    var em = normalizeEmail_(data[i][IDX.STAFF.EMAIL]);
+  let data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    let em = normalizeEmail_(data[i][IDX.STAFF.EMAIL]);
     if (em !== target) continue;
-    var active = parseBoolean_(data[i][IDX.STAFF.IS_ACTIVE], true);
+    let active = parseBoolean_(data[i][IDX.STAFF.IS_ACTIVE], true);
     if (!active) return null;
-    var role = String(data[i][IDX.STAFF.ROLE] || '').trim().toLowerCase();
+    let role = String(data[i][IDX.STAFF.ROLE] || '').trim().toLowerCase();
     return role || 'staff';
   }
   return null;
 }
 
 function isAdminEmail_(email) {
-  var role = getStaffRoleByEmail_(email);
+  let role = getStaffRoleByEmail_(email);
   if (role === 'admin') return true;
-  var adminEmails = getAdminEmails_();
+  let adminEmails = getAdminEmails_();
   return adminEmails.indexOf(normalizeEmail_(email)) !== -1;
 }
 
 function getActor_() {
-  var actorEmail = normalizeEmail_(Session.getActiveUser().getEmail());
+  let actorEmail = normalizeEmail_(Session.getActiveUser().getEmail());
   if (!actorEmail) {
     throw new Error('ユーザー情報の取得に失敗しました。');
   }
   // Staffシート1回読みで name + role を同時取得
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
-  var staffName = null;
-  var staffRole = null;
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
+  let staffName = null;
+  let staffRole = null;
   if (sheet && sheet.getLastRow() > 1) {
-    var data = sheet.getDataRange().getValues();
-    for (var i = 1; i < data.length; i++) {
-      var em = normalizeEmail_(data[i][IDX.STAFF.EMAIL]);
+    let data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      let em = normalizeEmail_(data[i][IDX.STAFF.EMAIL]);
       if (em !== actorEmail) continue;
-      var active = parseBoolean_(data[i][IDX.STAFF.IS_ACTIVE], true);
+      let active = parseBoolean_(data[i][IDX.STAFF.IS_ACTIVE], true);
       if (!active) continue;
       staffName = data[i][IDX.STAFF.NAME];
       staffRole = String(data[i][IDX.STAFF.ROLE] || '').trim().toLowerCase() || 'staff';
@@ -247,7 +247,7 @@ function getActor_() {
   }
   // 旧管理者メールリストとのフォールバック
   if (staffRole !== 'admin') {
-    var adminEmails = getAdminEmails_();
+    let adminEmails = getAdminEmails_();
     if (adminEmails.indexOf(actorEmail) !== -1) staffRole = 'admin';
   }
   return {
@@ -259,7 +259,7 @@ function getActor_() {
 }
 
 function requireAdmin_() {
-  var actor = getActor_();
+  let actor = getActor_();
   if (!actor.isAdmin) {
     throw new Error('管理者権限が必要です。');
   }
@@ -267,37 +267,37 @@ function requireAdmin_() {
 }
 
 function getCaseRecordRowIndex_(caseId) {
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
-  var data = sheet.getDataRange().getValues();
-  for (var i = 1; i < data.length; i++) {
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  let data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
     if (String(data[i][IDX.RECORDS.FK]) === String(caseId)) return i + 1;
   }
   return -1;
 }
 
 function ensureCaseEditableByActor_(caseId, actor, allowUnassigned) {
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
-  var rowIndex = getCaseRecordRowIndex_(caseId);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  let rowIndex = getCaseRecordRowIndex_(caseId);
   if (rowIndex === -1) return true;
 
-  var row = sheet.getRange(rowIndex, 1, 1, sheet.getLastColumn()).getValues()[0];
-  var staffEmail = normalizeEmail_(row[IDX.RECORDS.STAFF_EMAIL]);
+  let row = sheet.getRange(rowIndex, 1, 1, sheet.getLastColumn()).getValues()[0];
+  let staffEmail = normalizeEmail_(row[IDX.RECORDS.STAFF_EMAIL]);
   if (!staffEmail && allowUnassigned) return true;
   if (actor.isAdmin) return true;
   if (staffEmail && staffEmail === normalizeEmail_(actor.email)) return true;
   // サブ担当も操作可能（OJT用）
-  var subStaffJson = row[IDX.RECORDS.SUB_STAFF] ? String(row[IDX.RECORDS.SUB_STAFF]) : '[]';
-  var subStaff = [];
+  let subStaffJson = row[IDX.RECORDS.SUB_STAFF] ? String(row[IDX.RECORDS.SUB_STAFF]) : '[]';
+  let subStaff = [];
   try { subStaff = JSON.parse(subStaffJson); } catch(e) {}
   if (subStaff.some(function(s) { return normalizeEmail_(s.email) === normalizeEmail_(actor.email); })) return true;
   throw new Error('この案件を操作する権限がありません。');
 }
 
 function getOrCreateAuditLogSheet_() {
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.AUDIT_LOG);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.AUDIT_LOG);
   if (sheet) return sheet;
   sheet = ss.insertSheet(SHEET_NAMES.AUDIT_LOG);
   sheet.getRange(1, 1, 1, 8).setValues([[
@@ -309,7 +309,7 @@ function getOrCreateAuditLogSheet_() {
 
 function appendAuditLog_(actor, action, targetType, targetId, beforeObj, afterObj) {
   try {
-    var sheet = getOrCreateAuditLogSheet_();
+    let sheet = getOrCreateAuditLogSheet_();
     sheet.appendRow([
       new Date(),
       actor && actor.email ? actor.email : '',
@@ -329,7 +329,7 @@ function appendAuditLog_(actor, action, targetType, targetId, beforeObj, afterOb
 // Webアプリ エントリポイント
 // ======================================================================
 function doGet() {
-  var html = HtmlService.createTemplateFromFile('index')
+  let html = HtmlService.createTemplateFromFile('index')
     .evaluate()
     .setTitle('タダサポ管理')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
@@ -337,8 +337,8 @@ function doGet() {
 
   // 初期データをHTMLに埋め込み（google.script.run の往復を1回削減）
   try {
-    var data = getInitialData();
-    var json = JSON.stringify(data).replace(/<\//g, '<\\/');
+    let data = getInitialData();
+    let json = JSON.stringify(data).replace(/<\//g, '<\\/');
     html.append('<script>window.__INITIAL_DATA__=' + json + ';</script>');
   } catch (e) {
     // 認証エラー等: 埋め込みスキップ（フロントで再取得しエラー表示）
@@ -353,21 +353,21 @@ function doGet() {
 function getInitialData() {
   ensureAttachmentSchema_();
 
-  var userEmail = normalizeEmail_(Session.getActiveUser().getEmail());
-  var staff = getStaffByEmail(userEmail);
+  let userEmail = normalizeEmail_(Session.getActiveUser().getEmail());
+  let staff = getStaffByEmail(userEmail);
 
   if (!staff) {
     throw new Error('アクセス権限がありません。管理者によりタダメンマスタへの登録が必要です。');
   }
 
-  var role = getStaffRoleByEmail_(userEmail) || (isAdminEmail_(userEmail) ? 'admin' : 'staff');
-  var isAdmin = role === 'admin';
-  var cases = getAllCasesJoined();
-  var masters = getMasters();
+  let role = getStaffRoleByEmail_(userEmail) || (isAdminEmail_(userEmail) ? 'admin' : 'staff');
+  let isAdmin = role === 'admin';
+  let cases = getAllCasesJoined();
+  let masters = getMasters();
   // v1.11.0: 下書きを持つ案件IDの一覧（バッジ表示用）
-  var draftCaseIds = listDraftCaseIdsForUser_(userEmail);
+  let draftCaseIds = listDraftCaseIdsForUser_(userEmail);
   // v1.11.0: 予約送信のペンディング案件IDの一覧（バッジ表示用）
-  var scheduledCaseIds = listScheduledCaseIdsForUser_(userEmail);
+  let scheduledCaseIds = listScheduledCaseIdsForUser_(userEmail);
 
   return {
     user: { name: staff.name, email: userEmail, isAdmin: isAdmin, role: role },
@@ -383,7 +383,7 @@ function getInitialData() {
 // 年度計算
 // ======================================================================
 function getFiscalYear(dateObj) {
-  var d = new Date(dateObj);
+  let d = new Date(dateObj);
   if (isNaN(d.getTime())) return 0;
   return d.getMonth() < 3 ? d.getFullYear() - 1 : d.getFullYear();
 }
@@ -392,40 +392,40 @@ function getFiscalYear(dateObj) {
 // データ結合取得
 // ======================================================================
 function getAllCasesJoined() {
-  var ss = getSpreadsheet_();
+  let ss = getSpreadsheet_();
   // スプレッドシートのタイムゾーンを取得（dateLabel の整形に使用）
-  var ssTimeZone = ss.getSpreadsheetTimeZone();
-  var caseSheet = ss.getSheetByName(SHEET_NAMES.CASES);
-  var recordSheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  let ssTimeZone = ss.getSpreadsheetTimeZone();
+  let caseSheet = ss.getSheetByName(SHEET_NAMES.CASES);
+  let recordSheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
 
-  var caseData = caseSheet.getDataRange().getValues();
-  var recordData = recordSheet.getDataRange().getValues();
+  let caseData = caseSheet.getDataRange().getValues();
+  let recordData = recordSheet.getDataRange().getValues();
 
   // 手動追加案件シートを読み込み、案件リストとマージ（ヘッダ行を除いた行配列を結合）
-  var manualSheet = ss.getSheetByName(SHEET_NAMES.CASES_MANUAL);
-  var manualRows = (manualSheet && manualSheet.getLastRow() > 1)
+  let manualSheet = ss.getSheetByName(SHEET_NAMES.CASES_MANUAL);
+  let manualRows = (manualSheet && manualSheet.getLastRow() > 1)
     ? manualSheet.getDataRange().getValues().slice(1)
     : [];
-  var allCaseRows = caseData.slice(1).concat(manualRows);
+  let allCaseRows = caseData.slice(1).concat(manualRows);
 
   // 削除済み案件を除外
-  var deletedRaw = getSetting_('DELETED_CASE_IDS', '');
+  let deletedRaw = getSetting_('DELETED_CASE_IDS', '');
   if (deletedRaw) {
-    var deletedSet = {};
+    let deletedSet = {};
     deletedRaw.split(',').forEach(function(id) { if (id) deletedSet[id.trim()] = true; });
     allCaseRows = allCaseRows.filter(function(r) { return !deletedSet[String(r[IDX.CASES.PK])]; });
   }
 
   // 案件補正マップを読み込む（管理者が修正した値を案件リストに上書き表示するため）
-  var overrideMap = getCasesOverrideMap_(ss);
+  let overrideMap = getCasesOverrideMap_(ss);
 
   // メール履歴を読み込み
-  var emailMap = {};
-  var emailSheet = ss.getSheetByName(SHEET_NAMES.EMAIL_HISTORY);
+  let emailMap = {};
+  let emailSheet = ss.getSheetByName(SHEET_NAMES.EMAIL_HISTORY);
   if (emailSheet && emailSheet.getLastRow() > 1) {
-    var emailData = emailSheet.getDataRange().getValues();
-    for (var ei = 1; ei < emailData.length; ei++) {
-      var eCaseId = String(emailData[ei][IDX.EMAIL.CASE_ID]);
+    let emailData = emailSheet.getDataRange().getValues();
+    for (let ei = 1; ei < emailData.length; ei++) {
+      let eCaseId = String(emailData[ei][IDX.EMAIL.CASE_ID]);
       if (!emailMap[eCaseId]) emailMap[eCaseId] = [];
       emailMap[eCaseId].push({
         sendDate: emailData[ei][IDX.EMAIL.SEND_DATE] ? new Date(emailData[ei][IDX.EMAIL.SEND_DATE]).toISOString() : null,
@@ -436,22 +436,22 @@ function getAllCasesJoined() {
     }
   }
 
-  var recordMap = {};
-  var fiscalYearCounts = {};
+  let recordMap = {};
+  let fiscalYearCounts = {};
 
-  for (var i = 1; i < recordData.length; i++) {
-    var r = recordData[i];
-    var historyStr = r[IDX.RECORDS.HISTORY] ? String(r[IDX.RECORDS.HISTORY]) : '[]';
-    var parsedHistory = [];
+  for (let i = 1; i < recordData.length; i++) {
+    let r = recordData[i];
+    let historyStr = r[IDX.RECORDS.HISTORY] ? String(r[IDX.RECORDS.HISTORY]) : '[]';
+    let parsedHistory = [];
     try { parsedHistory = JSON.parse(historyStr); } catch(e) { parsedHistory = []; }
-    var attachmentsStr = r[IDX.RECORDS.ATTACHMENTS] ? String(r[IDX.RECORDS.ATTACHMENTS]) : '[]';
-    var parsedAttachments = [];
+    let attachmentsStr = r[IDX.RECORDS.ATTACHMENTS] ? String(r[IDX.RECORDS.ATTACHMENTS]) : '[]';
+    let parsedAttachments = [];
     try { parsedAttachments = JSON.parse(attachmentsStr); } catch(e) { parsedAttachments = []; }
-    var toolsStr = r[IDX.RECORDS.TOOLS] ? String(r[IDX.RECORDS.TOOLS]) : '[]';
-    var parsedTools = [];
+    let toolsStr = r[IDX.RECORDS.TOOLS] ? String(r[IDX.RECORDS.TOOLS]) : '[]';
+    let parsedTools = [];
     try { parsedTools = JSON.parse(toolsStr); } catch(e) { parsedTools = []; }
-    var subStaffStr = r[IDX.RECORDS.SUB_STAFF] ? String(r[IDX.RECORDS.SUB_STAFF]) : '[]';
-    var parsedSubStaff = [];
+    let subStaffStr = r[IDX.RECORDS.SUB_STAFF] ? String(r[IDX.RECORDS.SUB_STAFF]) : '[]';
+    let parsedSubStaff = [];
     try { parsedSubStaff = JSON.parse(subStaffStr); } catch(e) { parsedSubStaff = []; }
     recordMap[String(r[IDX.RECORDS.FK])] = {
       status: r[IDX.RECORDS.STATUS],
@@ -467,11 +467,11 @@ function getAllCasesJoined() {
       eventId: r[IDX.RECORDS.EVENT_ID],
       threadId: r[IDX.RECORDS.THREAD_ID] || null,
       caseLimitOverride: (function(v) {
-        var n = Number(v);
+        let n = Number(v);
         return isFinite(n) && n > 0 ? Math.floor(n) : null;
       })(r[IDX.RECORDS.CASE_LIMIT_OVERRIDE]),
       annualLimitOverride: (function(v) {
-        var n = Number(v);
+        let n = Number(v);
         return isFinite(n) && n > 0 ? Math.floor(n) : null;
       })(r[IDX.RECORDS.ANNUAL_LIMIT_OVERRIDE]),
       supportHistory: parsedHistory,
@@ -481,55 +481,55 @@ function getAllCasesJoined() {
     };
   }
 
-  for (var j = 0; j < allCaseRows.length; j++) {
-    var c = allCaseRows[j];
-    var ts = String(c[IDX.CASES.PK]);
+  for (let j = 0; j < allCaseRows.length; j++) {
+    let c = allCaseRows[j];
+    let ts = String(c[IDX.CASES.PK]);
     if (!ts) continue;
     // 補正シートにメールアドレスの補正があればそちらを使う（年度集計の正確性のため）
-    var ovr = overrideMap[ts] || {};
-    var email = ovr.email !== null && ovr.email !== undefined ? ovr.email : String(c[IDX.CASES.EMAIL]);
-    var record = recordMap[ts] || { status: 'unhandled' };
+    let ovr = overrideMap[ts] || {};
+    let email = ovr.email !== null && ovr.email !== undefined ? ovr.email : String(c[IDX.CASES.EMAIL]);
+    let record = recordMap[ts] || { status: 'unhandled' };
     if (record.status === 'inProgress' || record.status === 'completed') {
-      var fy = getFiscalYear(ts);
-      var key = email + '_' + fy;
+      let fy = getFiscalYear(ts);
+      let key = email + '_' + fy;
       fiscalYearCounts[key] = (fiscalYearCounts[key] || 0) + (Number(record.supportCount) || 1);
     }
   }
 
-  var joinedCases = [];
-  var seenPks = {};
-  for (var j = 0; j < allCaseRows.length; j++) {
-    var c = allCaseRows[j];
-    var ts = String(c[IDX.CASES.PK]);
+  let joinedCases = [];
+  let seenPks = {};
+  for (let j = 0; j < allCaseRows.length; j++) {
+    let c = allCaseRows[j];
+    let ts = String(c[IDX.CASES.PK]);
     if (!ts) continue;
     if (seenPks[ts]) continue; // 重複PKをスキップ
     seenPks[ts] = true;
-    var record = recordMap[ts] || { status: 'unhandled', supportCount: 1 };
+    let record = recordMap[ts] || { status: 'unhandled', supportCount: 1 };
     // 案件補正マップを適用（補正値が存在する場合は上書き、null は補正なし）
-    var ovr = overrideMap[ts] || {};
-    var email       = ovr.email         !== null && ovr.email         !== undefined ? ovr.email         : String(c[IDX.CASES.EMAIL]);
-    var officeName  = ovr.officeName    !== null && ovr.officeName    !== undefined ? ovr.officeName    : c[IDX.CASES.OFFICE];
-    var reqName     = ovr.requesterName !== null && ovr.requesterName !== undefined ? ovr.requesterName : c[IDX.CASES.NAME];
-    var details     = ovr.details       !== null && ovr.details       !== undefined ? ovr.details       : c[IDX.CASES.DETAILS];
-    var prefecture  = ovr.prefecture    !== null && ovr.prefecture    !== undefined ? ovr.prefecture    : (c[IDX.CASES.PREFECTURE] || null);
-    var serviceType = ovr.serviceType   !== null && ovr.serviceType   !== undefined ? ovr.serviceType   : c[IDX.CASES.SERVICE];
-    var fy = getFiscalYear(ts);
-    var count = fiscalYearCounts[email + '_' + fy] || 0;
+    let ovr = overrideMap[ts] || {};
+    let email       = ovr.email         !== null && ovr.email         !== undefined ? ovr.email         : String(c[IDX.CASES.EMAIL]);
+    let officeName  = ovr.officeName    !== null && ovr.officeName    !== undefined ? ovr.officeName    : c[IDX.CASES.OFFICE];
+    let reqName     = ovr.requesterName !== null && ovr.requesterName !== undefined ? ovr.requesterName : c[IDX.CASES.NAME];
+    let details     = ovr.details       !== null && ovr.details       !== undefined ? ovr.details       : c[IDX.CASES.DETAILS];
+    let prefecture  = ovr.prefecture    !== null && ovr.prefecture    !== undefined ? ovr.prefecture    : (c[IDX.CASES.PREFECTURE] || null);
+    let serviceType = ovr.serviceType   !== null && ovr.serviceType   !== undefined ? ovr.serviceType   : c[IDX.CASES.SERVICE];
+    let fy = getFiscalYear(ts);
+    let count = fiscalYearCounts[email + '_' + fy] || 0;
     // タイムスタンプをJST日付文字列に変換
     // c[IDX.CASES.PK] は GAS が Sheet から読んだ Date オブジェクトのため、
     // String() → new Date() の往復変換を避けて直接 formatDate に渡す
-    var pkRaw = c[IDX.CASES.PK];
-    var pkDate;
+    let pkRaw = c[IDX.CASES.PK];
+    let pkDate;
     if (pkRaw && typeof pkRaw.getTime === 'function') {
       pkDate = pkRaw;
     } else if (typeof pkRaw === 'string' && pkRaw.indexOf('manual_') === 0) {
       // 手動追加案件: "manual_" + エポックミリ秒 から日付を復元
-      var epoch = Number(pkRaw.replace('manual_', ''));
+      let epoch = Number(pkRaw.replace('manual_', ''));
       pkDate = isFinite(epoch) ? new Date(epoch) : new Date(NaN);
     } else {
       pkDate = new Date(pkRaw);
     }
-    var dateLabel = isNaN(pkDate.getTime()) ? '' : Utilities.formatDate(pkDate, ssTimeZone, 'yyyy/MM/dd');
+    let dateLabel = isNaN(pkDate.getTime()) ? '' : Utilities.formatDate(pkDate, ssTimeZone, 'yyyy/MM/dd');
 
     joinedCases.push({
       id: ts, timestamp: ts, dateLabel: dateLabel, email: email,
@@ -561,17 +561,17 @@ function getAllCasesJoined() {
 // 案件アサイン
 // ======================================================================
 function assignCase(caseId, user, tools) {
-  var actor = getActor_();
+  let actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, true);
 
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
-  var data = sheet.getDataRange().getValues();
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  let data = sheet.getDataRange().getValues();
 
-  var toolsVal = Array.isArray(tools) && tools.length > 0 ? JSON.stringify(tools) : '[]';
+  let toolsVal = Array.isArray(tools) && tools.length > 0 ? JSON.stringify(tools) : '[]';
 
-  var rowIndex = -1;
-  for (var i = 1; i < data.length; i++) {
+  let rowIndex = -1;
+  for (let i = 1; i < data.length; i++) {
     if (String(data[i][IDX.RECORDS.FK]) === String(caseId)) {
       rowIndex = i + 1;
       break;
@@ -584,7 +584,7 @@ function assignCase(caseId, user, tools) {
       null, 1, null, null, null, null, null, null, null, null, '[]', '', '', toolsVal, '[]'
     ]);
   } else {
-    var before = {
+    let before = {
       status: String(data[rowIndex - 1][IDX.RECORDS.STATUS] || ''),
       staffEmail: String(data[rowIndex - 1][IDX.RECORDS.STAFF_EMAIL] || ''),
       staffName: String(data[rowIndex - 1][IDX.RECORDS.STAFF_NAME] || '')
@@ -614,15 +614,15 @@ function assignCase(caseId, user, tools) {
  * supportCount >= 3 の場合はエラー。
  */
 function reopenCase(caseId, user) {
-  var actor = getActor_();
+  let actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, false);
 
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
-  var data = sheet.getDataRange().getValues();
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  let data = sheet.getDataRange().getValues();
 
-  var rowIndex = -1;
-  for (var i = 1; i < data.length; i++) {
+  let rowIndex = -1;
+  for (let i = 1; i < data.length; i++) {
     if (String(data[i][IDX.RECORDS.FK]) === String(caseId)) {
       rowIndex = i + 1;
       break;
@@ -630,14 +630,14 @@ function reopenCase(caseId, user) {
   }
   if (rowIndex === -1) throw new Error('レコードが見つかりません: ' + caseId);
 
-  var row = data[rowIndex - 1];
-  var currentCount = Number(row[IDX.RECORDS.COUNT]) || 1;
-  var caseLimit = parseNullablePositiveInteger_(row[IDX.RECORDS.CASE_LIMIT_OVERRIDE]) || getCaseUsageLimit_();
+  let row = data[rowIndex - 1];
+  let currentCount = Number(row[IDX.RECORDS.COUNT]) || 1;
+  let caseLimit = parseNullablePositiveInteger_(row[IDX.RECORDS.CASE_LIMIT_OVERRIDE]) || getCaseUsageLimit_();
   if (currentCount >= caseLimit) throw new Error('この案件は対応上限（' + caseLimit + '回）に達しているため再開できません。');
 
   // 現在の回の記録を履歴に保存
-  var historyJson = row[IDX.RECORDS.HISTORY] ? String(row[IDX.RECORDS.HISTORY]) : '[]';
-  var history = [];
+  let historyJson = row[IDX.RECORDS.HISTORY] ? String(row[IDX.RECORDS.HISTORY]) : '[]';
+  let history = [];
   try { history = JSON.parse(historyJson); } catch(e) { history = []; }
   history.push({
     round: currentCount,
@@ -647,18 +647,18 @@ function reopenCase(caseId, user) {
     remarks: row[IDX.RECORDS.REMARKS] || null,
     meetUrl: row[IDX.RECORDS.MEET_URL] || null,
     attachments: (function() {
-      var a = row[IDX.RECORDS.ATTACHMENTS] ? String(row[IDX.RECORDS.ATTACHMENTS]) : '[]';
+      let a = row[IDX.RECORDS.ATTACHMENTS] ? String(row[IDX.RECORDS.ATTACHMENTS]) : '[]';
       try { return JSON.parse(a); } catch(e) { return []; }
     })(),
     tools: (function() {
-      var t = row[IDX.RECORDS.TOOLS] ? String(row[IDX.RECORDS.TOOLS]) : '[]';
+      let t = row[IDX.RECORDS.TOOLS] ? String(row[IDX.RECORDS.TOOLS]) : '[]';
       try { return JSON.parse(t); } catch(e) { return []; }
     })(),
     staffName: row[IDX.RECORDS.STAFF_NAME] || null,
     staffEmail: row[IDX.RECORDS.STAFF_EMAIL] || null
   });
   // STATUS(1)～ATTACHMENTS(14) を一括書き込み
-  var newRow = [];
+  let newRow = [];
   newRow[IDX.RECORDS.STATUS] = 'inProgress';
   newRow[IDX.RECORDS.COUNT] = currentCount + 1;
   newRow[IDX.RECORDS.DATE] = null;
@@ -685,15 +685,15 @@ function reopenCase(caseId, user) {
  * 担当者本人・サブ担当・管理者が実行可能。
  */
 function rollbackCurrentRound(caseId) {
-  var actor = getActor_();
+  let actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, false);
 
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
-  var data = sheet.getDataRange().getValues();
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  let data = sheet.getDataRange().getValues();
 
-  var rowIndex = -1;
-  for (var i = 1; i < data.length; i++) {
+  let rowIndex = -1;
+  for (let i = 1; i < data.length; i++) {
     if (String(data[i][IDX.RECORDS.FK]) === String(caseId)) {
       rowIndex = i + 1;
       break;
@@ -701,20 +701,20 @@ function rollbackCurrentRound(caseId) {
   }
   if (rowIndex === -1) throw new Error('レコードが見つかりません: ' + caseId);
 
-  var row = data[rowIndex - 1];
-  var currentCount = Number(row[IDX.RECORDS.COUNT]) || 1;
+  let row = data[rowIndex - 1];
+  let currentCount = Number(row[IDX.RECORDS.COUNT]) || 1;
   if (currentCount <= 1) throw new Error('1回目の対応は取り消せません。');
 
   // 履歴から直前の回を復元
-  var historyJson = row[IDX.RECORDS.HISTORY] ? String(row[IDX.RECORDS.HISTORY]) : '[]';
-  var history = [];
+  let historyJson = row[IDX.RECORDS.HISTORY] ? String(row[IDX.RECORDS.HISTORY]) : '[]';
+  let history = [];
   try { history = JSON.parse(historyJson); } catch(e) { history = []; }
   if (history.length === 0) throw new Error('復元する履歴がありません。');
 
-  var prev = history.pop(); // 直前の回のデータ
+  let prev = history.pop(); // 直前の回のデータ
 
   // レコードを前回の完了状態に復元
-  var restoreRow = [];
+  let restoreRow = [];
   restoreRow[IDX.RECORDS.STATUS] = 'completed';
   restoreRow[IDX.RECORDS.STAFF_EMAIL] = prev.staffEmail || row[IDX.RECORDS.STAFF_EMAIL];
   restoreRow[IDX.RECORDS.STAFF_NAME] = prev.staffName || row[IDX.RECORDS.STAFF_NAME];
@@ -745,16 +745,16 @@ function rollbackCurrentRound(caseId) {
  * 未アサインの案件は管理者のみキャンセル可能。
  */
 function cancelCase(caseId) {
-  var actor = getActor_();
+  let actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, false);
 
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
-  var rowIndex = getCaseRecordRowIndex_(caseId);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  let rowIndex = getCaseRecordRowIndex_(caseId);
   if (rowIndex === -1) throw new Error('レコードが見つかりません: ' + caseId);
 
-  var row = sheet.getRange(rowIndex, 1, 1, sheet.getLastColumn()).getValues()[0];
-  var before = { status: String(row[IDX.RECORDS.STATUS] || '') };
+  let row = sheet.getRange(rowIndex, 1, 1, sheet.getLastColumn()).getValues()[0];
+  let before = { status: String(row[IDX.RECORDS.STATUS] || '') };
 
   sheet.getRange(rowIndex, IDX.RECORDS.STATUS + 1).setValue('cancelled');
   appendAuditLog_(actor, 'cancel_case', 'case', caseId, before, { status: 'cancelled' });
@@ -767,7 +767,7 @@ var SCHEMA_VERSION_ = '5';
 function ensureAttachmentSchema_() {
   // CacheService でスキーマ確認済みなら全スキップ（6時間有効）
   try {
-    var cache = CacheService.getScriptCache();
+    let cache = CacheService.getScriptCache();
     if (cache.get('schema_v') === SCHEMA_VERSION_) return;
   } catch (e) { /* CacheService 利用不可の場合はフォールスルー */ }
 
@@ -798,17 +798,17 @@ function ensureAttachmentSchema_() {
  * が存在しない場合のみ追加する。
  */
 function addMissingEmailSettings_() {
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
   if (!sheet) return;
 
-  var data = sheet.getDataRange().getValues();
-  var existingKeys = {};
-  for (var i = 0; i < data.length; i++) {
+  let data = sheet.getDataRange().getValues();
+  let existingKeys = {};
+  for (let i = 0; i < data.length; i++) {
     existingKeys[String(data[i][0]).trim()] = true;
   }
 
-  var toAdd = [];
+  let toAdd = [];
   if (!existingKeys['MAIL_INITIAL_INCLUDE_DETAILS']) {
     toAdd.push(['MAIL_INITIAL_INCLUDE_DETAILS', '初回メールに相談内容を含める', 'true', 'true / false', '初回メール本文に相談内容ブロックを含めるか（true=含める）']);
   }
@@ -836,11 +836,11 @@ function addMissingEmailSettings_() {
 
   if (!toAdd.length) return;
 
-  var lastRow = sheet.getLastRow();
+  let lastRow = sheet.getLastRow();
   sheet.getRange(lastRow + 1, 1, toAdd.length, 5).setValues(toAdd);
   // 値列（C列）を編集可能な黄色スタイルに
-  for (var j = 0; j < toAdd.length; j++) {
-    var r = lastRow + 1 + j;
+  for (let j = 0; j < toAdd.length; j++) {
+    let r = lastRow + 1 + j;
     sheet.getRange(r, 3).setBackground('#fffbeb').setBorder(true, true, true, true, null, null, '#f59e0b', SpreadsheetApp.BorderStyle.SOLID).setFontWeight('bold');
     sheet.getRange(r, 1).setFontColor('#9ca3af').setFontSize(8);
     sheet.getRange(r, 2).setFontWeight('bold').setFontColor('#1e293b');
@@ -859,18 +859,18 @@ function addMissingEmailSettings_() {
  * 回数超過メールを送信し、ステータスを rejected に変更する。
  */
 function declineCase(caseId, user, subject, body, cc, bcc) {
-  var actor = getActor_();
+  let actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, true);
 
-  var recipientEmail = getRecipientEmail_(caseId);
+  let recipientEmail = getRecipientEmail_(caseId);
   if (!recipientEmail) throw new Error('案件が見つかりません: ' + caseId);
 
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
-  var data = sheet.getDataRange().getValues();
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  let data = sheet.getDataRange().getValues();
 
-  var rowIndex = -1;
-  for (var i = 1; i < data.length; i++) {
+  let rowIndex = -1;
+  for (let i = 1; i < data.length; i++) {
     if (String(data[i][IDX.RECORDS.FK]) === String(caseId)) {
       rowIndex = i + 1;
       break;
@@ -889,7 +889,7 @@ function declineCase(caseId, user, subject, body, cc, bcc) {
       staffName: actor.name
     });
   } else {
-    var before = {
+    let before = {
       status: String(data[rowIndex - 1][IDX.RECORDS.STATUS] || ''),
       staffEmail: String(data[rowIndex - 1][IDX.RECORDS.STAFF_EMAIL] || ''),
       staffName: String(data[rowIndex - 1][IDX.RECORDS.STAFF_NAME] || '')
@@ -905,7 +905,7 @@ function declineCase(caseId, user, subject, body, cc, bcc) {
   }
 
   // メール送信
-  var result = sendInThread_(recipientEmail, subject, body, null, null, cc || null, bcc || null);
+  let result = sendInThread_(recipientEmail, subject, body, null, null, cc || null, bcc || null);
   storeThreadId_(caseId, result.threadId);
   recordEmail_(caseId, actor, recipientEmail, subject, body);
   return { threadId: result.threadId };
@@ -919,16 +919,16 @@ function declineCase(caseId, user, subject, body, cc, bcc) {
  * 「メール履歴」シートを取得（無ければ自動作成）
  */
 function getOrCreateEmailHistorySheet_() {
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_HISTORY);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_HISTORY);
   if (sheet) return sheet;
 
   sheet = ss.insertSheet(SHEET_NAMES.EMAIL_HISTORY);
-  var headers = ['案件ID', '送信日時', '送信者メール', '送信者名', '宛先メール', '件名', '本文'];
+  let headers = ['案件ID', '送信日時', '送信者メール', '送信者名', '宛先メール', '件名', '本文'];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
 
   // ヘッダースタイル
-  var headerRange = sheet.getRange(1, 1, 1, headers.length);
+  let headerRange = sheet.getRange(1, 1, 1, headers.length);
   headerRange.setBackground('#0d9488').setFontColor('#ffffff').setFontWeight('bold').setFontSize(10);
   headerRange.setFontFamily('Noto Sans JP');
   sheet.setFrozenRows(1);
@@ -950,7 +950,7 @@ function getOrCreateEmailHistorySheet_() {
  * メール送信履歴を記録する（内部ヘルパー）
  */
 function recordEmail_(caseId, user, recipientEmail, subject, body) {
-  var sheet = getOrCreateEmailHistorySheet_();
+  let sheet = getOrCreateEmailHistorySheet_();
   sheet.appendRow([
     caseId,
     new Date(),
@@ -967,26 +967,26 @@ function recordEmail_(caseId, user, recipientEmail, subject, body) {
  * 案件補正シートにメールアドレスの補正がある場合はそちらを優先する。
  */
 function getRecipientEmail_(caseId) {
-  var ss = getSpreadsheet_();
+  let ss = getSpreadsheet_();
   // 案件補正シートのメール補正を優先チェック
-  var overrideMap = getCasesOverrideMap_(ss);
-  var ovr = overrideMap[String(caseId)];
+  let overrideMap = getCasesOverrideMap_(ss);
+  let ovr = overrideMap[String(caseId)];
   if (ovr && ovr.email !== null) return ovr.email;
 
   // 案件リストをチェック
-  var caseSheet = ss.getSheetByName(SHEET_NAMES.CASES);
-  var caseData = caseSheet.getDataRange().getValues();
-  for (var i = 1; i < caseData.length; i++) {
+  let caseSheet = ss.getSheetByName(SHEET_NAMES.CASES);
+  let caseData = caseSheet.getDataRange().getValues();
+  for (let i = 1; i < caseData.length; i++) {
     if (String(caseData[i][IDX.CASES.PK]) === String(caseId)) {
       return String(caseData[i][IDX.CASES.EMAIL]);
     }
   }
 
   // 手動追加案件シートもチェック（案件リストに存在しない manual_xxx 案件に対応）
-  var manualSheet = ss.getSheetByName(SHEET_NAMES.CASES_MANUAL);
+  let manualSheet = ss.getSheetByName(SHEET_NAMES.CASES_MANUAL);
   if (manualSheet && manualSheet.getLastRow() > 1) {
-    var manualData = manualSheet.getDataRange().getValues();
-    for (var j = 1; j < manualData.length; j++) {
+    let manualData = manualSheet.getDataRange().getValues();
+    for (let j = 1; j < manualData.length; j++) {
       if (String(manualData[j][IDX.CASES.PK]) === String(caseId)) {
         return String(manualData[j][IDX.CASES.EMAIL]);
       }
@@ -1011,16 +1011,16 @@ function getRecipientEmail_(caseId) {
  * @returns {{ messageId: string, threadId: string }}
  */
 function sendInThread_(to, subject, body, threadId, inReplyTo, optionalCc, optionalBcc) {
-  var encodedSubject = '=?UTF-8?B?' + Utilities.base64Encode(subject, Utilities.Charset.UTF_8) + '?=';
-  var forceCc = getForcedCc_();
+  let encodedSubject = '=?UTF-8?B?' + Utilities.base64Encode(subject, Utilities.Charset.UTF_8) + '?=';
+  let forceCc = getForcedCc_();
 
   // 設定の必須CCと任意CCをマージ
-  var ccParts = [];
+  let ccParts = [];
   if (forceCc) ccParts.push(forceCc);
   if (optionalCc) ccParts.push(optionalCc);
-  var mergedCc = ccParts.length > 0 ? ccParts.join(', ') : null;
+  let mergedCc = ccParts.length > 0 ? ccParts.join(', ') : null;
 
-  var headers = [
+  let headers = [
     'MIME-Version: 1.0',
     'To: ' + to,
     'Subject: ' + encodedSubject,
@@ -1034,14 +1034,14 @@ function sendInThread_(to, subject, body, threadId, inReplyTo, optionalCc, optio
     headers.push('References: ' + inReplyTo);
   }
 
-  var rawMessage = headers.join('\r\n') + '\r\n\r\n' + body;
-  var encoded = Utilities.base64EncodeWebSafe(rawMessage, Utilities.Charset.UTF_8);
+  let rawMessage = headers.join('\r\n') + '\r\n\r\n' + body;
+  let encoded = Utilities.base64EncodeWebSafe(rawMessage, Utilities.Charset.UTF_8);
 
-  var request = { raw: encoded };
+  let request = { raw: encoded };
   if (threadId) request.threadId = threadId;
 
   if (isMailDryRun_()) {
-    var stamp = String(new Date().getTime());
+    let stamp = String(new Date().getTime());
     Logger.log('[MAIL_DRY_RUN] send skipped. to=%s cc=%s bcc=%s subject=%s threadId=%s', to, mergedCc || '', optionalBcc || '', subject, threadId || '');
     return {
       messageId: 'dryrun-msg-' + stamp,
@@ -1053,7 +1053,7 @@ function sendInThread_(to, subject, body, threadId, inReplyTo, optionalCc, optio
     };
   }
 
-  var result = Gmail.Users.Messages.send(request, 'me');
+  let result = Gmail.Users.Messages.send(request, 'me');
   return { messageId: result.id, threadId: result.threadId, dryRun: false, to: to, cc: mergedCc || null, bcc: optionalBcc || null };
 }
 
@@ -1065,12 +1065,12 @@ function verifyCcDryRun() {
   if (!isMailDryRun_()) {
     throw new Error('MAIL_DRY_RUN が有効ではありません。テスト時のみ true にしてください。');
   }
-  var forceCc = getForcedCc_();
+  let forceCc = getForcedCc_();
   if (!forceCc) {
     throw new Error('MAIL_FORCE_CC が未設定です。CC確認のため設定してください。');
   }
 
-  var result = sendInThread_(
+  let result = sendInThread_(
     'dry-run-check@example.invalid',
     '[DRY RUN] CC確認',
     'This is a dry-run verification mail.',
@@ -1093,12 +1093,12 @@ function verifyCcDryRun() {
  */
 function getLastMessageId_(threadId) {
   try {
-    var thread = Gmail.Users.Threads.get('me', threadId, { format: 'metadata', metadataHeaders: ['Message-Id'] });
-    var messages = thread.messages;
+    let thread = Gmail.Users.Threads.get('me', threadId, { format: 'metadata', metadataHeaders: ['Message-Id'] });
+    let messages = thread.messages;
     if (!messages || messages.length === 0) return null;
-    var lastMsg = messages[messages.length - 1];
-    var hdrs = lastMsg.payload.headers;
-    for (var i = 0; i < hdrs.length; i++) {
+    let lastMsg = messages[messages.length - 1];
+    let hdrs = lastMsg.payload.headers;
+    for (let i = 0; i < hdrs.length; i++) {
       if (hdrs[i].name.toLowerCase() === 'message-id') return hdrs[i].value;
     }
   } catch(e) { /* ignore */ }
@@ -1114,10 +1114,10 @@ function getPlainTextBody_(payload) {
       (payload.mimeType === 'text/plain' || payload.mimeType === 'text/html')) {
     try {
       // Base64URL → 標準 Base64 変換（- を +、_ を / に置換）してからパディング補完
-      var data = payload.body.data.replace(/-/g, '+').replace(/_/g, '/');
+      let data = payload.body.data.replace(/-/g, '+').replace(/_/g, '/');
       while (data.length % 4 !== 0) data += '=';
-      var bytes = Utilities.base64Decode(data);
-      var text = Utilities.newBlob(bytes).getDataAsString('UTF-8');
+      let bytes = Utilities.base64Decode(data);
+      let text = Utilities.newBlob(bytes).getDataAsString('UTF-8');
       // HTML の場合はタグを除去してプレーンテキスト化
       if (payload.mimeType === 'text/html') {
         text = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
@@ -1136,15 +1136,15 @@ function getPlainTextBody_(payload) {
   }
   if (payload.parts) {
     // text/plain を優先して再帰探索
-    for (var i = 0; i < payload.parts.length; i++) {
+    for (let i = 0; i < payload.parts.length; i++) {
       if (payload.parts[i].mimeType === 'text/plain') {
-        var r = getPlainTextBody_(payload.parts[i]);
+        let r = getPlainTextBody_(payload.parts[i]);
         if (r) return r;
       }
     }
     // text/plain が見つからなければ再帰（HTML含む）
-    for (var j = 0; j < payload.parts.length; j++) {
-      var result = getPlainTextBody_(payload.parts[j]);
+    for (let j = 0; j < payload.parts.length; j++) {
+      let result = getPlainTextBody_(payload.parts[j]);
       if (result) return result;
     }
   }
@@ -1155,12 +1155,12 @@ function getPlainTextBody_(payload) {
  * 案件の全スレッドIDをサポート記録から取得する（カンマ区切りで複数保存）
  */
 function getThreadIdsForCase_(caseId) {
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
-  var data = sheet.getDataRange().getValues();
-  for (var i = 1; i < data.length; i++) {
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  let data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
     if (String(data[i][IDX.RECORDS.FK]) === String(caseId)) {
-      var raw = String(data[i][IDX.RECORDS.THREAD_ID] || '');
+      let raw = String(data[i][IDX.RECORDS.THREAD_ID] || '');
       if (!raw) return [];
       return raw.split(',').filter(function(t) { return t.trim(); });
     }
@@ -1172,13 +1172,13 @@ function getThreadIdsForCase_(caseId) {
  * 案件にスレッドIDを追記する（カンマ区切りで末尾に追加）
  */
 function storeThreadId_(caseId, threadId) {
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
-  var data = sheet.getDataRange().getValues();
-  for (var i = 1; i < data.length; i++) {
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  let data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
     if (String(data[i][IDX.RECORDS.FK]) === String(caseId)) {
-      var existing = String(data[i][IDX.RECORDS.THREAD_ID] || '');
-      var newVal = existing ? existing + ',' + threadId : threadId;
+      let existing = String(data[i][IDX.RECORDS.THREAD_ID] || '');
+      let newVal = existing ? existing + ',' + threadId : threadId;
       sheet.getRange(i + 1, IDX.RECORDS.THREAD_ID + 1).setValue(newVal);
       return;
     }
@@ -1189,12 +1189,12 @@ function storeThreadId_(caseId, threadId) {
  * 全スタッフのメールアドレスをリストで取得する
  */
 function getAllStaffEmails_() {
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
-  var data = sheet.getDataRange().getValues();
-  var emails = [];
-  for (var i = 1; i < data.length; i++) {
-    var isActive = parseBoolean_(data[i][IDX.STAFF.IS_ACTIVE], true);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
+  let data = sheet.getDataRange().getValues();
+  let emails = [];
+  for (let i = 1; i < data.length; i++) {
+    let isActive = parseBoolean_(data[i][IDX.STAFF.IS_ACTIVE], true);
     if (isActive && data[i][IDX.STAFF.EMAIL]) {
       emails.push(String(data[i][IDX.STAFF.EMAIL]).toLowerCase());
     }
@@ -1211,16 +1211,16 @@ function getAllStaffEmails_() {
  * Gmail API でスレッドIDを取得し、サポート記録に保存する。
  */
 function assignAndSendEmail(caseId, user, subject, body, cc, bcc, tools) {
-  var actor = getActor_();
+  let actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, true);
 
-  var recipientEmail = getRecipientEmail_(caseId);
+  let recipientEmail = getRecipientEmail_(caseId);
   if (!recipientEmail) throw new Error('案件が見つかりません: ' + caseId);
 
   assignCase(caseId, actor, tools);
 
   // Gmail API で送信（新規スレッド開始）
-  var result = sendInThread_(recipientEmail, subject, body, null, null, cc || null, bcc || null);
+  let result = sendInThread_(recipientEmail, subject, body, null, null, cc || null, bcc || null);
 
   // スレッドIDを保存
   storeThreadId_(caseId, result.threadId);
@@ -1239,13 +1239,13 @@ function assignAndSendEmail(caseId, user, subject, body, cc, bcc, tools) {
  * 「メール送信」ボタンから呼ばれる。
  */
 function sendNewCaseEmail(caseId, user, subject, body, cc, bcc) {
-  var actor = getActor_();
+  let actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, false);
 
-  var recipientEmail = getRecipientEmail_(caseId);
+  let recipientEmail = getRecipientEmail_(caseId);
   if (!recipientEmail) throw new Error('案件が見つかりません: ' + caseId);
 
-  var result = sendInThread_(recipientEmail, subject, body, null, null, cc || null, bcc || null);
+  let result = sendInThread_(recipientEmail, subject, body, null, null, cc || null, bcc || null);
   storeThreadId_(caseId, result.threadId);
   recordEmail_(caseId, actor, recipientEmail, subject, body);
   return { threadId: result.threadId };
@@ -1260,18 +1260,18 @@ function sendNewCaseEmail(caseId, user, subject, body, cc, bcc) {
  * threadIdを指定して呼ばれる。
  */
 function sendCaseEmail(caseId, user, subject, body, threadId, cc, bcc) {
-  var actor = getActor_();
+  let actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, false);
 
-  var recipientEmail = getRecipientEmail_(caseId);
+  let recipientEmail = getRecipientEmail_(caseId);
   if (!recipientEmail) throw new Error('案件が見つかりません: ' + caseId);
 
-  var inReplyTo = null;
+  let inReplyTo = null;
   if (threadId) {
     inReplyTo = getLastMessageId_(threadId);
   }
 
-  var result = sendInThread_(recipientEmail, subject, body, threadId || null, inReplyTo, cc || null, bcc || null);
+  let result = sendInThread_(recipientEmail, subject, body, threadId || null, inReplyTo, cc || null, bcc || null);
 
   // threadId未指定の場合は新規スレッドとして保存
   if (!threadId && result.threadId) {
@@ -1292,20 +1292,20 @@ function sendCaseEmail(caseId, user, subject, body, threadId, cc, bcc) {
  * 戻り値: [{ threadId, subject, messages: [{ sendDate, senderName, fromEmail, subject, body, isStaff }] }]
  */
 function getThreadMessages(caseId) {
-  var actor = getActor_();
+  let actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, false);
 
-  var threadIds = getThreadIdsForCase_(caseId);
+  let threadIds = getThreadIdsForCase_(caseId);
 
   // スレッドIDが無い場合はメール履歴シートから返す（フォールバック）
   if (!threadIds.length) {
-    var ss = getSpreadsheet_();
-    var emailSheet = ss.getSheetByName(SHEET_NAMES.EMAIL_HISTORY);
+    let ss = getSpreadsheet_();
+    let emailSheet = ss.getSheetByName(SHEET_NAMES.EMAIL_HISTORY);
     if (!emailSheet || emailSheet.getLastRow() <= 1) return [];
 
-    var emailData = emailSheet.getDataRange().getValues();
-    var fallbackMsgs = [];
-    for (var i = 1; i < emailData.length; i++) {
+    let emailData = emailSheet.getDataRange().getValues();
+    let fallbackMsgs = [];
+    for (let i = 1; i < emailData.length; i++) {
       if (String(emailData[i][IDX.EMAIL.CASE_ID]) === String(caseId)) {
         fallbackMsgs.push({
           sendDate: emailData[i][IDX.EMAIL.SEND_DATE] ? new Date(emailData[i][IDX.EMAIL.SEND_DATE]).toISOString() : null,
@@ -1321,20 +1321,20 @@ function getThreadMessages(caseId) {
   }
 
   // GmailApp でスレッドを取得（base64デコード不要、.getPlainBody() で直接取得）
-  var staffEmails = getAllStaffEmails_();
-  var threads = [];
+  let staffEmails = getAllStaffEmails_();
+  let threads = [];
 
-  for (var t = 0; t < threadIds.length; t++) {
+  for (let t = 0; t < threadIds.length; t++) {
     try {
-      var thread = GmailApp.getThreadById(threadIds[t]);
+      let thread = GmailApp.getThreadById(threadIds[t]);
       if (!thread) continue;
-      var gmailMsgs = thread.getMessages();
+      let gmailMsgs = thread.getMessages();
 
-      var parsed = gmailMsgs.map(function(msg) {
-        var from = msg.getFrom();
-        var fromEmail = from.match(/<(.+?)>/) ? from.match(/<(.+?)>/)[1] : from;
-        var isStaff = staffEmails.indexOf(fromEmail.toLowerCase()) !== -1;
-        var senderName = from.match(/^(.+?)\s*</) ? from.match(/^(.+?)\s*</)[1].replace(/"/g, '').trim() : fromEmail;
+      let parsed = gmailMsgs.map(function(msg) {
+        let from = msg.getFrom();
+        let fromEmail = from.match(/<(.+?)>/) ? from.match(/<(.+?)>/)[1] : from;
+        let isStaff = staffEmails.indexOf(fromEmail.toLowerCase()) !== -1;
+        let senderName = from.match(/^(.+?)\s*</) ? from.match(/^(.+?)\s*</)[1].replace(/"/g, '').trim() : fromEmail;
         return {
           sendDate: msg.getDate().toISOString(),
           senderName: senderName,
@@ -1357,8 +1357,8 @@ function getThreadMessages(caseId) {
 
   // 最新スレッドが先頭に来るようにソート
   threads.sort(function(a, b) {
-    var aDate = a.messages.length ? new Date(a.messages[a.messages.length - 1].sendDate) : 0;
-    var bDate = b.messages.length ? new Date(b.messages[b.messages.length - 1].sendDate) : 0;
+    let aDate = a.messages.length ? new Date(a.messages[a.messages.length - 1].sendDate) : 0;
+    let bDate = b.messages.length ? new Date(b.messages[b.messages.length - 1].sendDate) : 0;
     return bDate - aDate;
   });
 
@@ -1369,32 +1369,32 @@ function getThreadMessages(caseId) {
 // Zoom API
 // ======================================================================
 function getZoomAccessToken_() {
-  var accountId = getSetting_('ZOOM_ACCOUNT_ID');
-  var clientId = getSetting_('ZOOM_CLIENT_ID');
-  var clientSecret = getSetting_('ZOOM_CLIENT_SECRET');
+  let accountId = getSetting_('ZOOM_ACCOUNT_ID');
+  let clientId = getSetting_('ZOOM_CLIENT_ID');
+  let clientSecret = getSetting_('ZOOM_CLIENT_SECRET');
 
   if (!accountId || !clientId || !clientSecret) {
     throw new Error('Zoom API の設定が不足しています。「設定」シートに ZOOM_ACCOUNT_ID, ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET を入力してください。');
   }
 
-  var credentials = Utilities.base64Encode(clientId + ':' + clientSecret);
-  var response = UrlFetchApp.fetch('https://zoom.us/oauth/token', {
+  let credentials = Utilities.base64Encode(clientId + ':' + clientSecret);
+  let response = UrlFetchApp.fetch('https://zoom.us/oauth/token', {
     method: 'post',
     headers: { 'Authorization': 'Basic ' + credentials, 'Content-Type': 'application/x-www-form-urlencoded' },
     payload: 'grant_type=account_credentials&account_id=' + accountId,
     muteHttpExceptions: true
   });
 
-  var result = JSON.parse(response.getContentText());
+  let result = JSON.parse(response.getContentText());
   if (result.access_token) return result.access_token;
   throw new Error('Zoom認証エラー: ' + (result.reason || response.getContentText()));
 }
 
 function createZoomMeeting(title, startTime, durationMinutes) {
-  var token = getZoomAccessToken_();
-  var startISO = Utilities.formatDate(new Date(startTime), 'Asia/Tokyo', "yyyy-MM-dd'T'HH:mm:ss");
+  let token = getZoomAccessToken_();
+  let startISO = Utilities.formatDate(new Date(startTime), 'Asia/Tokyo', "yyyy-MM-dd'T'HH:mm:ss");
 
-  var response = UrlFetchApp.fetch('https://api.zoom.us/v2/users/me/meetings', {
+  let response = UrlFetchApp.fetch('https://api.zoom.us/v2/users/me/meetings', {
     method: 'post',
     headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
     payload: JSON.stringify({
@@ -1405,7 +1405,7 @@ function createZoomMeeting(title, startTime, durationMinutes) {
     muteHttpExceptions: true
   });
 
-  var result = JSON.parse(response.getContentText());
+  let result = JSON.parse(response.getContentText());
   if (result.join_url) return { joinUrl: result.join_url, meetingId: String(result.id) };
   throw new Error('Zoom会議作成エラー: ' + (result.message || response.getContentText()));
 }
@@ -1419,17 +1419,17 @@ function createZoomMeeting(title, startTime, durationMinutes) {
  * conferenceDataVersion: 1 を指定することで、Google Meet が自動発行される。
  */
 function createGoogleMeetEvent(title, startTime, description, durationMinutes) {
-  var start = new Date(startTime);
-  var dur = (durationMinutes && Number(durationMinutes) > 0) ? Number(durationMinutes) : 60;
-  var end = new Date(start.getTime() + dur * 60 * 1000);
-  var apiCalId = getApiCalendarId_();
+  let start = new Date(startTime);
+  let dur = (durationMinutes && Number(durationMinutes) > 0) ? Number(durationMinutes) : 60;
+  let end = new Date(start.getTime() + dur * 60 * 1000);
+  let apiCalId = getApiCalendarId_();
 
   // アプリURLをdescriptionに追記
-  var appUrl = ScriptApp.getService().getUrl();
-  var descWithApp = (description || '') + (appUrl ? '\n\nタダサポ管理: ' + appUrl : '');
+  let appUrl = ScriptApp.getService().getUrl();
+  let descWithApp = (description || '') + (appUrl ? '\n\nタダサポ管理: ' + appUrl : '');
 
   // Calendar Advanced Service で直接イベント+Meet を作成
-  var eventResource = {
+  let eventResource = {
     summary: title,
     description: descWithApp,
     start: {
@@ -1449,10 +1449,10 @@ function createGoogleMeetEvent(title, startTime, description, durationMinutes) {
   };
 
   try {
-    var created = Calendar.Events.insert(eventResource, apiCalId, { conferenceDataVersion: 1 });
-    var meetUrl = '';
+    let created = Calendar.Events.insert(eventResource, apiCalId, { conferenceDataVersion: 1 });
+    let meetUrl = '';
     if (created.conferenceData && created.conferenceData.entryPoints) {
-      var videoEntry = created.conferenceData.entryPoints.find(function(ep) { return ep.entryPointType === 'video'; });
+      let videoEntry = created.conferenceData.entryPoints.find(function(ep) { return ep.entryPointType === 'video'; });
       if (videoEntry) meetUrl = videoEntry.uri;
     }
     if (meetUrl) {
@@ -1469,10 +1469,10 @@ function createGoogleMeetEvent(title, startTime, description, durationMinutes) {
     console.error('Calendar Events.insert エラー: ' + e.message + ' (apiCalId=' + apiCalId + ')');
     // フォールバック: CalendarApp でイベントだけ作成（Meetなし）
     try {
-      var sharedCalId = getSetting_('SHARED_CALENDAR_ID', '');
-      var cal = (sharedCalId && sharedCalId !== 'primary') ? CalendarApp.getCalendarById(sharedCalId) : null;
+      let sharedCalId = getSetting_('SHARED_CALENDAR_ID', '');
+      let cal = (sharedCalId && sharedCalId !== 'primary') ? CalendarApp.getCalendarById(sharedCalId) : null;
       if (!cal) cal = CalendarApp.getDefaultCalendar();
-      var fallback = cal.createEvent(title, start, end, { description: descWithApp });
+      let fallback = cal.createEvent(title, start, end, { description: descWithApp });
       console.log('フォールバック: CalendarAppでイベント作成 eventId=' + fallback.getId());
       return { meetUrl: '', eventId: fallback.getId() };
     } catch(e2) {
@@ -1486,18 +1486,18 @@ function createGoogleMeetEvent(title, startTime, description, durationMinutes) {
 // 既存カレンダーイベントの日時を更新
 // ======================================================================
 function getApiCalendarId_() {
-  var sharedCalId = getSetting_('SHARED_CALENDAR_ID', '');
+  let sharedCalId = getSetting_('SHARED_CALENDAR_ID', '');
   return (sharedCalId && sharedCalId !== 'primary') ? sharedCalId : 'primary';
 }
 
 function updateCalendarEventDateTime_(eventId, newStartTime, durationMinutes) {
   if (!eventId) return;
   try {
-    var apiCalId = getApiCalendarId_();
-    var cleanId = String(eventId).replace('@google.com', '');
-    var start = new Date(newStartTime);
-    var dur = (durationMinutes && Number(durationMinutes) > 0) ? Number(durationMinutes) : 60;
-    var end = new Date(start.getTime() + dur * 60 * 1000);
+    let apiCalId = getApiCalendarId_();
+    let cleanId = String(eventId).replace('@google.com', '');
+    let start = new Date(newStartTime);
+    let dur = (durationMinutes && Number(durationMinutes) > 0) ? Number(durationMinutes) : 60;
+    let end = new Date(start.getTime() + dur * 60 * 1000);
     Calendar.Events.patch({
       start: { dateTime: start.toISOString() },
       end: { dateTime: end.toISOString() }
@@ -1514,8 +1514,8 @@ function updateCalendarEventDateTime_(eventId, newStartTime, durationMinutes) {
 function updateCalendarEventDescription_(eventId, newDescription) {
   if (!eventId) return;
   try {
-    var apiCalId = getApiCalendarId_();
-    var cleanId = String(eventId).replace('@google.com', '');
+    let apiCalId = getApiCalendarId_();
+    let cleanId = String(eventId).replace('@google.com', '');
     Calendar.Events.patch({ description: newDescription }, apiCalId, cleanId);
     console.log('カレンダーイベント説明更新成功: eventId=' + cleanId);
   } catch(e) {
@@ -1527,7 +1527,7 @@ function parseJsonArray_(value) {
   if (!value) return [];
   if (Array.isArray(value)) return value;
   try {
-    var parsed = JSON.parse(String(value));
+    let parsed = JSON.parse(String(value));
     return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
     return [];
@@ -1535,16 +1535,16 @@ function parseJsonArray_(value) {
 }
 
 function buildKeepAttachmentIdMap_(keepAttachmentIds) {
-  var map = {};
+  let map = {};
   (keepAttachmentIds || []).forEach(function(id) {
-    var key = String(id || '').trim();
+    let key = String(id || '').trim();
     if (key) map[key] = true;
   });
   return map;
 }
 
 function getAttachmentFolder_() {
-  var folderId = getSetting_('ATTACHMENT_FOLDER_ID', '');
+  let folderId = getSetting_('ATTACHMENT_FOLDER_ID', '');
   if (!folderId) throw new Error('添付ファイル保存先が未設定です。設定シートの ATTACHMENT_FOLDER_ID を入力してください。');
   try {
     return DriveApp.getFolderById(folderId);
@@ -1554,20 +1554,20 @@ function getAttachmentFolder_() {
 }
 
 function saveNewAttachments_(caseId, user, newAttachments) {
-  var files = newAttachments || [];
+  let files = newAttachments || [];
   if (!files.length) return [];
 
-  var folder = getAttachmentFolder_();
-  var uploaded = [];
-  for (var i = 0; i < files.length; i++) {
-    var f = files[i] || {};
-    var fileName = String(f.name || ('attachment_' + (i + 1)));
-    var mimeType = String(f.mimeType || 'application/octet-stream');
-    var base64Data = String(f.base64Data || '');
+  let folder = getAttachmentFolder_();
+  let uploaded = [];
+  for (let i = 0; i < files.length; i++) {
+    let f = files[i] || {};
+    let fileName = String(f.name || ('attachment_' + (i + 1)));
+    let mimeType = String(f.mimeType || 'application/octet-stream');
+    let base64Data = String(f.base64Data || '');
     if (!base64Data) continue;
 
-    var blob = Utilities.newBlob(Utilities.base64Decode(base64Data), mimeType, fileName);
-    var file = folder.createFile(blob);
+    let blob = Utilities.newBlob(Utilities.base64Decode(base64Data), mimeType, fileName);
+    let file = folder.createFile(blob);
     uploaded.push({
       fileId: file.getId(),
       name: file.getName(),
@@ -1583,7 +1583,7 @@ function saveNewAttachments_(caseId, user, newAttachments) {
 
 function trashRemovedAttachments_(existingAttachments, keepIdMap) {
   (existingAttachments || []).forEach(function(att) {
-    var fileId = String(att && att.fileId ? att.fileId : '');
+    let fileId = String(att && att.fileId ? att.fileId : '');
     if (!fileId || keepIdMap[fileId]) return;
     try {
       DriveApp.getFileById(fileId).setTrashed(true);
@@ -1597,15 +1597,15 @@ function trashRemovedAttachments_(existingAttachments, keepIdMap) {
 // サポート記録の更新（方法別: Meet / Zoom / その他）
 // ======================================================================
 function updateSupportRecord(recordData) {
-  var actor = getActor_();
+  let actor = getActor_();
   ensureCaseEditableByActor_(recordData.timestamp, actor, false);
 
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
-  var data = sheet.getDataRange().getValues();
-  var rowIndex = -1;
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  let data = sheet.getDataRange().getValues();
+  let rowIndex = -1;
 
-  for (var i = 1; i < data.length; i++) {
+  for (let i = 1; i < data.length; i++) {
     if (String(data[i][IDX.RECORDS.FK]) === String(recordData.timestamp)) {
       rowIndex = i + 1;
       break;
@@ -1619,51 +1619,51 @@ function updateSupportRecord(recordData) {
     data = sheet.getDataRange().getValues();
   }
 
-  var before = {
+  let before = {
     status: data[rowIndex - 1][IDX.RECORDS.STATUS],
     scheduledDateTime: data[rowIndex - 1][IDX.RECORDS.DATE],
     method: data[rowIndex - 1][IDX.RECORDS.METHOD],
     content: data[rowIndex - 1][IDX.RECORDS.CONTENT]
   };
 
-  var currentMeetUrl = data[rowIndex - 1][IDX.RECORDS.MEET_URL];
-  var currentAttachments = parseJsonArray_(data[rowIndex - 1][IDX.RECORDS.ATTACHMENTS]);
-  var eventTitle = '【タダサポ】' + recordData.officeName + ' 様';
+  let currentMeetUrl = data[rowIndex - 1][IDX.RECORDS.MEET_URL];
+  let currentAttachments = parseJsonArray_(data[rowIndex - 1][IDX.RECORDS.ATTACHMENTS]);
+  let eventTitle = '【タダサポ】' + recordData.officeName + ' 様';
 
   // サーバー生成データを追跡
-  var newMeetUrl = null;
-  var newEventId = null;
+  let newMeetUrl = null;
+  let newEventId = null;
 
-  var currentEventId = data[rowIndex - 1][IDX.RECORDS.EVENT_ID];
+  let currentEventId = data[rowIndex - 1][IDX.RECORDS.EVENT_ID];
 
   // skipCalendar=true の場合はカレンダー・Meet・Zoom登録をスキップ
   if (recordData.scheduledDateTime && !currentMeetUrl && !recordData.skipCalendar) {
     if (recordData.method === 'GoogleMeet') {
       try {
-        var meetResult = createGoogleMeetEvent(eventTitle, recordData.scheduledDateTime, recordData.details, recordData.duration);
+        let meetResult = createGoogleMeetEvent(eventTitle, recordData.scheduledDateTime, recordData.details, recordData.duration);
         newEventId = meetResult.eventId;
         newMeetUrl = meetResult.meetUrl;
       } catch(e) { console.error('Google Meet作成エラー: ' + e.message); }
 
     } else if (recordData.method === 'Zoom') {
-      var zDur = (recordData.duration && Number(recordData.duration) > 0) ? Number(recordData.duration) : 60;
-      var zStart = new Date(recordData.scheduledDateTime);
-      var zEnd = new Date(zStart.getTime() + zDur * 60 * 1000);
-      var appUrl = ScriptApp.getService().getUrl() || '';
+      let zDur = (recordData.duration && Number(recordData.duration) > 0) ? Number(recordData.duration) : 60;
+      let zStart = new Date(recordData.scheduledDateTime);
+      let zEnd = new Date(zStart.getTime() + zDur * 60 * 1000);
+      let appUrl = ScriptApp.getService().getUrl() || '';
 
       // Zoom会議作成を試みる（API設定が不完全でも後続のカレンダー作成には影響させない）
       try {
-        var zoomResult = createZoomMeeting(eventTitle, recordData.scheduledDateTime, zDur);
+        let zoomResult = createZoomMeeting(eventTitle, recordData.scheduledDateTime, zDur);
         newMeetUrl = zoomResult.joinUrl;
       } catch(e) { console.error('Zoom会議作成エラー（カレンダーのみ作成します）: ' + e.message); }
 
       // カレンダーイベントは Zoom 成否に関わらず作成する
       try {
-        var zSharedCalId = getSetting_('SHARED_CALENDAR_ID', '');
-        var zCal = (zSharedCalId && zSharedCalId !== 'primary') ? CalendarApp.getCalendarById(zSharedCalId) : null;
+        let zSharedCalId = getSetting_('SHARED_CALENDAR_ID', '');
+        let zCal = (zSharedCalId && zSharedCalId !== 'primary') ? CalendarApp.getCalendarById(zSharedCalId) : null;
         if (!zCal) zCal = CalendarApp.getDefaultCalendar();
-        var zDesc = (newMeetUrl ? 'Zoom URL: ' + newMeetUrl + '\n\n' : '') + (recordData.details || '') + (appUrl ? '\n\nタダサポ管理: ' + appUrl : '');
-        var zEvent = zCal.createEvent(eventTitle, zStart, zEnd, { description: zDesc });
+        let zDesc = (newMeetUrl ? 'Zoom URL: ' + newMeetUrl + '\n\n' : '') + (recordData.details || '') + (appUrl ? '\n\nタダサポ管理: ' + appUrl : '');
+        let zEvent = zCal.createEvent(eventTitle, zStart, zEnd, { description: zDesc });
         newEventId = zEvent.getId();
       } catch(e) { console.error('カレンダーイベント作成エラー: ' + e.message); }
     }
@@ -1673,19 +1673,19 @@ function updateSupportRecord(recordData) {
   }
 
   // 添付ファイル処理（バッチ書き込みの前に解決）
-  var finalAttachments = null;
-  var attachmentsValue = data[rowIndex - 1][IDX.RECORDS.ATTACHMENTS];
-  var hasAttachmentUpdate = recordData.keepAttachmentIds !== undefined || recordData.newAttachments !== undefined;
+  let finalAttachments = null;
+  let attachmentsValue = data[rowIndex - 1][IDX.RECORDS.ATTACHMENTS];
+  let hasAttachmentUpdate = recordData.keepAttachmentIds !== undefined || recordData.newAttachments !== undefined;
   if (hasAttachmentUpdate) {
-    var keepIds = Array.isArray(recordData.keepAttachmentIds)
+    let keepIds = Array.isArray(recordData.keepAttachmentIds)
       ? recordData.keepAttachmentIds
       : currentAttachments.map(function(a) { return a.fileId; });
-    var keepIdMap = buildKeepAttachmentIdMap_(keepIds);
-    var keptAttachments = currentAttachments.filter(function(a) {
+    let keepIdMap = buildKeepAttachmentIdMap_(keepIds);
+    let keptAttachments = currentAttachments.filter(function(a) {
       return !!(a && a.fileId && keepIdMap[String(a.fileId)]);
     });
-    var uploadedAttachments = saveNewAttachments_(recordData.timestamp, recordData.user || null, recordData.newAttachments || []);
-    var mergedAttachments = keptAttachments.concat(uploadedAttachments);
+    let uploadedAttachments = saveNewAttachments_(recordData.timestamp, recordData.user || null, recordData.newAttachments || []);
+    let mergedAttachments = keptAttachments.concat(uploadedAttachments);
 
     if (mergedAttachments.length > 5) {
       throw new Error('添付ファイルは1回の報告につき最大5件です。');
@@ -1697,8 +1697,8 @@ function updateSupportRecord(recordData) {
   }
 
   // STATUS(1)～TOOLS(17) を一括書き込み（既存値を保持しつつ変更箇所を上書き）
-  var curRow = data[rowIndex - 1];
-  var batchRow = [
+  let curRow = data[rowIndex - 1];
+  let batchRow = [
     recordData.status,                                                          // STATUS(1)
     curRow[IDX.RECORDS.STAFF_EMAIL],                                            // STAFF_EMAIL(2)
     curRow[IDX.RECORDS.STAFF_NAME],                                             // STAFF_NAME(3)
@@ -1720,15 +1720,15 @@ function updateSupportRecord(recordData) {
   sheet.getRange(rowIndex, IDX.RECORDS.STATUS + 1, 1, batchRow.length).setValues([batchRow]);
 
   // ── 都道府県・サービス種別の案件情報更新（完了報告時など） ──
-  var hasCaseInfoUpdate = (recordData.prefecture !== undefined && recordData.prefecture !== null) ||
+  let hasCaseInfoUpdate = (recordData.prefecture !== undefined && recordData.prefecture !== null) ||
                           (recordData.serviceType !== undefined && recordData.serviceType !== null);
   if (hasCaseInfoUpdate) {
-    var caseId = recordData.timestamp;
-    var caseSheet = ss.getSheetByName(SHEET_NAMES.CASES);
-    var caseRowIdx = getCaseRowIndex_(caseSheet, caseId);
-    var isManual = false;
-    var manualSh = null;
-    var manualRowIdx = -1;
+    let caseId = recordData.timestamp;
+    let caseSheet = ss.getSheetByName(SHEET_NAMES.CASES);
+    let caseRowIdx = getCaseRowIndex_(caseSheet, caseId);
+    let isManual = false;
+    let manualSh = null;
+    let manualRowIdx = -1;
     if (caseRowIdx === -1) {
       manualSh = ss.getSheetByName(SHEET_NAMES.CASES_MANUAL);
       if (manualSh) manualRowIdx = getCaseRowIndex_(manualSh, caseId);
@@ -1744,8 +1744,8 @@ function updateSupportRecord(recordData) {
       }
     } else if (caseRowIdx !== -1) {
       // 通常案件: 案件補正シートに書き込み
-      var ovrSheet = ensureCasesOverrideSheet_(ss);
-      var ovrRowIdx = getOrCreateOverrideRowIndex_(ovrSheet, caseId);
+      let ovrSheet = ensureCasesOverrideSheet_(ss);
+      let ovrRowIdx = getOrCreateOverrideRowIndex_(ovrSheet, caseId);
       if (recordData.prefecture !== undefined && recordData.prefecture !== null) {
         ovrSheet.getRange(ovrRowIdx, IDX.CASES_OVERRIDE.PREFECTURE + 1).setValue(sanitizeForSheet_(String(recordData.prefecture).trim()));
       }
@@ -1767,14 +1767,14 @@ function updateSupportRecord(recordData) {
 // マスタデータ
 // ======================================================================
 function getStaffByEmail(email) {
-  var normalized = normalizeEmail_(email);
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
-  var data = sheet.getDataRange().getValues();
+  let normalized = normalizeEmail_(email);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
+  let data = sheet.getDataRange().getValues();
 
-  for (var i = 1; i < data.length; i++) {
-    var staffEmail = normalizeEmail_(data[i][IDX.STAFF.EMAIL]);
-    var isActive = parseBoolean_(data[i][IDX.STAFF.IS_ACTIVE], true);
+  for (let i = 1; i < data.length; i++) {
+    let staffEmail = normalizeEmail_(data[i][IDX.STAFF.EMAIL]);
+    let isActive = parseBoolean_(data[i][IDX.STAFF.IS_ACTIVE], true);
     if (isActive && staffEmail === normalized) {
       return { name: data[i][IDX.STAFF.NAME], email: normalized };
     }
@@ -1783,20 +1783,20 @@ function getStaffByEmail(email) {
 }
 
 function getMasters() {
-  var zoomEnabled = !!getSetting_('ZOOM_ACCOUNT_ID');
-  var attachmentFolderConfigured = !!getSetting_('ATTACHMENT_FOLDER_ID');
-  var methods = ['GoogleMeet', 'メール等', '電話等', '対面'];
+  let zoomEnabled = !!getSetting_('ZOOM_ACCOUNT_ID');
+  let attachmentFolderConfigured = !!getSetting_('ATTACHMENT_FOLDER_ID');
+  let methods = ['GoogleMeet', 'メール等', '電話等', '対面'];
   if (zoomEnabled) methods.splice(1, 0, 'Zoom');
-  var allStaff = [];
+  let allStaff = [];
   try {
-    var ss = getSpreadsheet_();
-    var staffSheet = ss.getSheetByName(SHEET_NAMES.STAFF);
+    let ss = getSpreadsheet_();
+    let staffSheet = ss.getSheetByName(SHEET_NAMES.STAFF);
     if (staffSheet && staffSheet.getLastRow() > 1) {
-      var rows = staffSheet.getDataRange().getValues();
-      for (var i = 1; i < rows.length; i++) {
-        var em = normalizeEmail_(rows[i][IDX.STAFF.EMAIL]);
+      let rows = staffSheet.getDataRange().getValues();
+      for (let i = 1; i < rows.length; i++) {
+        let em = normalizeEmail_(rows[i][IDX.STAFF.EMAIL]);
         if (!em) continue;
-        var active = parseBoolean_(rows[i][IDX.STAFF.IS_ACTIVE], true);
+        let active = parseBoolean_(rows[i][IDX.STAFF.IS_ACTIVE], true);
         if (!active) continue;
         allStaff.push({
           name: String(rows[i][IDX.STAFF.NAME] || ''),
@@ -1831,19 +1831,19 @@ function getMasters() {
     },
     attachmentFolderConfigured: attachmentFolderConfigured,
     supportTools: (function() {
-      var raw = getSetting_('SUPPORT_TOOLS', '');
+      let raw = getSetting_('SUPPORT_TOOLS', '');
       if (!raw) return null; // nullのときフロントエンドでデフォルトにフォールバック
       return raw.split(',').map(function(s) { return s.trim(); }).filter(function(s) { return s; });
     })(),
     toolMonthlyLimits: (function() {
-      var raw = getSetting_('TOOL_MONTHLY_LIMITS', '');
+      let raw = getSetting_('TOOL_MONTHLY_LIMITS', '');
       if (!raw) return {};
-      var result = {};
+      let result = {};
       raw.split(',').forEach(function(pair) {
-        var parts = pair.split(':');
+        let parts = pair.split(':');
         if (parts.length === 2) {
-          var name = parts[0].trim();
-          var limit = parseInt(parts[1].trim(), 10);
+          let name = parts[0].trim();
+          let limit = parseInt(parts[1].trim(), 10);
           if (name && !isNaN(limit) && limit > 0) result[name] = limit;
         }
       });
@@ -1888,12 +1888,12 @@ function getEditableSettingsKeys_() {
 }
 
 function ensureStaffAdminSchema_() {
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
   if (!sheet) return;
-  var headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
-  var roleHeader = String(headers[IDX.STAFF.ROLE] || '').trim();
-  var activeHeader = String(headers[IDX.STAFF.IS_ACTIVE] || '').trim();
+  let headers = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
+  let roleHeader = String(headers[IDX.STAFF.ROLE] || '').trim();
+  let activeHeader = String(headers[IDX.STAFF.IS_ACTIVE] || '').trim();
 
   if (sheet.getLastColumn() < 5) {
     sheet.insertColumnsAfter(sheet.getLastColumn(), 5 - sheet.getLastColumn());
@@ -1902,11 +1902,11 @@ function ensureStaffAdminSchema_() {
   if (!activeHeader) sheet.getRange(1, IDX.STAFF.IS_ACTIVE + 1).setValue('IS_ACTIVE');
 
   if (sheet.getLastRow() > 1) {
-    var roleRange = sheet.getRange(2, IDX.STAFF.ROLE + 1, sheet.getLastRow() - 1, 1);
-    var activeRange = sheet.getRange(2, IDX.STAFF.IS_ACTIVE + 1, sheet.getLastRow() - 1, 1);
-    var roleValues = roleRange.getValues();
-    var activeValues = activeRange.getValues();
-    for (var i = 0; i < roleValues.length; i++) {
+    let roleRange = sheet.getRange(2, IDX.STAFF.ROLE + 1, sheet.getLastRow() - 1, 1);
+    let activeRange = sheet.getRange(2, IDX.STAFF.IS_ACTIVE + 1, sheet.getLastRow() - 1, 1);
+    let roleValues = roleRange.getValues();
+    let activeValues = activeRange.getValues();
+    for (let i = 0; i < roleValues.length; i++) {
       if (!String(roleValues[i][0] || '').trim()) roleValues[i][0] = 'staff';
       if (String(activeValues[i][0] || '').trim() === '') activeValues[i][0] = 'true';
     }
@@ -1916,16 +1916,16 @@ function ensureStaffAdminSchema_() {
 }
 
 function migrateAdminEmailsToStaffRoles_() {
-  var adminMap = {};
+  let adminMap = {};
   getAdminEmails_().forEach(function(e) { adminMap[normalizeEmail_(e)] = true; });
   if (!Object.keys(adminMap).length) return;
 
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
   if (!sheet || sheet.getLastRow() <= 1) return;
-  var data = sheet.getDataRange().getValues();
-  for (var i = 1; i < data.length; i++) {
-    var em = normalizeEmail_(data[i][IDX.STAFF.EMAIL]);
+  let data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    let em = normalizeEmail_(data[i][IDX.STAFF.EMAIL]);
     if (!em) continue;
     if (adminMap[em]) {
       sheet.getRange(i + 1, IDX.STAFF.ROLE + 1).setValue('admin');
@@ -1944,13 +1944,13 @@ function ensureAdminSchema_() {
 }
 
 function listStaffMembers_() {
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
   if (!sheet || sheet.getLastRow() <= 1) return [];
-  var data = sheet.getDataRange().getValues();
-  var out = [];
-  for (var i = 1; i < data.length; i++) {
-    var em = normalizeEmail_(data[i][IDX.STAFF.EMAIL]);
+  let data = sheet.getDataRange().getValues();
+  let out = [];
+  for (let i = 1; i < data.length; i++) {
+    let em = normalizeEmail_(data[i][IDX.STAFF.EMAIL]);
     if (!em) continue;
     out.push({
       rowIndex: i + 1,
@@ -1967,18 +1967,18 @@ function getAdminPanelData() {
   requireAdmin_();
   ensureAdminSchema_();
 
-  var settings = loadSettings_();
-  var allowed = getEditableSettingsKeys_();
-  var filteredSettings = {};
-  for (var i = 0; i < allowed.length; i++) {
+  let settings = loadSettings_();
+  let allowed = getEditableSettingsKeys_();
+  let filteredSettings = {};
+  for (let i = 0; i < allowed.length; i++) {
     filteredSettings[allowed[i]] = settings[allowed[i]] || '';
   }
 
-  var auditSheet = getOrCreateAuditLogSheet_();
-  var logs = [];
+  let auditSheet = getOrCreateAuditLogSheet_();
+  let logs = [];
   if (auditSheet.getLastRow() > 1) {
-    var data = auditSheet.getRange(2, 1, Math.min(100, auditSheet.getLastRow() - 1), 8).getValues();
-    for (var j = 0; j < data.length; j++) {
+    let data = auditSheet.getRange(2, 1, Math.min(100, auditSheet.getLastRow() - 1), 8).getValues();
+    for (let j = 0; j < data.length; j++) {
       logs.push({
         timestamp: data[j][0] ? new Date(data[j][0]).toISOString() : null,
         actorEmail: String(data[j][1] || ''),
@@ -1999,29 +1999,29 @@ function getAdminPanelData() {
 }
 
 function upsertStaffMember(payload) {
-  var actor = requireAdmin_();
+  let actor = requireAdmin_();
   ensureAdminSchema_();
   if (!payload) throw new Error('payload が必要です。');
 
-  var email = normalizeEmail_(payload.email);
-  var name = String(payload.name || '').trim();
-  var role = String(payload.role || 'staff').trim().toLowerCase();
-  var hasIsActive = Object.prototype.hasOwnProperty.call(payload, 'isActive');
-  var isActive = hasIsActive ? parseBoolean_(payload.isActive, true) : null;
+  let email = normalizeEmail_(payload.email);
+  let name = String(payload.name || '').trim();
+  let role = String(payload.role || 'staff').trim().toLowerCase();
+  let hasIsActive = Object.prototype.hasOwnProperty.call(payload, 'isActive');
+  let isActive = hasIsActive ? parseBoolean_(payload.isActive, true) : null;
 
   if (!email) throw new Error('メールアドレスは必須です。');
   if (role !== 'admin' && role !== 'staff') throw new Error('role は admin または staff を指定してください。');
 
-  var lock = LockService.getScriptLock();
+  let lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    var ss = getSpreadsheet_();
-    var sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
+    let ss = getSpreadsheet_();
+    let sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
     if (!sheet) throw new Error('スタッフシートが見つかりません。');
-    var data = sheet.getDataRange().getValues();
-    var rowIndex = -1;
-    var before = null;
-    for (var i = 1; i < data.length; i++) {
+    let data = sheet.getDataRange().getValues();
+    let rowIndex = -1;
+    let before = null;
+    for (let i = 1; i < data.length; i++) {
       if (normalizeEmail_(data[i][IDX.STAFF.EMAIL]) === email) {
         rowIndex = i + 1;
         before = {
@@ -2059,21 +2059,21 @@ function upsertStaffMember(payload) {
 }
 
 function deactivateStaffMember(email) {
-  var actor = requireAdmin_();
+  let actor = requireAdmin_();
   ensureAdminSchema_();
-  var target = normalizeEmail_(email);
+  let target = normalizeEmail_(email);
   if (!target) throw new Error('email が必要です。');
 
-  var lock = LockService.getScriptLock();
+  let lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    var ss = getSpreadsheet_();
-    var sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
+    let ss = getSpreadsheet_();
+    let sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
     if (!sheet || sheet.getLastRow() <= 1) return listStaffMembers_();
-    var data = sheet.getDataRange().getValues();
-    for (var i = 1; i < data.length; i++) {
+    let data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
       if (normalizeEmail_(data[i][IDX.STAFF.EMAIL]) === target) {
-        var before = {
+        let before = {
           name: String(data[i][IDX.STAFF.NAME] || ''),
           email: target,
           role: String(data[i][IDX.STAFF.ROLE] || 'staff').toLowerCase(),
@@ -2115,27 +2115,27 @@ var SETTINGS_LABEL_MAP_ = {
 };
 
 function updateSettingsAdmin(patch) {
-  var actor = requireAdmin_();
+  let actor = requireAdmin_();
   ensureAdminSchema_();
   if (!patch || typeof patch !== 'object') throw new Error('patch が必要です。');
 
-  var allowMap = {};
+  let allowMap = {};
   getEditableSettingsKeys_().forEach(function(k) { allowMap[k] = true; });
 
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
   if (!sheet) throw new Error('設定シートが見つかりません。');
-  var data = sheet.getDataRange().getValues();
+  let data = sheet.getDataRange().getValues();
 
-  var lock = LockService.getScriptLock();
+  let lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    var before = {};
-    var after = {};
+    let before = {};
+    let after = {};
     Object.keys(patch).forEach(function(key) {
       if (!allowMap[key]) throw new Error('更新不可の設定キーです: ' + key);
-      var found = false;
-      for (var i = 1; i < data.length; i++) {
+      let found = false;
+      for (let i = 1; i < data.length; i++) {
         if (String(data[i][0]) === key) {
           before[key] = String(data[i][2] || '');
           sheet.getRange(i + 1, 3).setValue(sanitizeForSheet_(String(patch[key] || '')));
@@ -2146,9 +2146,9 @@ function updateSettingsAdmin(patch) {
       }
       if (!found) {
         // シートに行がない場合は末尾に追加して保存
-        var newVal = sanitizeForSheet_(String(patch[key] || ''));
-        var label = SETTINGS_LABEL_MAP_[key] || key;
-        var newRow = sheet.getLastRow() + 1;
+        let newVal = sanitizeForSheet_(String(patch[key] || ''));
+        let label = SETTINGS_LABEL_MAP_[key] || key;
+        let newRow = sheet.getLastRow() + 1;
         sheet.appendRow([key, label, newVal, '', '']);
         // 他の設定行と同じ書式を適用
         sheet.getRange(newRow, 1).setFontColor('#9ca3af').setFontSize(8);
@@ -2165,30 +2165,30 @@ function updateSettingsAdmin(patch) {
     lock.releaseLock();
   }
 
-  var settings = loadSettings_();
-  var out = {};
+  let settings = loadSettings_();
+  let out = {};
   getEditableSettingsKeys_().forEach(function(key) { out[key] = settings[key] || ''; });
   return out;
 }
 
 function reassignCaseAdmin(caseId, staffEmail) {
-  var actor = requireAdmin_();
+  let actor = requireAdmin_();
   ensureAdminSchema_();
-  var targetEmail = normalizeEmail_(staffEmail);
+  let targetEmail = normalizeEmail_(staffEmail);
 
   // 未割当の場合（staffEmail が空）: 担当をクリアして unhandled に戻す
-  var isUnassign = !targetEmail;
-  var targetStaff = null;
+  let isUnassign = !targetEmail;
+  let targetStaff = null;
   if (!isUnassign) {
     targetStaff = getStaffByEmail(targetEmail);
     if (!targetStaff) throw new Error('対象スタッフが見つかりません。');
   }
 
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
-  var data = sheet.getDataRange().getValues();
-  var rowIndex = -1;
-  for (var i = 1; i < data.length; i++) {
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  let data = sheet.getDataRange().getValues();
+  let rowIndex = -1;
+  for (let i = 1; i < data.length; i++) {
     if (String(data[i][IDX.RECORDS.FK]) === String(caseId)) {
       rowIndex = i + 1;
       break;
@@ -2198,7 +2198,7 @@ function reassignCaseAdmin(caseId, staffEmail) {
   if (isUnassign) {
     // 未割当：レコード行がなければ何もしない（元々 unhandled）
     if (rowIndex === -1) return;
-    var before = {
+    let before = {
       status: String(data[rowIndex - 1][IDX.RECORDS.STATUS] || ''),
       staffEmail: String(data[rowIndex - 1][IDX.RECORDS.STAFF_EMAIL] || ''),
       staffName: String(data[rowIndex - 1][IDX.RECORDS.STAFF_NAME] || '')
@@ -2225,7 +2225,7 @@ function reassignCaseAdmin(caseId, staffEmail) {
     return;
   }
 
-  var before = {
+  let before = {
     status: String(data[rowIndex - 1][IDX.RECORDS.STATUS] || ''),
     staffEmail: String(data[rowIndex - 1][IDX.RECORDS.STAFF_EMAIL] || ''),
     staffName: String(data[rowIndex - 1][IDX.RECORDS.STAFF_NAME] || '')
@@ -2252,17 +2252,17 @@ function reassignCaseAdmin(caseId, staffEmail) {
  * GASエディタからこの関数を手動実行してください。
  */
 function fixSettingsSheet() {
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
   if (!sheet) { Logger.log('設定シートが見つかりません。'); return; }
 
-  var data = sheet.getDataRange().getValues();
-  var fixed = [];
+  let data = sheet.getDataRange().getValues();
+  let fixed = [];
 
-  for (var i = 1; i < data.length; i++) {
-    var key   = String(data[i][0]).trim();
-    var label = String(data[i][1]).trim();
-    var row   = i + 1;
+  for (let i = 1; i < data.length; i++) {
+    let key   = String(data[i][0]).trim();
+    let label = String(data[i][1]).trim();
+    let row   = i + 1;
 
     // B列がキー名と同じ（壊れた状態）なら正しい日本語名に修正
     if (key && label === key && SETTINGS_LABEL_MAP_[key]) {
@@ -2271,7 +2271,7 @@ function fixSettingsSheet() {
     }
 
     // 書式が未設定の行（背景色なし）にも書式を適用
-    var bg = sheet.getRange(row, 3).getBackground();
+    let bg = sheet.getRange(row, 3).getBackground();
     if (bg === '#ffffff' || bg === null) {
       sheet.getRange(row, 1).setFontColor('#9ca3af').setFontSize(8);
       sheet.getRange(row, 2).setFontWeight('bold').setFontColor('#1e293b');
@@ -2303,7 +2303,7 @@ function fixSettingsSheet() {
  *   E列 = 説明・注意事項
  */
 function normalizeAdminCaseStatus_(status) {
-  var normalized = String(status || '').trim();
+  let normalized = String(status || '').trim();
   if (normalized === 'unhandled' || normalized === 'inProgress' || normalized === 'completed' || normalized === 'rejected' || normalized === 'cancelled') {
     return normalized;
   }
@@ -2311,8 +2311,8 @@ function normalizeAdminCaseStatus_(status) {
 }
 
 function getCaseRowIndex_(sheet, caseId) {
-  var data = sheet.getDataRange().getValues();
-  for (var i = 1; i < data.length; i++) {
+  let data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
     if (String(data[i][IDX.CASES.PK]) === String(caseId)) return i + 1;
   }
   return -1;
@@ -2328,7 +2328,7 @@ function getCaseRowIndex_(sheet, caseId) {
  * 「案件補正」シートを取得する。存在しなければ作成してヘッダを設定する。
  */
 function ensureCasesOverrideSheet_(ss) {
-  var sheet = ss.getSheetByName(SHEET_NAMES.CASES_OVERRIDE);
+  let sheet = ss.getSheetByName(SHEET_NAMES.CASES_OVERRIDE);
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_NAMES.CASES_OVERRIDE);
     sheet.getRange(1, 1, 1, 7).setValues([[
@@ -2343,12 +2343,12 @@ function ensureCasesOverrideSheet_(ss) {
  * 値が空文字のフィールドは null として返す（「補正なし」扱い）。
  */
 function getCasesOverrideMap_(ss) {
-  var sheet = ss.getSheetByName(SHEET_NAMES.CASES_OVERRIDE);
+  let sheet = ss.getSheetByName(SHEET_NAMES.CASES_OVERRIDE);
   if (!sheet || sheet.getLastRow() < 2) return {};
-  var data = sheet.getDataRange().getValues();
-  var map = {};
-  for (var i = 1; i < data.length; i++) {
-    var pk = String(data[i][IDX.CASES_OVERRIDE.PK]);
+  let data = sheet.getDataRange().getValues();
+  let map = {};
+  for (let i = 1; i < data.length; i++) {
+    let pk = String(data[i][IDX.CASES_OVERRIDE.PK]);
     if (!pk) continue;
     map[pk] = {
       email:         data[i][IDX.CASES_OVERRIDE.EMAIL]      !== '' ? String(data[i][IDX.CASES_OVERRIDE.EMAIL])      : null,
@@ -2367,8 +2367,8 @@ function getCasesOverrideMap_(ss) {
  * 該当行がなければ PK だけセットした新規行を追加してその行番号を返す。
  */
 function getOrCreateOverrideRowIndex_(sheet, caseId) {
-  var data = sheet.getDataRange().getValues();
-  for (var i = 1; i < data.length; i++) {
+  let data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
     if (String(data[i][IDX.CASES_OVERRIDE.PK]) === String(caseId)) return i + 1;
   }
   sheet.appendRow([caseId, '', '', '', '', '', '']);
@@ -2386,7 +2386,7 @@ function getOrCreateOverrideRowIndex_(sheet, caseId) {
  * 「案件手動追加」シートを取得する。存在しなければ作成してヘッダを設定する。
  */
 function ensureCasesManualSheet_(ss) {
-  var sheet = ss.getSheetByName(SHEET_NAMES.CASES_MANUAL);
+  let sheet = ss.getSheetByName(SHEET_NAMES.CASES_MANUAL);
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_NAMES.CASES_MANUAL);
     sheet.getRange(1, 1, 1, 7).setValues([[
@@ -2401,24 +2401,24 @@ function ensureCasesManualSheet_(ss) {
  * PKは "manual_" + UNIXミリ秒 で生成するため重複は発生しない。
  */
 function addManualCase(payload) {
-  var actor = requireAdmin_();
+  let actor = requireAdmin_();
   if (!payload.email)         throw new Error('メールアドレスは必須です。');
   if (!payload.officeName)    throw new Error('介護事業所名は必須です。');
   if (!payload.requesterName) throw new Error('お名前は必須です。');
   if (!payload.details)       throw new Error('困りごと詳細は必須です。');
 
-  var ss = getSpreadsheet_();
-  var sheet = ensureCasesManualSheet_(ss);
+  let ss = getSpreadsheet_();
+  let sheet = ensureCasesManualSheet_(ss);
 
   // 申込日が指定されていればそのエポックミリ秒をPKに使用（月間カウントに反映）
-  var baseTime;
+  let baseTime;
   if (payload.applicationDate) {
     // "yyyy-MM-dd" → JST正午で生成（日付ずれ防止）
     baseTime = new Date(payload.applicationDate + 'T12:00:00+09:00').getTime();
   } else {
     baseTime = new Date().getTime();
   }
-  var pk = 'manual_' + baseTime;
+  let pk = 'manual_' + baseTime;
   sheet.appendRow([
     pk,
     payload.email,
@@ -2439,8 +2439,8 @@ function addManualCase(payload) {
 }
 
 function ensureRecordRowForCase_(sheet, caseId) {
-  var data = sheet.getDataRange().getValues();
-  for (var i = 1; i < data.length; i++) {
+  let data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
     if (String(data[i][IDX.RECORDS.FK]) === String(caseId)) return i + 1;
   }
   sheet.appendRow([
@@ -2452,39 +2452,39 @@ function ensureRecordRowForCase_(sheet, caseId) {
 
 // サブ担当更新（メイン担当者 or 管理者のみ）
 function updateSubStaff(caseId, subStaffArray) {
-  var actor = getActor_();
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
-  var rowIndex = getCaseRecordRowIndex_(caseId);
+  let actor = getActor_();
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  let rowIndex = getCaseRecordRowIndex_(caseId);
   if (rowIndex === -1) throw new Error('案件が見つかりません: ' + caseId);
 
-  var row = sheet.getRange(rowIndex, 1, 1, sheet.getLastColumn()).getValues()[0];
-  var staffEmail = normalizeEmail_(row[IDX.RECORDS.STAFF_EMAIL]);
-  var isMainStaff = staffEmail && staffEmail === normalizeEmail_(actor.email);
+  let row = sheet.getRange(rowIndex, 1, 1, sheet.getLastColumn()).getValues()[0];
+  let staffEmail = normalizeEmail_(row[IDX.RECORDS.STAFF_EMAIL]);
+  let isMainStaff = staffEmail && staffEmail === normalizeEmail_(actor.email);
   if (!actor.isAdmin && !isMainStaff) throw new Error('サブ担当を設定する権限がありません。');
 
-  var MAX_SUB_STAFF = 1;
+  let MAX_SUB_STAFF = 1;
   if (Array.isArray(subStaffArray) && subStaffArray.length > MAX_SUB_STAFF) {
     throw new Error('サブ担当は最大' + MAX_SUB_STAFF + '名までです。');
   }
-  var validated = [];
+  let validated = [];
   if (Array.isArray(subStaffArray)) {
-    var staffSheet = ss.getSheetByName(SHEET_NAMES.STAFF);
-    var staffData = staffSheet.getDataRange().getValues();
-    var staffMap = {};
-    for (var i = 1; i < staffData.length; i++) {
-      var e = normalizeEmail_(staffData[i][IDX.STAFF.EMAIL]);
+    let staffSheet = ss.getSheetByName(SHEET_NAMES.STAFF);
+    let staffData = staffSheet.getDataRange().getValues();
+    let staffMap = {};
+    for (let i = 1; i < staffData.length; i++) {
+      let e = normalizeEmail_(staffData[i][IDX.STAFF.EMAIL]);
       if (e) staffMap[e] = String(staffData[i][IDX.STAFF.NAME]);
     }
-    for (var j = 0; j < subStaffArray.length; j++) {
-      var email = normalizeEmail_(subStaffArray[j].email);
+    for (let j = 0; j < subStaffArray.length; j++) {
+      let email = normalizeEmail_(subStaffArray[j].email);
       if (email && staffMap[email]) {
         validated.push({ email: email, name: staffMap[email] });
       }
     }
   }
 
-  var before = row[IDX.RECORDS.SUB_STAFF] ? String(row[IDX.RECORDS.SUB_STAFF]) : '[]';
+  let before = row[IDX.RECORDS.SUB_STAFF] ? String(row[IDX.RECORDS.SUB_STAFF]) : '[]';
   sheet.getRange(rowIndex, IDX.RECORDS.SUB_STAFF + 1).setValue(JSON.stringify(validated));
   appendAuditLog_(actor, 'update_sub_staff', 'case', caseId, { subStaff: before }, { subStaff: JSON.stringify(validated) });
   return { subStaff: validated };
@@ -2501,14 +2501,14 @@ function updateSubStaff(caseId, subStaffArray) {
  * @returns {object} { meetUrl }
  */
 function updateMeetUrl(caseId, newUrl) {
-  var actor = getActor_();
+  let actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, false);
 
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
-  var data = sheet.getDataRange().getValues();
-  var rowIndex = -1;
-  for (var i = 1; i < data.length; i++) {
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  let data = sheet.getDataRange().getValues();
+  let rowIndex = -1;
+  for (let i = 1; i < data.length; i++) {
     if (String(data[i][IDX.RECORDS.FK]) === String(caseId)) {
       rowIndex = i + 1;
       break;
@@ -2516,10 +2516,10 @@ function updateMeetUrl(caseId, newUrl) {
   }
   if (rowIndex === -1) throw new Error('レコードが見つかりません: ' + caseId);
 
-  var row = data[rowIndex - 1];
-  var beforeUrl = row[IDX.RECORDS.MEET_URL] || '';
-  var eventId = row[IDX.RECORDS.EVENT_ID];
-  var url = (newUrl || '').trim();
+  let row = data[rowIndex - 1];
+  let beforeUrl = row[IDX.RECORDS.MEET_URL] || '';
+  let eventId = row[IDX.RECORDS.EVENT_ID];
+  let url = (newUrl || '').trim();
 
   // MEET_URL 列を更新
   sheet.getRange(rowIndex, IDX.RECORDS.MEET_URL + 1).setValue(url);
@@ -2527,33 +2527,33 @@ function updateMeetUrl(caseId, newUrl) {
   // カレンダーイベントのdescription + conferenceData（「Meetに参加する」ボタン）を更新
   if (eventId) {
     try {
-      var apiCalId = getApiCalendarId_();
-      var cleanId = String(eventId).replace('@google.com', '');
-      var event = Calendar.Events.get(apiCalId, cleanId);
-      var existingDesc = event.description || '';
+      let apiCalId = getApiCalendarId_();
+      let cleanId = String(eventId).replace('@google.com', '');
+      let event = Calendar.Events.get(apiCalId, cleanId);
+      let existingDesc = event.description || '';
 
       // 既存のURL行（"...URL: http..."）を除去
-      var urlLinePattern = /^(Google Meet URL|Zoom URL|URL)\s*[:：]\s*https?:\/\/\S+\s*/gm;
-      var stripped = existingDesc.replace(urlLinePattern, '');
+      let urlLinePattern = /^(Google Meet URL|Zoom URL|URL)\s*[:：]\s*https?:\/\/\S+\s*/gm;
+      let stripped = existingDesc.replace(urlLinePattern, '');
       stripped = stripped.replace(/^\n+/, '');
 
       // 新しいURL行を先頭に挿入
-      var newDesc;
+      let newDesc;
       if (url) {
-        var label = url.indexOf('zoom.us') !== -1 ? 'Zoom URL' : url.indexOf('meet.google') !== -1 ? 'Google Meet URL' : 'URL';
+        let label = url.indexOf('zoom.us') !== -1 ? 'Zoom URL' : url.indexOf('meet.google') !== -1 ? 'Google Meet URL' : 'URL';
         newDesc = label + ': ' + url + (stripped ? '\n\n' + stripped : '');
       } else {
         newDesc = stripped;
       }
 
       // patch用オブジェクトを構築
-      var patchBody = { description: newDesc };
+      let patchBody = { description: newDesc };
 
       // 「Google Meetに参加する」ボタン（conferenceData）の更新
-      var isMeetUrl = url && url.indexOf('meet.google.com/') !== -1;
+      let isMeetUrl = url && url.indexOf('meet.google.com/') !== -1;
       if (isMeetUrl) {
         // Meet URLからミーティングコードを抽出（例: abc-defg-hij）
-        var meetCode = url.replace(/.*meet\.google\.com\//, '').replace(/[?#].*$/, '');
+        let meetCode = url.replace(/.*meet\.google\.com\//, '').replace(/[?#].*$/, '');
         patchBody.conferenceData = {
           conferenceId: meetCode,
           conferenceSolution: {
@@ -2593,14 +2593,14 @@ function updateMeetUrl(caseId, newUrl) {
  * @returns {object} 更新後の supportHistory 配列
  */
 function updateSupportHistory(caseId, roundIndex, patch) {
-  var actor = getActor_();
+  let actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, false);
 
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
-  var data = sheet.getDataRange().getValues();
-  var rowIndex = -1;
-  for (var i = 1; i < data.length; i++) {
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  let data = sheet.getDataRange().getValues();
+  let rowIndex = -1;
+  for (let i = 1; i < data.length; i++) {
     if (String(data[i][IDX.RECORDS.FK]) === String(caseId)) {
       rowIndex = i + 1;
       break;
@@ -2608,17 +2608,17 @@ function updateSupportHistory(caseId, roundIndex, patch) {
   }
   if (rowIndex === -1) throw new Error('レコードが見つかりません: ' + caseId);
 
-  var row = data[rowIndex - 1];
-  var historyJson = row[IDX.RECORDS.HISTORY] ? String(row[IDX.RECORDS.HISTORY]) : '[]';
-  var history = [];
+  let row = data[rowIndex - 1];
+  let historyJson = row[IDX.RECORDS.HISTORY] ? String(row[IDX.RECORDS.HISTORY]) : '[]';
+  let history = [];
   try { history = JSON.parse(historyJson); } catch(e) { history = []; }
 
-  var idx = Number(roundIndex);
+  let idx = Number(roundIndex);
   if (!isFinite(idx) || idx < 0 || idx >= history.length) {
     throw new Error('指定された履歴インデックスが範囲外です: ' + roundIndex);
   }
 
-  var before = JSON.parse(JSON.stringify(history[idx]));
+  let before = JSON.parse(JSON.stringify(history[idx]));
 
   // 編集可能フィールドのみ更新
   if (patch.hasOwnProperty('scheduledDateTime')) {
@@ -2643,17 +2643,17 @@ function updateSupportHistory(caseId, roundIndex, patch) {
 }
 
 function setCaseStatusAdmin(caseId, status) {
-  var actor = requireAdmin_();
+  let actor = requireAdmin_();
   ensureAdminSchema_();
 
-  var normalizedStatus = normalizeAdminCaseStatus_(status);
-  var ss = getSpreadsheet_();
-  var recordSheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  let normalizedStatus = normalizeAdminCaseStatus_(status);
+  let ss = getSpreadsheet_();
+  let recordSheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
   if (!recordSheet) throw new Error('サポート記録シートが見つかりません。');
 
-  var rowIndex = ensureRecordRowForCase_(recordSheet, caseId);
-  var row = recordSheet.getRange(rowIndex, 1, 1, recordSheet.getLastColumn()).getValues()[0];
-  var before = {
+  let rowIndex = ensureRecordRowForCase_(recordSheet, caseId);
+  let row = recordSheet.getRange(rowIndex, 1, 1, recordSheet.getLastColumn()).getValues()[0];
+  let before = {
     status: String(row[IDX.RECORDS.STATUS] || ''),
     staffEmail: String(row[IDX.RECORDS.STAFF_EMAIL] || ''),
     staffName: String(row[IDX.RECORDS.STAFF_NAME] || '')
@@ -2665,20 +2665,20 @@ function setCaseStatusAdmin(caseId, status) {
 }
 
 function deleteCaseAdmin(caseId) {
-  var actor = requireAdmin_();
-  var ss = getSpreadsheet_();
+  let actor = requireAdmin_();
+  let ss = getSpreadsheet_();
 
   // 案件情報を記録（監査ログ用）
-  var before = { caseId: String(caseId) };
+  let before = { caseId: String(caseId) };
 
   // 1. RECORDS シートから行を削除 + 添付ファイルをゴミ箱に移動
-  var recordSheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  let recordSheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
   if (recordSheet && recordSheet.getLastRow() > 1) {
-    var recData = recordSheet.getDataRange().getValues();
-    for (var i = recData.length - 1; i >= 1; i--) {
+    let recData = recordSheet.getDataRange().getValues();
+    for (let i = recData.length - 1; i >= 1; i--) {
       if (String(recData[i][IDX.RECORDS.FK]) === String(caseId)) {
         // 添付ファイルをゴミ箱へ
-        var attachments = parseJsonArray_(recData[i][IDX.RECORDS.ATTACHMENTS]);
+        let attachments = parseJsonArray_(recData[i][IDX.RECORDS.ATTACHMENTS]);
         attachments.forEach(function(att) {
           try { if (att && att.fileId) DriveApp.getFileById(att.fileId).setTrashed(true); } catch(e) {}
         });
@@ -2691,11 +2691,11 @@ function deleteCaseAdmin(caseId) {
   }
 
   // 2. CASES_MANUAL シートから行を削除（手動追加案件の場合）
-  var manualSheet = ss.getSheetByName(SHEET_NAMES.CASES_MANUAL);
-  var isManualCase = false;
+  let manualSheet = ss.getSheetByName(SHEET_NAMES.CASES_MANUAL);
+  let isManualCase = false;
   if (manualSheet && manualSheet.getLastRow() > 1) {
-    var manualData = manualSheet.getDataRange().getValues();
-    for (var j = manualData.length - 1; j >= 1; j--) {
+    let manualData = manualSheet.getDataRange().getValues();
+    for (let j = manualData.length - 1; j >= 1; j--) {
       if (String(manualData[j][0]) === String(caseId)) {
         before.officeName = String(manualData[j][IDX.CASES.OFFICE] || '');
         before.email = String(manualData[j][IDX.CASES.EMAIL] || '');
@@ -2707,10 +2707,10 @@ function deleteCaseAdmin(caseId) {
   }
 
   // 3. CASES_OVERRIDE シートから補正行を削除
-  var overrideSheet = ss.getSheetByName(SHEET_NAMES.CASES_OVERRIDE);
+  let overrideSheet = ss.getSheetByName(SHEET_NAMES.CASES_OVERRIDE);
   if (overrideSheet && overrideSheet.getLastRow() > 1) {
-    var ovrData = overrideSheet.getDataRange().getValues();
-    for (var k = ovrData.length - 1; k >= 1; k--) {
+    let ovrData = overrideSheet.getDataRange().getValues();
+    for (let k = ovrData.length - 1; k >= 1; k--) {
       if (String(ovrData[k][0]) === String(caseId)) {
         overrideSheet.deleteRow(k + 1);
         break;
@@ -2719,10 +2719,10 @@ function deleteCaseAdmin(caseId) {
   }
 
   // 4. EMAIL_HISTORY シートから関連行を削除（下から上へ）
-  var emailSheet = ss.getSheetByName(SHEET_NAMES.EMAIL_HISTORY);
+  let emailSheet = ss.getSheetByName(SHEET_NAMES.EMAIL_HISTORY);
   if (emailSheet && emailSheet.getLastRow() > 1) {
-    var emailData = emailSheet.getDataRange().getValues();
-    for (var m = emailData.length - 1; m >= 1; m--) {
+    let emailData = emailSheet.getDataRange().getValues();
+    for (let m = emailData.length - 1; m >= 1; m--) {
       if (String(emailData[m][IDX.EMAIL.CASE_ID]) === String(caseId)) {
         emailSheet.deleteRow(m + 1);
       }
@@ -2731,8 +2731,8 @@ function deleteCaseAdmin(caseId) {
 
   // 5. 通常案件（IMPORTRANGE）の場合は削除済みリストに追加
   if (!isManualCase) {
-    var deletedRaw = getSetting_('DELETED_CASE_IDS', '');
-    var deletedList = deletedRaw ? deletedRaw.split(',') : [];
+    let deletedRaw = getSetting_('DELETED_CASE_IDS', '');
+    let deletedList = deletedRaw ? deletedRaw.split(',') : [];
     if (deletedList.indexOf(String(caseId)) === -1) {
       deletedList.push(String(caseId));
       saveSetting_('DELETED_CASE_IDS', deletedList.join(','));
@@ -2744,24 +2744,24 @@ function deleteCaseAdmin(caseId) {
 }
 
 function updateCaseDataAdmin(caseId, payload) {
-  var actor = requireAdmin_();
+  let actor = requireAdmin_();
   ensureAdminSchema_();
   if (!payload || typeof payload !== 'object') throw new Error('payload が不正です。');
 
-  var casePatch = payload.casePatch || payload.case || {};
-  var recordPatch = payload.recordPatch || payload.record || {};
+  let casePatch = payload.casePatch || payload.case || {};
+  let recordPatch = payload.recordPatch || payload.record || {};
   if (typeof casePatch !== 'object' || typeof recordPatch !== 'object') throw new Error('casePatch / recordPatch が不正です。');
 
-  var ss = getSpreadsheet_();
-  var caseSheet = ss.getSheetByName(SHEET_NAMES.CASES);
-  var recordSheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  let ss = getSpreadsheet_();
+  let caseSheet = ss.getSheetByName(SHEET_NAMES.CASES);
+  let recordSheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
   if (!caseSheet || !recordSheet) throw new Error('必要なシートが見つかりません。');
 
   // 案件の存在確認: まずCASESシート、なければCASES_MANUALシートを検索
-  var caseRowIndex = getCaseRowIndex_(caseSheet, caseId);
-  var isManualCase = false;
-  var manualSheet = null;
-  var manualRowIndex = -1;
+  let caseRowIndex = getCaseRowIndex_(caseSheet, caseId);
+  let isManualCase = false;
+  let manualSheet = null;
+  let manualRowIndex = -1;
   if (caseRowIndex === -1) {
     manualSheet = ss.getSheetByName(SHEET_NAMES.CASES_MANUAL);
     if (manualSheet) manualRowIndex = getCaseRowIndex_(manualSheet, caseId);
@@ -2770,16 +2770,16 @@ function updateCaseDataAdmin(caseId, payload) {
   }
 
   // 案件補正シートを取得（通常案件のcasePatch書き込み先）
-  var overrideSheet = ensureCasesOverrideSheet_(ss);
+  let overrideSheet = ensureCasesOverrideSheet_(ss);
 
-  var lock = LockService.getScriptLock();
+  let lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    var actualCaseSheet = isManualCase ? manualSheet : caseSheet;
-    var actualCaseRowIndex = isManualCase ? manualRowIndex : caseRowIndex;
-    var beforeCaseRow = actualCaseSheet.getRange(actualCaseRowIndex, 1, 1, actualCaseSheet.getLastColumn()).getValues()[0];
-    var recordRowIndex = ensureRecordRowForCase_(recordSheet, caseId);
-    var beforeRecordRow = recordSheet.getRange(recordRowIndex, 1, 1, recordSheet.getLastColumn()).getValues()[0];
+    let actualCaseSheet = isManualCase ? manualSheet : caseSheet;
+    let actualCaseRowIndex = isManualCase ? manualRowIndex : caseRowIndex;
+    let beforeCaseRow = actualCaseSheet.getRange(actualCaseRowIndex, 1, 1, actualCaseSheet.getLastColumn()).getValues()[0];
+    let recordRowIndex = ensureRecordRowForCase_(recordSheet, caseId);
+    let beforeRecordRow = recordSheet.getRange(recordRowIndex, 1, 1, recordSheet.getLastColumn()).getValues()[0];
 
     // ─── casePatch: 案件情報の書き込み ───
     // 手動案件 → CASES_MANUAL シートに直接書き込み
@@ -2812,7 +2812,7 @@ function updateCaseDataAdmin(caseId, payload) {
         }
       } else {
         // 通常案件: 案件補正シートに書き込み
-        var overrideRowIndex = getOrCreateOverrideRowIndex_(overrideSheet, caseId);
+        let overrideRowIndex = getOrCreateOverrideRowIndex_(overrideSheet, caseId);
         if (Object.prototype.hasOwnProperty.call(casePatch, 'email')) {
           overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.EMAIL + 1).setValue(String(casePatch.email || '').trim());
         }
@@ -2838,8 +2838,8 @@ function updateCaseDataAdmin(caseId, payload) {
       recordSheet.getRange(recordRowIndex, IDX.RECORDS.STATUS + 1).setValue(normalizeAdminCaseStatus_(recordPatch.status));
     }
     if (Object.prototype.hasOwnProperty.call(recordPatch, 'staffEmail')) {
-      var targetEmail = normalizeEmail_(recordPatch.staffEmail);
-      var staff = targetEmail ? getStaffByEmail(targetEmail) : null;
+      let targetEmail = normalizeEmail_(recordPatch.staffEmail);
+      let staff = targetEmail ? getStaffByEmail(targetEmail) : null;
       if (targetEmail && !staff) throw new Error('存在しないスタッフです: ' + targetEmail);
       recordSheet.getRange(recordRowIndex, IDX.RECORDS.STAFF_EMAIL + 1).setValue(targetEmail);
       if (!Object.prototype.hasOwnProperty.call(recordPatch, 'staffName')) {
@@ -2850,20 +2850,20 @@ function updateCaseDataAdmin(caseId, payload) {
       recordSheet.getRange(recordRowIndex, IDX.RECORDS.STAFF_NAME + 1).setValue(String(recordPatch.staffName || '').trim());
     }
     if (Object.prototype.hasOwnProperty.call(recordPatch, 'scheduledDateTime')) {
-      var dt = recordPatch.scheduledDateTime;
+      let dt = recordPatch.scheduledDateTime;
       recordSheet.getRange(recordRowIndex, IDX.RECORDS.DATE + 1).setValue(dt ? new Date(dt) : null);
     }
     if (Object.prototype.hasOwnProperty.call(recordPatch, 'supportCount')) {
-      var count = Number(recordPatch.supportCount);
+      let count = Number(recordPatch.supportCount);
       if (!isFinite(count) || count < 1) throw new Error('supportCount は1以上の数値を指定してください。');
       recordSheet.getRange(recordRowIndex, IDX.RECORDS.COUNT + 1).setValue(Math.floor(count));
     }
     if (Object.prototype.hasOwnProperty.call(recordPatch, 'caseLimitOverride')) {
-      var caseOverride = parseNullablePositiveInteger_(recordPatch.caseLimitOverride);
+      let caseOverride = parseNullablePositiveInteger_(recordPatch.caseLimitOverride);
       recordSheet.getRange(recordRowIndex, IDX.RECORDS.CASE_LIMIT_OVERRIDE + 1).setValue(caseOverride === null ? '' : caseOverride);
     }
     if (Object.prototype.hasOwnProperty.call(recordPatch, 'annualLimitOverride')) {
-      var annualOverride = parseNullablePositiveInteger_(recordPatch.annualLimitOverride);
+      let annualOverride = parseNullablePositiveInteger_(recordPatch.annualLimitOverride);
       recordSheet.getRange(recordRowIndex, IDX.RECORDS.ANNUAL_LIMIT_OVERRIDE + 1).setValue(annualOverride === null ? '' : annualOverride);
     }
     if (Object.prototype.hasOwnProperty.call(recordPatch, 'method')) {
@@ -2888,11 +2888,11 @@ function updateCaseDataAdmin(caseId, payload) {
       recordSheet.getRange(recordRowIndex, IDX.RECORDS.THREAD_ID + 1).setValue(String(recordPatch.threadId || '').trim());
     }
     if (Object.prototype.hasOwnProperty.call(recordPatch, 'tools')) {
-      var toolsVal = Array.isArray(recordPatch.tools) ? JSON.stringify(recordPatch.tools) : '[]';
+      let toolsVal = Array.isArray(recordPatch.tools) ? JSON.stringify(recordPatch.tools) : '[]';
       recordSheet.getRange(recordRowIndex, IDX.RECORDS.TOOLS + 1).setValue(toolsVal);
     }
     if (Object.prototype.hasOwnProperty.call(recordPatch, 'subStaff')) {
-      var subStaffVal = Array.isArray(recordPatch.subStaff) ? JSON.stringify(recordPatch.subStaff) : '[]';
+      let subStaffVal = Array.isArray(recordPatch.subStaff) ? JSON.stringify(recordPatch.subStaff) : '[]';
       recordSheet.getRange(recordRowIndex, IDX.RECORDS.SUB_STAFF + 1).setValue(subStaffVal);
     }
 
@@ -2924,14 +2924,14 @@ function updateCaseDataAdmin(caseId, payload) {
 }
 
 function setupSettingsSheet() {
-  var ss = getSpreadsheet_();
-  var existing = ss.getSheetByName(SHEET_NAMES.SETTINGS);
+  let ss = getSpreadsheet_();
+  let existing = ss.getSheetByName(SHEET_NAMES.SETTINGS);
   if (existing) {
     Logger.log('「設定」シートは既に存在します。');
     return;
   }
 
-  var sheet = ss.insertSheet(SHEET_NAMES.SETTINGS);
+  let sheet = ss.insertSheet(SHEET_NAMES.SETTINGS);
 
   // --- 列幅の設定 ---
   sheet.setColumnWidth(1, 180);  // A: 設定キー
@@ -2942,7 +2942,7 @@ function setupSettingsSheet() {
 
   // --- データ定義 ---
   // '#' で始まるキーはカテゴリ見出し行（コードでスキップされる）
-  var rows = [
+  let rows = [
     // ヘッダー
     ['設定キー', '項目名', '設定値', '入力例', '説明・注意事項'],
 
@@ -2981,23 +2981,23 @@ function setupSettingsSheet() {
   sheet.getRange(1, 1, rows.length, 5).setValues(rows);
 
   // --- 全体の基本スタイル ---
-  var allRange = sheet.getRange(1, 1, rows.length, 5);
+  let allRange = sheet.getRange(1, 1, rows.length, 5);
   allRange.setVerticalAlignment('middle');
   allRange.setWrapStrategy(SpreadsheetApp.WrapStrategy.WRAP);
   allRange.setFontFamily('Noto Sans JP');
   allRange.setFontSize(10);
 
   // --- ヘッダー行 (1行目) ---
-  var headerRange = sheet.getRange(1, 1, 1, 5);
+  let headerRange = sheet.getRange(1, 1, 1, 5);
   headerRange.setBackground('#0d9488').setFontColor('#ffffff').setFontWeight('bold').setFontSize(11);
   sheet.setRowHeight(1, 36);
 
   // --- カテゴリ行のスタイル ---
-  var categoryStyle = { bg: '#f0fdfa', font: '#0d9488', size: 11 };
-  for (var i = 0; i < rows.length; i++) {
+  let categoryStyle = { bg: '#f0fdfa', font: '#0d9488', size: 11 };
+  for (let i = 0; i < rows.length; i++) {
     if (String(rows[i][0]).charAt(0) === '#') {
-      var rowNum = i + 1;
-      var catRange = sheet.getRange(rowNum, 1, 1, 5);
+      let rowNum = i + 1;
+      let catRange = sheet.getRange(rowNum, 1, 1, 5);
       catRange.setBackground(categoryStyle.bg).setFontColor(categoryStyle.font).setFontWeight('bold').setFontSize(categoryStyle.size);
       sheet.setRowHeight(rowNum, 32);
       // B列のカテゴリ名をA-B結合表示風に（A列は非表示なので実質B列が見出し）
@@ -3006,11 +3006,11 @@ function setupSettingsSheet() {
   }
 
   // --- 設定値列 (C列) のスタイル: 入力しやすく強調 ---
-  var dataRowStart = 2;
-  var dataRowCount = rows.length - 1;
-  for (var i = 1; i < rows.length; i++) {
+  let dataRowStart = 2;
+  let dataRowCount = rows.length - 1;
+  for (let i = 1; i < rows.length; i++) {
     if (String(rows[i][0]).charAt(0) !== '#' && rows[i][0] !== '') {
-      var r = i + 1;
+      let r = i + 1;
       // C列（設定値）を入力しやすく
       sheet.getRange(r, 3).setBackground('#fffbeb').setBorder(true, true, true, true, null, null, '#f59e0b', SpreadsheetApp.BorderStyle.SOLID).setFontWeight('bold');
       // A列（設定キー）をグレー表示
@@ -3047,31 +3047,31 @@ function setupSettingsSheet() {
  * GASエディタからこの関数を実行してください。
  */
 function addEmailTemplates() {
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
   if (!sheet) {
     Logger.log('「設定」シートが見つかりません。先に setupSettingsSheet を実行してください。');
     return;
   }
 
   // 既に追加済みか確認
-  var data = sheet.getDataRange().getValues();
-  for (var i = 0; i < data.length; i++) {
+  let data = sheet.getDataRange().getValues();
+  for (let i = 0; i < data.length; i++) {
     if (String(data[i][0]) === 'MAIL_INITIAL_SUBJECT') {
       Logger.log('メールテンプレートは既に設定シートに存在します。');
       return;
     }
   }
 
-  var newRows = [
+  let newRows = [
     ['#メールテンプレート', 'メールテンプレート設定', '', '', ''],
     ['MAIL_INITIAL_SUBJECT', '初回メール件名', 'タダサポ｜ご相談を承りました', 'タダサポ｜{{事業所名}}様のご相談を承りました', '「担当する」ボタン押下時に送信されるメールの件名。\n使用可能タグ: {{事業所名}} {{名前}} {{担当者名}}'],
     ['MAIL_INITIAL_BODY', '初回メール本文', '{{名前}} 様\n\nこの度はタダサポへご相談いただきありがとうございます。\n担当させていただきます{{担当者名}}と申します。\n\n以下の内容で受付いたしました。\n\n----------------\n【ご相談内容】\n{{相談内容}}\n----------------\n\n追ってサポート日時のご連絡をさせていただきます。\n\n何かご不明な点がございましたら、お気軽にお問い合わせください。\n\n今後ともよろしくお願いいたします。', '（デフォルト文を参照）', '初回メール本文。C列のセル内で改行可能（Ctrl+Enter）。\n使用可能タグ: {{事業所名}} {{名前}} {{担当者名}} {{相談内容}}']
   ];
 
   // システム情報カテゴリの前に挿入
-  var insertBefore = -1;
-  for (var i = 0; i < data.length; i++) {
+  let insertBefore = -1;
+  for (let i = 0; i < data.length; i++) {
     if (String(data[i][0]) === '#システム情報') {
       insertBefore = i + 1;
       break;
@@ -3082,20 +3082,20 @@ function addEmailTemplates() {
     sheet.insertRowsBefore(insertBefore, newRows.length);
     sheet.getRange(insertBefore, 1, newRows.length, 5).setValues(newRows);
   } else {
-    var lastRow = sheet.getLastRow();
+    let lastRow = sheet.getLastRow();
     sheet.getRange(lastRow + 1, 1, newRows.length, 5).setValues(newRows);
     insertBefore = lastRow + 1;
   }
 
   // カテゴリ行スタイル
-  var catRange = sheet.getRange(insertBefore, 1, 1, 5);
+  let catRange = sheet.getRange(insertBefore, 1, 1, 5);
   catRange.setBackground('#f0fdfa').setFontColor('#0d9488').setFontWeight('bold').setFontSize(11);
   catRange.setBorder(true, null, true, null, null, null, '#99f6e4', SpreadsheetApp.BorderStyle.SOLID);
   sheet.setRowHeight(insertBefore, 32);
 
   // データ行スタイル
-  for (var j = 1; j < newRows.length; j++) {
-    var r = insertBefore + j;
+  for (let j = 1; j < newRows.length; j++) {
+    let r = insertBefore + j;
     sheet.getRange(r, 3).setBackground('#fffbeb').setBorder(true, true, true, true, null, null, '#f59e0b', SpreadsheetApp.BorderStyle.SOLID).setFontWeight('bold');
     sheet.getRange(r, 1).setFontColor('#9ca3af').setFontSize(8);
     sheet.getRange(r, 2).setFontWeight('bold').setFontColor('#1e293b');
@@ -3115,30 +3115,30 @@ function addEmailTemplates() {
  * 既に存在する場合はスキップする。
  */
 function addForcedCcSetting() {
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
   if (!sheet) {
     Logger.log('「設定」シートが見つかりません。先に setupSettingsSheet を実行してください。');
     return;
   }
 
-  var data = sheet.getDataRange().getValues();
-  for (var i = 0; i < data.length; i++) {
+  let data = sheet.getDataRange().getValues();
+  for (let i = 0; i < data.length; i++) {
     if (String(data[i][0]) === 'MAIL_FORCE_CC') {
       Logger.log('MAIL_FORCE_CC は既に設定シートに存在します。');
       return;
     }
   }
 
-  var insertAfterRow = -1;
-  for (var j = 0; j < data.length; j++) {
+  let insertAfterRow = -1;
+  for (let j = 0; j < data.length; j++) {
     if (String(data[j][0]) === '#メールテンプレート') {
       insertAfterRow = j + 1;
       break;
     }
   }
 
-  var newRow = [
+  let newRow = [
     'MAIL_FORCE_CC',
     'CCメールアドレス（任意）',
     '',
@@ -3150,12 +3150,12 @@ function addForcedCcSetting() {
     sheet.insertRowAfter(insertAfterRow);
     sheet.getRange(insertAfterRow + 1, 1, 1, 5).setValues([newRow]);
   } else {
-    var last = sheet.getLastRow();
+    let last = sheet.getLastRow();
     sheet.getRange(last + 1, 1, 1, 5).setValues([newRow]);
     insertAfterRow = last;
   }
 
-  var rowNum = insertAfterRow + 1;
+  let rowNum = insertAfterRow + 1;
   sheet.getRange(rowNum, 3).setBackground('#fffbeb').setBorder(true, true, true, true, null, null, '#f59e0b', SpreadsheetApp.BorderStyle.SOLID).setFontWeight('bold');
   sheet.getRange(rowNum, 1).setFontColor('#9ca3af').setFontSize(8);
   sheet.getRange(rowNum, 2).setFontWeight('bold').setFontColor('#1e293b');
@@ -3175,30 +3175,30 @@ function addForcedCcSetting() {
  * 既に存在する場合はスキップする。
  */
 function addMailDryRunSetting() {
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
   if (!sheet) {
     Logger.log('「設定」シートが見つかりません。先に setupSettingsSheet を実行してください。');
     return;
   }
 
-  var data = sheet.getDataRange().getValues();
-  for (var i = 0; i < data.length; i++) {
+  let data = sheet.getDataRange().getValues();
+  for (let i = 0; i < data.length; i++) {
     if (String(data[i][0]) === 'MAIL_DRY_RUN') {
       Logger.log('MAIL_DRY_RUN は既に設定シートに存在します。');
       return;
     }
   }
 
-  var insertAfterRow = -1;
-  for (var j = 0; j < data.length; j++) {
+  let insertAfterRow = -1;
+  for (let j = 0; j < data.length; j++) {
     if (String(data[j][0]) === 'MAIL_FORCE_CC') {
       insertAfterRow = j + 1;
       break;
     }
   }
 
-  var newRow = [
+  let newRow = [
     'MAIL_DRY_RUN',
     'メールドライラン',
     'false',
@@ -3210,12 +3210,12 @@ function addMailDryRunSetting() {
     sheet.insertRowAfter(insertAfterRow);
     sheet.getRange(insertAfterRow + 1, 1, 1, 5).setValues([newRow]);
   } else {
-    var last = sheet.getLastRow();
+    let last = sheet.getLastRow();
     sheet.getRange(last + 1, 1, 1, 5).setValues([newRow]);
     insertAfterRow = last;
   }
 
-  var rowNum = insertAfterRow + 1;
+  let rowNum = insertAfterRow + 1;
   sheet.getRange(rowNum, 3).setBackground('#fffbeb').setBorder(true, true, true, true, null, null, '#f59e0b', SpreadsheetApp.BorderStyle.SOLID).setFontWeight('bold');
   sheet.getRange(rowNum, 1).setFontColor('#9ca3af').setFontSize(8);
   sheet.getRange(rowNum, 2).setFontWeight('bold').setFontColor('#1e293b');
@@ -3227,32 +3227,32 @@ function addMailDryRunSetting() {
 }
 
 function addUsageLimitSettings() {
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
   if (!sheet) {
     Logger.log('「設定」シートが見つかりません。先に setupSettingsSheet を実行してください。');
     return;
   }
 
-  var data = sheet.getDataRange().getValues();
-  var hasAnnual = false;
-  var hasCase = false;
-  for (var i = 0; i < data.length; i++) {
-    var key = String(data[i][0] || '');
+  let data = sheet.getDataRange().getValues();
+  let hasAnnual = false;
+  let hasCase = false;
+  for (let i = 0; i < data.length; i++) {
+    let key = String(data[i][0] || '');
     if (key === 'ANNUAL_USAGE_LIMIT') hasAnnual = true;
     if (key === 'CASE_USAGE_LIMIT') hasCase = true;
   }
   if (hasAnnual && hasCase) return;
 
-  var insertAfterRow = -1;
-  for (var j = 0; j < data.length; j++) {
+  let insertAfterRow = -1;
+  for (let j = 0; j < data.length; j++) {
     if (String(data[j][0]) === 'MAIL_DRY_RUN') {
       insertAfterRow = j + 1;
       break;
     }
   }
 
-  var newRows = [];
+  let newRows = [];
   if (!hasAnnual) {
     newRows.push([
       'ANNUAL_USAGE_LIMIT',
@@ -3277,13 +3277,13 @@ function addUsageLimitSettings() {
     sheet.insertRowsAfter(insertAfterRow, newRows.length);
     sheet.getRange(insertAfterRow + 1, 1, newRows.length, 5).setValues(newRows);
   } else {
-    var last = sheet.getLastRow();
+    let last = sheet.getLastRow();
     sheet.getRange(last + 1, 1, newRows.length, 5).setValues(newRows);
     insertAfterRow = last;
   }
 
-  for (var r = 0; r < newRows.length; r++) {
-    var rowNum = insertAfterRow + 1 + r;
+  for (let r = 0; r < newRows.length; r++) {
+    let rowNum = insertAfterRow + 1 + r;
     sheet.getRange(rowNum, 3).setBackground('#fffbeb').setBorder(true, true, true, true, null, null, '#f59e0b', SpreadsheetApp.BorderStyle.SOLID).setFontWeight('bold');
     sheet.getRange(rowNum, 1).setFontColor('#9ca3af').setFontSize(8);
     sheet.getRange(rowNum, 2).setFontWeight('bold').setFontColor('#1e293b');
@@ -3294,41 +3294,41 @@ function addUsageLimitSettings() {
 }
 
 function addAttachmentFolderSetting() {
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
   if (!sheet) {
     Logger.log('「設定」シートが見つかりません。先に setupSettingsSheet を実行してください。');
     return;
   }
 
-  var data = sheet.getDataRange().getValues();
-  for (var i = 0; i < data.length; i++) {
+  let data = sheet.getDataRange().getValues();
+  for (let i = 0; i < data.length; i++) {
     if (String(data[i][0]) === 'ATTACHMENT_FOLDER_ID') {
       Logger.log('ATTACHMENT_FOLDER_ID は既に存在します。');
       return;
     }
   }
 
-  var insertAfterRow = -1;
-  for (var j = 0; j < data.length; j++) {
+  let insertAfterRow = -1;
+  for (let j = 0; j < data.length; j++) {
     if (String(data[j][0]) === 'SHARED_CALENDAR_ID') {
       insertAfterRow = j + 1;
       break;
     }
   }
 
-  var newRow = ['ATTACHMENT_FOLDER_ID', '添付ファイル保存先フォルダID', '', '1AbCdEfGhIjKlMnOpQrStUvWxYz', '完了報告/記録修正でアップロードした添付ファイルの保存先Google DriveフォルダID。\nGoogle Drive フォルダURLの /folders/ の後ろの値を入力してください。'];
+  let newRow = ['ATTACHMENT_FOLDER_ID', '添付ファイル保存先フォルダID', '', '1AbCdEfGhIjKlMnOpQrStUvWxYz', '完了報告/記録修正でアップロードした添付ファイルの保存先Google DriveフォルダID。\nGoogle Drive フォルダURLの /folders/ の後ろの値を入力してください。'];
 
   if (insertAfterRow > 0) {
     sheet.insertRowAfter(insertAfterRow);
     sheet.getRange(insertAfterRow + 1, 1, 1, 5).setValues([newRow]);
   } else {
-    var last = sheet.getLastRow();
+    let last = sheet.getLastRow();
     sheet.getRange(last + 1, 1, 1, 5).setValues([newRow]);
     insertAfterRow = last;
   }
 
-  var rowNum = insertAfterRow + 1;
+  let rowNum = insertAfterRow + 1;
   sheet.getRange(rowNum, 3).setBackground('#fffbeb').setBorder(true, true, true, true, null, null, '#f59e0b', SpreadsheetApp.BorderStyle.SOLID).setFontWeight('bold');
   sheet.getRange(rowNum, 1).setFontColor('#9ca3af').setFontSize(8);
   sheet.getRange(rowNum, 2).setFontWeight('bold').setFontColor('#1e293b');
@@ -3344,14 +3344,14 @@ function addAttachmentFolderSetting() {
  * 既に存在する場合はスキップ。
  */
 function addAttachmentsColumnToRecords() {
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
   if (!sheet) {
     throw new Error('「サポート記録」シートが見つかりません。');
   }
 
-  var headerRow = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
-  var expectedHeader = '添付ファイルJSON';
+  let headerRow = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getValues()[0];
+  let expectedHeader = '添付ファイルJSON';
 
   // 既にO列（15列目）に存在する場合
   if (sheet.getLastColumn() >= 15 && String(sheet.getRange(1, 15).getValue()) === expectedHeader) {
@@ -3360,7 +3360,7 @@ function addAttachmentsColumnToRecords() {
   }
 
   // ヘッダー行から既存位置を探索（別位置に存在する場合はそのまま利用）
-  for (var i = 0; i < headerRow.length; i++) {
+  for (let i = 0; i < headerRow.length; i++) {
     if (String(headerRow[i]) === expectedHeader) {
       Logger.log('添付ファイルJSON 列は既に存在します（列: ' + (i + 1) + '）。');
       return;
@@ -3369,7 +3369,7 @@ function addAttachmentsColumnToRecords() {
 
   // N列の後ろ（15列目）に追加
   if (sheet.getLastColumn() < 15) {
-    var addCount = 15 - sheet.getLastColumn();
+    let addCount = 15 - sheet.getLastColumn();
     sheet.insertColumnsAfter(sheet.getLastColumn(), addCount);
   } else {
     sheet.insertColumnAfter(14);
@@ -3378,11 +3378,11 @@ function addAttachmentsColumnToRecords() {
   sheet.getRange(1, 15).setValue(expectedHeader);
 
   // 既存データ行を '[]' で初期化（空セルのみ）
-  var lastRow = sheet.getLastRow();
+  let lastRow = sheet.getLastRow();
   if (lastRow > 1) {
-    var range = sheet.getRange(2, 15, lastRow - 1, 1);
-    var values = range.getValues();
-    for (var r = 0; r < values.length; r++) {
+    let range = sheet.getRange(2, 15, lastRow - 1, 1);
+    let values = range.getValues();
+    for (let r = 0; r < values.length; r++) {
       if (!values[r][0]) values[r][0] = '[]';
     }
     range.setValues(values);
@@ -3397,13 +3397,13 @@ function addAttachmentsColumnToRecords() {
  * 2) サポート記録へ ATTACHMENTS 列を追加
  */
 function addCaseLimitOverrideColumnsToRecords() {
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
   if (!sheet) throw new Error('「サポート記録」シートが見つかりません。');
 
-  var expectedCaseHeader = '案件上限上書き';
-  var expectedAnnualHeader = '年度上限上書き';
-  var requiredColumns = IDX.RECORDS.ANNUAL_LIMIT_OVERRIDE + 1;
+  let expectedCaseHeader = '案件上限上書き';
+  let expectedAnnualHeader = '年度上限上書き';
+  let requiredColumns = IDX.RECORDS.ANNUAL_LIMIT_OVERRIDE + 1;
 
   if (sheet.getLastColumn() < requiredColumns) {
     sheet.insertColumnsAfter(sheet.getLastColumn(), requiredColumns - sheet.getLastColumn());
@@ -3421,15 +3421,15 @@ function addCaseLimitOverrideColumnsToRecords() {
  * 既に存在する場合はスキップする。
  */
 function addToolsColumnToRecords() {
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
   if (!sheet) throw new Error('「サポート記録」シートが見つかりません。');
 
-  var requiredColumns = IDX.RECORDS.TOOLS + 1; // 18
+  let requiredColumns = IDX.RECORDS.TOOLS + 1; // 18
   if (sheet.getLastColumn() < requiredColumns) {
     sheet.insertColumnsAfter(sheet.getLastColumn(), requiredColumns - sheet.getLastColumn());
   }
-  var header = String(sheet.getRange(1, IDX.RECORDS.TOOLS + 1).getValue() || '').trim();
+  let header = String(sheet.getRange(1, IDX.RECORDS.TOOLS + 1).getValue() || '').trim();
   if (!header) {
     sheet.getRange(1, IDX.RECORDS.TOOLS + 1).setValue('対応ツール');
     Logger.log('サポート記録シートに 対応ツール 列を追加しました。');
@@ -3437,15 +3437,15 @@ function addToolsColumnToRecords() {
 }
 
 function addSubStaffColumnToRecords() {
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
   if (!sheet) throw new Error('「サポート記録」シートが見つかりません。');
 
-  var requiredColumns = IDX.RECORDS.SUB_STAFF + 1; // 19
+  let requiredColumns = IDX.RECORDS.SUB_STAFF + 1; // 19
   if (sheet.getLastColumn() < requiredColumns) {
     sheet.insertColumnsAfter(sheet.getLastColumn(), requiredColumns - sheet.getLastColumn());
   }
-  var header = String(sheet.getRange(1, IDX.RECORDS.SUB_STAFF + 1).getValue() || '').trim();
+  let header = String(sheet.getRange(1, IDX.RECORDS.SUB_STAFF + 1).getValue() || '').trim();
   if (!header) {
     sheet.getRange(1, IDX.RECORDS.SUB_STAFF + 1).setValue('サブ担当');
     Logger.log('サポート記録シートに サブ担当 列を追加しました。');
@@ -3473,12 +3473,12 @@ function setupAttachmentFeatureSchema() {
 // ======================================================================
 
 function ensureDraftsSheet_() {
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_DRAFTS);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_DRAFTS);
   if (sheet) return sheet;
 
   sheet = ss.insertSheet(SHEET_NAMES.EMAIL_DRAFTS);
-  var headers = ['下書きID', '案件ID', '担当者メール', 'モード', 'スレッドID', '件名', '本文', 'CC', 'BCC', '対応ツール(JSON)', '更新日時'];
+  let headers = ['下書きID', '案件ID', '担当者メール', 'モード', 'スレッドID', '件名', '本文', 'CC', 'BCC', '対応ツール(JSON)', '更新日時'];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   sheet.getRange(1, 1, 1, headers.length).setBackground('#7c3aed').setFontColor('#ffffff').setFontWeight('bold').setFontSize(10);
   sheet.setFrozenRows(1);
@@ -3510,29 +3510,29 @@ function saveDraft(payload) {
   if (!payload || !payload.caseId || !payload.mode) {
     throw new Error('下書き保存には caseId と mode が必要です。');
   }
-  var actor = getActor_();
-  var staffEmail = actor.email;
-  var sheet = ensureDraftsSheet_();
+  let actor = getActor_();
+  let staffEmail = actor.email;
+  let sheet = ensureDraftsSheet_();
 
-  var caseId = String(payload.caseId);
-  var mode = String(payload.mode);
-  var threadId = String(payload.threadId || '');
-  var subject = String(payload.subject || '');
-  var body = String(payload.body || '');
-  var cc = String(payload.cc || '');
-  var bcc = String(payload.bcc || '');
-  var toolsJson = '';
+  let caseId = String(payload.caseId);
+  let mode = String(payload.mode);
+  let threadId = String(payload.threadId || '');
+  let subject = String(payload.subject || '');
+  let body = String(payload.body || '');
+  let cc = String(payload.cc || '');
+  let bcc = String(payload.bcc || '');
+  let toolsJson = '';
   if (payload.tools && Array.isArray(payload.tools)) {
     toolsJson = JSON.stringify(payload.tools);
   }
-  var now = new Date();
-  var targetKey = normalizeDraftKey_(caseId, staffEmail, mode, threadId);
+  let now = new Date();
+  let targetKey = normalizeDraftKey_(caseId, staffEmail, mode, threadId);
 
-  var data = sheet.getDataRange().getValues();
-  for (var i = 1; i < data.length; i++) {
-    var rowKey = normalizeDraftKey_(data[i][IDX.DRAFT.CASE_ID], data[i][IDX.DRAFT.STAFF_EMAIL], data[i][IDX.DRAFT.MODE], data[i][IDX.DRAFT.THREAD_ID]);
+  let data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    let rowKey = normalizeDraftKey_(data[i][IDX.DRAFT.CASE_ID], data[i][IDX.DRAFT.STAFF_EMAIL], data[i][IDX.DRAFT.MODE], data[i][IDX.DRAFT.THREAD_ID]);
     if (rowKey === targetKey) {
-      var rowNum = i + 1;
+      let rowNum = i + 1;
       sheet.getRange(rowNum, IDX.DRAFT.SUBJECT + 1).setValue(subject);
       sheet.getRange(rowNum, IDX.DRAFT.BODY + 1).setValue(body);
       sheet.getRange(rowNum, IDX.DRAFT.CC + 1).setValue(cc);
@@ -3543,7 +3543,7 @@ function saveDraft(payload) {
     }
   }
 
-  var draftId = 'draft-' + Utilities.getUuid();
+  let draftId = 'draft-' + Utilities.getUuid();
   sheet.appendRow([draftId, caseId, staffEmail, mode, threadId, subject, body, cc, bcc, toolsJson, now]);
   return { draftId: draftId, updatedAt: now.toISOString() };
 }
@@ -3553,22 +3553,22 @@ function saveDraft(payload) {
  * 戻り値: 下書きオブジェクト or null
  */
 function loadDraft(caseId, mode, threadId) {
-  var actor = getActor_();
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_DRAFTS);
+  let actor = getActor_();
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_DRAFTS);
   if (!sheet || sheet.getLastRow() < 2) return null;
 
-  var targetKey = normalizeDraftKey_(caseId, actor.email, mode, threadId);
-  var data = sheet.getDataRange().getValues();
-  for (var i = 1; i < data.length; i++) {
-    var rowKey = normalizeDraftKey_(data[i][IDX.DRAFT.CASE_ID], data[i][IDX.DRAFT.STAFF_EMAIL], data[i][IDX.DRAFT.MODE], data[i][IDX.DRAFT.THREAD_ID]);
+  let targetKey = normalizeDraftKey_(caseId, actor.email, mode, threadId);
+  let data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    let rowKey = normalizeDraftKey_(data[i][IDX.DRAFT.CASE_ID], data[i][IDX.DRAFT.STAFF_EMAIL], data[i][IDX.DRAFT.MODE], data[i][IDX.DRAFT.THREAD_ID]);
     if (rowKey === targetKey) {
-      var toolsJson = String(data[i][IDX.DRAFT.TOOLS] || '');
-      var tools = [];
+      let toolsJson = String(data[i][IDX.DRAFT.TOOLS] || '');
+      let tools = [];
       if (toolsJson) {
         try { tools = JSON.parse(toolsJson); } catch (e) { tools = []; }
       }
-      var updatedAt = data[i][IDX.DRAFT.UPDATED_AT];
+      let updatedAt = data[i][IDX.DRAFT.UPDATED_AT];
       return {
         draftId: String(data[i][IDX.DRAFT.DRAFT_ID]),
         caseId: String(data[i][IDX.DRAFT.CASE_ID]),
@@ -3590,15 +3590,15 @@ function loadDraft(caseId, mode, threadId) {
  * 指定キーの下書きを削除する。
  */
 function deleteDraft(caseId, mode, threadId) {
-  var actor = getActor_();
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_DRAFTS);
+  let actor = getActor_();
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_DRAFTS);
   if (!sheet || sheet.getLastRow() < 2) return { deleted: false };
 
-  var targetKey = normalizeDraftKey_(caseId, actor.email, mode, threadId);
-  var data = sheet.getDataRange().getValues();
-  for (var i = data.length - 1; i >= 1; i--) {
-    var rowKey = normalizeDraftKey_(data[i][IDX.DRAFT.CASE_ID], data[i][IDX.DRAFT.STAFF_EMAIL], data[i][IDX.DRAFT.MODE], data[i][IDX.DRAFT.THREAD_ID]);
+  let targetKey = normalizeDraftKey_(caseId, actor.email, mode, threadId);
+  let data = sheet.getDataRange().getValues();
+  for (let i = data.length - 1; i >= 1; i--) {
+    let rowKey = normalizeDraftKey_(data[i][IDX.DRAFT.CASE_ID], data[i][IDX.DRAFT.STAFF_EMAIL], data[i][IDX.DRAFT.MODE], data[i][IDX.DRAFT.THREAD_ID]);
     if (rowKey === targetKey) {
       sheet.deleteRow(i + 1);
       return { deleted: true };
@@ -3612,22 +3612,22 @@ function deleteDraft(caseId, mode, threadId) {
  * 戻り値: [{ draftId, mode, threadId, subject, body, cc, bcc, tools, updatedAt }, ...]
  */
 function listDraftsForCase(caseId) {
-  var actor = getActor_();
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_DRAFTS);
+  let actor = getActor_();
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_DRAFTS);
   if (!sheet || sheet.getLastRow() < 2) return [];
 
-  var data = sheet.getDataRange().getValues();
-  var userEmail = normalizeEmail_(actor.email);
-  var target = String(caseId || '');
-  var out = [];
-  for (var i = 1; i < data.length; i++) {
+  let data = sheet.getDataRange().getValues();
+  let userEmail = normalizeEmail_(actor.email);
+  let target = String(caseId || '');
+  let out = [];
+  for (let i = 1; i < data.length; i++) {
     if (normalizeEmail_(data[i][IDX.DRAFT.STAFF_EMAIL]) !== userEmail) continue;
     if (String(data[i][IDX.DRAFT.CASE_ID]) !== target) continue;
-    var toolsJson = String(data[i][IDX.DRAFT.TOOLS] || '');
-    var tools = [];
+    let toolsJson = String(data[i][IDX.DRAFT.TOOLS] || '');
+    let tools = [];
     if (toolsJson) { try { tools = JSON.parse(toolsJson); } catch (e) {} }
-    var updatedAt = data[i][IDX.DRAFT.UPDATED_AT];
+    let updatedAt = data[i][IDX.DRAFT.UPDATED_AT];
     out.push({
       draftId: String(data[i][IDX.DRAFT.DRAFT_ID]),
       caseId: String(data[i][IDX.DRAFT.CASE_ID]),
@@ -3649,14 +3649,14 @@ function listDraftsForCase(caseId) {
  * バッジ表示用の軽量クエリ。
  */
 function listDraftCaseIdsForUser_(userEmail) {
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_DRAFTS);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_DRAFTS);
   if (!sheet || sheet.getLastRow() < 2) return [];
 
-  var data = sheet.getDataRange().getValues();
-  var target = normalizeEmail_(userEmail);
-  var seen = {};
-  for (var i = 1; i < data.length; i++) {
+  let data = sheet.getDataRange().getValues();
+  let target = normalizeEmail_(userEmail);
+  let seen = {};
+  for (let i = 1; i < data.length; i++) {
     if (normalizeEmail_(data[i][IDX.DRAFT.STAFF_EMAIL]) !== target) continue;
     seen[String(data[i][IDX.DRAFT.CASE_ID])] = true;
   }
@@ -3679,12 +3679,12 @@ var SCHEDULED_BATCH_LIMIT = 20;         // 1回のトリガーで処理する最
 var SCHEDULED_VALID_MODES = { initial: 1, 'new': 1, reply: 1, schedule: 1, decline: 1 };
 
 function ensureScheduledSheet_() {
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_SCHEDULED);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_SCHEDULED);
   if (sheet) return sheet;
 
   sheet = ss.insertSheet(SHEET_NAMES.EMAIL_SCHEDULED);
-  var headers = ['キューID', '案件ID', '担当者メール', '担当者名', 'モード', 'スレッドID', '件名', '本文', 'CC', 'BCC', '対応ツール(JSON)', '送信予定時刻', 'ステータス', 'エラー', '作成日時', '送信完了日時'];
+  let headers = ['キューID', '案件ID', '担当者メール', '担当者名', 'モード', 'スレッドID', '件名', '本文', 'CC', 'BCC', '対応ツール(JSON)', '送信予定時刻', 'ステータス', 'エラー', '作成日時', '送信完了日時'];
   sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
   sheet.getRange(1, 1, 1, headers.length).setBackground('#be185d').setFontColor('#ffffff').setFontWeight('bold').setFontSize(10);
   sheet.setFrozenRows(1);
@@ -3718,17 +3718,17 @@ function scheduleEmail(payload) {
   if (!payload.mode || !SCHEDULED_VALID_MODES[payload.mode]) throw new Error('mode が不正です: ' + payload.mode);
   if (!payload.sendAt) throw new Error('送信予定時刻が必要です');
 
-  var sendAt = new Date(payload.sendAt);
+  let sendAt = new Date(payload.sendAt);
   if (isNaN(sendAt.getTime())) throw new Error('送信予定時刻の形式が不正です');
-  var now = new Date();
+  let now = new Date();
   // 1分未満の予約は不可（トリガー間隔との衝突防止）
   if (sendAt.getTime() - now.getTime() < 60 * 1000) {
     throw new Error('送信予定時刻は現在時刻より1分以上先を指定してください');
   }
 
-  var actor = getActor_();
-  var sheet = ensureScheduledSheet_();
-  var queueId = 'sch-' + Utilities.getUuid();
+  let actor = getActor_();
+  let sheet = ensureScheduledSheet_();
+  let queueId = 'sch-' + Utilities.getUuid();
 
   sheet.appendRow([
     queueId,
@@ -3761,25 +3761,25 @@ function scheduleEmail(payload) {
  */
 function cancelScheduledEmail(queueId) {
   if (!queueId) throw new Error('queueId が必要です');
-  var actor = getActor_();
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_SCHEDULED);
+  let actor = getActor_();
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_SCHEDULED);
   if (!sheet || sheet.getLastRow() < 2) throw new Error('予約送信が見つかりません');
 
-  var data = sheet.getDataRange().getValues();
-  for (var i = 1; i < data.length; i++) {
+  let data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
     if (String(data[i][IDX.SCHEDULED.QUEUE_ID]) !== String(queueId)) continue;
 
     // 本人または管理者のみキャンセル可
-    var ownerEmail = normalizeEmail_(data[i][IDX.SCHEDULED.STAFF_EMAIL]);
+    let ownerEmail = normalizeEmail_(data[i][IDX.SCHEDULED.STAFF_EMAIL]);
     if (ownerEmail !== normalizeEmail_(actor.email) && !actor.isAdmin) {
       throw new Error('この予約送信をキャンセルする権限がありません');
     }
-    var status = String(data[i][IDX.SCHEDULED.STATUS] || '');
+    let status = String(data[i][IDX.SCHEDULED.STATUS] || '');
     if (status !== 'pending') {
       throw new Error('このステータスの予約はキャンセルできません: ' + status);
     }
-    var rowNum = i + 1;
+    let rowNum = i + 1;
     sheet.getRange(rowNum, IDX.SCHEDULED.STATUS + 1).setValue('cancelled');
     return { cancelled: true };
   }
@@ -3790,16 +3790,16 @@ function cancelScheduledEmail(queueId) {
  * 指定案件に紐づく予約送信（pending/sending のみ）を返す。
  */
 function listScheduledForCase(caseId) {
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_SCHEDULED);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_SCHEDULED);
   if (!sheet || sheet.getLastRow() < 2) return [];
 
-  var data = sheet.getDataRange().getValues();
-  var out = [];
-  var target = String(caseId || '');
-  for (var i = 1; i < data.length; i++) {
+  let data = sheet.getDataRange().getValues();
+  let out = [];
+  let target = String(caseId || '');
+  for (let i = 1; i < data.length; i++) {
     if (String(data[i][IDX.SCHEDULED.CASE_ID]) !== target) continue;
-    var status = String(data[i][IDX.SCHEDULED.STATUS] || '');
+    let status = String(data[i][IDX.SCHEDULED.STATUS] || '');
     if (status !== 'pending' && status !== 'sending') continue;
     out.push(mapScheduledRow_(data[i]));
   }
@@ -3810,15 +3810,15 @@ function listScheduledForCase(caseId) {
  * 現在ユーザーのペンディング予約案件ID一覧（バッジ表示用）
  */
 function listScheduledCaseIdsForUser_(userEmail) {
-  var ss = getSpreadsheet_();
-  var sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_SCHEDULED);
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_SCHEDULED);
   if (!sheet || sheet.getLastRow() < 2) return [];
-  var data = sheet.getDataRange().getValues();
-  var target = normalizeEmail_(userEmail);
-  var seen = {};
-  for (var i = 1; i < data.length; i++) {
+  let data = sheet.getDataRange().getValues();
+  let target = normalizeEmail_(userEmail);
+  let seen = {};
+  for (let i = 1; i < data.length; i++) {
     if (normalizeEmail_(data[i][IDX.SCHEDULED.STAFF_EMAIL]) !== target) continue;
-    var status = String(data[i][IDX.SCHEDULED.STATUS] || '');
+    let status = String(data[i][IDX.SCHEDULED.STATUS] || '');
     if (status !== 'pending' && status !== 'sending') continue;
     seen[String(data[i][IDX.SCHEDULED.CASE_ID])] = true;
   }
@@ -3826,8 +3826,8 @@ function listScheduledCaseIdsForUser_(userEmail) {
 }
 
 function mapScheduledRow_(row) {
-  var toolsJson = String(row[IDX.SCHEDULED.TOOLS] || '');
-  var tools = [];
+  let toolsJson = String(row[IDX.SCHEDULED.TOOLS] || '');
+  let tools = [];
   if (toolsJson) { try { tools = JSON.parse(toolsJson); } catch (e) {} }
   return {
     queueId: String(row[IDX.SCHEDULED.QUEUE_ID]),
@@ -3854,29 +3854,29 @@ function mapScheduledRow_(row) {
  * 送信時刻を過ぎた pending 行をバッチ処理する。
  */
 function processScheduledEmails_() {
-  var lock = LockService.getScriptLock();
+  let lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) {
     Logger.log('processScheduledEmails_: 他の実行中のためスキップ');
     return;
   }
 
   try {
-    var ss = getSpreadsheet_();
-    var sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_SCHEDULED);
+    let ss = getSpreadsheet_();
+    let sheet = ss.getSheetByName(SHEET_NAMES.EMAIL_SCHEDULED);
     if (!sheet || sheet.getLastRow() < 2) return;
 
-    var data = sheet.getDataRange().getValues();
-    var now = new Date();
-    var stuckCutoff = new Date(now.getTime() - SCHEDULED_STUCK_MINUTES * 60 * 1000);
+    let data = sheet.getDataRange().getValues();
+    let now = new Date();
+    let stuckCutoff = new Date(now.getTime() - SCHEDULED_STUCK_MINUTES * 60 * 1000);
 
     // 1. 処理対象行を抽出（pending で期限到来、または sending でスタック）
-    var targets = [];
-    for (var i = 1; i < data.length; i++) {
-      var row = data[i];
-      var status = String(row[IDX.SCHEDULED.STATUS] || '');
-      var sendAt = row[IDX.SCHEDULED.SEND_AT] ? new Date(row[IDX.SCHEDULED.SEND_AT]) : null;
+    let targets = [];
+    for (let i = 1; i < data.length; i++) {
+      let row = data[i];
+      let status = String(row[IDX.SCHEDULED.STATUS] || '');
+      let sendAt = row[IDX.SCHEDULED.SEND_AT] ? new Date(row[IDX.SCHEDULED.SEND_AT]) : null;
       if (!sendAt) continue;
-      var isDue = sendAt.getTime() <= now.getTime();
+      let isDue = sendAt.getTime() <= now.getTime();
       if (status === 'pending' && isDue) {
         targets.push({ rowNum: i + 1, row: row });
       } else if (status === 'sending' && sendAt.getTime() < stuckCutoff.getTime()) {
@@ -3899,15 +3899,15 @@ function processScheduledEmails_() {
 
   // 3. 各行を順次送信（ロック外で実行）
   // 再取得してクレーム済み行を処理
-  var ss2 = getSpreadsheet_();
-  var sheet2 = ss2.getSheetByName(SHEET_NAMES.EMAIL_SCHEDULED);
-  var data2 = sheet2.getDataRange().getValues();
-  for (var j = 1; j < data2.length; j++) {
+  let ss2 = getSpreadsheet_();
+  let sheet2 = ss2.getSheetByName(SHEET_NAMES.EMAIL_SCHEDULED);
+  let data2 = sheet2.getDataRange().getValues();
+  for (let j = 1; j < data2.length; j++) {
     if (String(data2[j][IDX.SCHEDULED.STATUS]) !== 'sending') continue;
-    var rowNum = j + 1;
-    var scheduled = mapScheduledRow_(data2[j]);
+    let rowNum = j + 1;
+    let scheduled = mapScheduledRow_(data2[j]);
     try {
-      var result = sendScheduledRow_(scheduled);
+      let result = sendScheduledRow_(scheduled);
       sheet2.getRange(rowNum, IDX.SCHEDULED.STATUS + 1).setValue(result.status || 'sent');
       sheet2.getRange(rowNum, IDX.SCHEDULED.ERROR + 1).setValue(result.note || '');
       sheet2.getRange(rowNum, IDX.SCHEDULED.SENT_AT + 1).setValue(new Date());
@@ -3924,20 +3924,20 @@ function processScheduledEmails_() {
  */
 function sendScheduledRow_(s) {
   // 案件の宛先取得
-  var recipientEmail = getRecipientEmail_(s.caseId);
+  let recipientEmail = getRecipientEmail_(s.caseId);
   if (!recipientEmail) {
     return { status: 'skipped', note: '案件が見つかりません' };
   }
 
   // 予約時のスタッフをactorとして扱う（トリガー実行者ではない）
-  var scheduledActor = { email: s.staffEmail, name: s.staffName, isAdmin: false };
+  let scheduledActor = { email: s.staffEmail, name: s.staffName, isAdmin: false };
 
-  var ss = getSpreadsheet_();
-  var recordSheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
-  var recordData = recordSheet.getDataRange().getValues();
-  var caseRow = -1;
-  var currentStatus = '';
-  for (var i = 1; i < recordData.length; i++) {
+  let ss = getSpreadsheet_();
+  let recordSheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  let recordData = recordSheet.getDataRange().getValues();
+  let caseRow = -1;
+  let currentStatus = '';
+  for (let i = 1; i < recordData.length; i++) {
     if (String(recordData[i][IDX.RECORDS.FK]) === String(s.caseId)) {
       caseRow = i + 1;
       currentStatus = String(recordData[i][IDX.RECORDS.STATUS] || '');
@@ -3951,7 +3951,7 @@ function sendScheduledRow_(s) {
   }
 
   // 実送信
-  var sendResult = sendInThread_(
+  let sendResult = sendInThread_(
     recipientEmail,
     s.subject,
     s.body,
@@ -3969,7 +3969,7 @@ function sendScheduledRow_(s) {
   // モード固有の後処理
   if (s.mode === 'initial' && currentStatus === 'unhandled') {
     // 担当アサイン（ステータスとスタッフ情報を更新）
-    var toolsVal = (s.tools && s.tools.length > 0) ? JSON.stringify(s.tools) : '[]';
+    let toolsVal = (s.tools && s.tools.length > 0) ? JSON.stringify(s.tools) : '[]';
     if (caseRow === -1) {
       recordSheet.appendRow([
         s.caseId, 'inProgress', scheduledActor.email, scheduledActor.name,
@@ -4014,8 +4014,8 @@ function setupScheduledEmailTrigger() {
 }
 
 function removeScheduledEmailTrigger() {
-  var triggers = ScriptApp.getProjectTriggers();
-  for (var i = 0; i < triggers.length; i++) {
+  let triggers = ScriptApp.getProjectTriggers();
+  for (let i = 0; i < triggers.length; i++) {
     if (triggers[i].getHandlerFunction() === 'processScheduledEmails_') {
       ScriptApp.deleteTrigger(triggers[i]);
     }
@@ -4026,8 +4026,8 @@ function removeScheduledEmailTrigger() {
  * 予約送信トリガーの稼働状態を確認する（管理者UI用）。
  */
 function getScheduledEmailTriggerStatus() {
-  var triggers = ScriptApp.getProjectTriggers();
-  for (var i = 0; i < triggers.length; i++) {
+  let triggers = ScriptApp.getProjectTriggers();
+  for (let i = 0; i < triggers.length; i++) {
     if (triggers[i].getHandlerFunction() === 'processScheduledEmails_') {
       return { active: true, triggerId: triggers[i].getUniqueId() };
     }
