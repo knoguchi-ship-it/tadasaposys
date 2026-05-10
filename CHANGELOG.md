@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.11.4] - 2026-05-10
+
+### Security
+- **数式インジェクション対策** (OWASP A03:2025): `sanitizeForSheet_()` ヘルパーを追加。`=` `+` `-` `@` で始まる文字列に先頭アポストロフィを付与し、スプレッドシート数式として実行されることを防止。影響範囲: `updateSupportRecord` / `addManualCase` / `updateCaseDataAdmin` / `updateSettingsAdmin`
+- **Babel CDN バージョン固定 + SRI**: `@babel/standalone` を未バージョン指定から `@7.29.4` に固定し、SRI (sha384) ハッシュと `crossorigin` 属性を追加
+
+### Fixed
+- `コード.js` ヘッダーコメントのバージョン表記を v1.11.1 → v1.11.3 に修正
+
+---
+
 本ドキュメントは [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) 形式に準拠する。
 バージョン番号は [Semantic Versioning](https://semver.org/) に基づく（Minor = 機能追加、Patch = バグ修正・改善）。
 
