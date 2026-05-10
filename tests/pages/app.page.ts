@@ -127,7 +127,7 @@ export class AppPage {
    * ⚠️ アクションボタンは fixed bottom-6 のフローティングバーにあり、
    *    .max-w-3xl の外側に配置されている。
    */
-  getActionButton(label: string): Locator {
+  getActionButton(label: string | RegExp): Locator {
     return this.actionBar.getByRole('button', { name: label });
   }
 

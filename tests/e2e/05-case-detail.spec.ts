@@ -41,19 +41,20 @@ test.describe('ケース詳細パネル', () => {
     await expect(appPage.page.locator('.max-w-3xl').getByText('テスト太郎')).toBeVisible();
   });
 
-  test('完了ケースに「再開する」ボタンが表示される（supportCount < 上限）', async ({ appPage }) => {
+  test('完了ケースに「N回目を開始」ボタンが表示される（supportCount < 上限）', async ({ appPage }) => {
     await appPage.clickTab('完了');
-    // パターン7: yamada 2回目で完了、currentFiscalYearCount=3（再開可能）
+    // パターン7: yamada 2回目で完了 → 「3回目を開始」ボタンが表示される
     await appPage.selectCase('やまだ訪問介護ステーション');
-    const reopenBtn = appPage.getActionButton('再開する');
+    // ボタンテキストは "{supportCount+1}回目を開始" の形式
+    const reopenBtn = appPage.getActionButton(/\d+回目を開始/);
     await expect(reopenBtn).toBeVisible();
   });
 
-  test('完了ケース（3回目 & 上限）には「再開する」ボタンが表示されない', async ({ appPage }) => {
+  test('完了ケース（3回目 & 上限）には「N回目を開始」ボタンが表示されない', async ({ appPage }) => {
     await appPage.clickTab('完了');
-    // パターン8: ito supportCount=3（上限）
+    // パターン8: ito supportCount=3（上限 = 3回目完了）→ ボタン非表示
     await appPage.selectCase('いとう在宅ケアセンター');
-    const reopenBtn = appPage.getActionButton('再開する');
+    const reopenBtn = appPage.getActionButton(/\d+回目を開始/);
     await expect(reopenBtn).not.toBeVisible();
   });
 
