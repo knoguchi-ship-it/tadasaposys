@@ -1173,7 +1173,7 @@
                     end: ev.end,
                     backgroundColor: calColor,
                     borderColor: calColor,
-                    textColor: '#1e293b',
+                    textColor: '#ffffff',
                     editable: false,
                     extendedProps: { calendarName: ev.calendarName }
                   });
@@ -2504,8 +2504,9 @@
         const dt = editFormData.scheduledDateTime;
         const method = editFormData.method || '';
         const dur = Number(editFormData.duration) || 60;
-        const willTouchSharedCalendar = method === 'Zoom' || (method === 'GoogleMeet' && useCalendar);
-        if (!dt || !willTouchSharedCalendar) {
+        // v1.11.9-r2: 重複チェックは方法=Zoom 時のみ有効（Zoom以外は重複OK）
+        const needsConflictCheck = method === 'Zoom';
+        if (!dt || !needsConflictCheck) {
           setConflictState({ status: 'idle', conflicts: [], bufferMin: 30, error: null });
           return;
         }

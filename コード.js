@@ -1857,11 +1857,10 @@ function updateSupportRecord(recordData) {
 
   let currentEventId = data[rowIndex - 1][IDX.RECORDS.EVENT_ID];
 
-  // v1.11.8: 重複検知（書込み直前）。Zoom強制登録 / GoogleMeet+useCalendar の場合に適用。
-  // skipConflictCheck=true でバイパス可能（フロントが再確認を放棄する場合）。
-  let willTouchSharedCalendar = recordData.scheduledDateTime && !currentMeetUrl &&
-    (recordData.method === 'Zoom' || (recordData.method === 'GoogleMeet' && !recordData.skipCalendar));
-  if (willTouchSharedCalendar && !recordData.skipConflictCheck) {
+  // v1.11.9-r2: 重複検知は方法=Zoom 時のみ実行（Zoom以外はチェックなし）
+  // skipConflictCheck=true でバイパス可能。
+  let needsConflictCheck = recordData.scheduledDateTime && !currentMeetUrl && recordData.method === 'Zoom';
+  if (needsConflictCheck && !recordData.skipConflictCheck) {
     let confDur = (recordData.duration && Number(recordData.duration) > 0) ? Number(recordData.duration) : 60;
     let conflictResult = checkScheduleConflict(recordData.scheduledDateTime, confDur, currentEventId || null);
     if (conflictResult.hasConflict) {
