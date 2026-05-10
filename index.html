@@ -51,8 +51,10 @@
     @keyframes slideInBottom { from { transform: translateY(1rem); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
   </style>
 
-  <!-- Babel for JSX transformation in browser -->
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Babel for JSX transformation in browser (version pinned + SRI, ADR-004準拠) -->
+  <script src="https://unpkg.com/@babel/standalone@7.29.4/babel.min.js"
+          integrity="sha384-qVgGRi0TCdh+xrBD9+4kG0YlkbOkWu2J3CB46EekpYQmtM96n9v+uaKIS5ipaqKb"
+          crossorigin="anonymous"></script>
 
   <!-- Import Map: React 18.2.0 固定 (ADR-004) -->
   <script type="importmap">

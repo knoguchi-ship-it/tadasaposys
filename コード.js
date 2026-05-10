@@ -1,5 +1,5 @@
 /**
- * タダサポ管理システム - Backend Logic (v1.11.1)
+ * タダサポ管理システム - Backend Logic (v1.11.3)
  *
  * 概要:
  * - Google Spreadsheets をデータベースとして利用
@@ -175,6 +175,22 @@ function parseBoolean_(v, defaultValue) {
   var raw = String(v || '').trim().toLowerCase();
   if (!raw) return !!defaultValue;
   return raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on';
+}
+
+/**
+ * スプレッドシートへの書き込み前にユーザー入力を無害化する（数式インジェクション防止）。
+ * Google Sheets は '=' '+' '-' '@' で始まる文字列を数式・特殊値として評価するため、
+ * 先頭にアポストロフィを付与してテキストとして強制解釈させる。
+ * 参考: OWASP A03:2025, Google Sheets formula injection best practices
+ */
+function sanitizeForSheet_(value) {
+  if (typeof value !== 'string') return value;
+  if (value.length === 0) return value;
+  // 数式インジェクションを引き起こす先頭文字を無害化
+  if (/^[=+\-@\t\r]/.test(value)) {
+    return "'" + value;
+  }
+  return value;
 }
 
 function getStaffRoleByEmail_(email) {
@@ -1690,7 +1706,7 @@ function updateSupportRecord(recordData) {
     curRow[IDX.RECORDS.COUNT],                                                  // COUNT(5)
     recordData.method,                                                          // METHOD(6)
     curRow[IDX.RECORDS.BUSINESS],                                               // BUSINESS(7)
-    recordData.content,                                                         // CONTENT(8)
+    sanitizeForSheet_(recordData.content),                                      // CONTENT(8)
     curRow[IDX.RECORDS.REMARKS],                                                // REMARKS(9)
     curRow[IDX.RECORDS.HISTORY],                                                // HISTORY(10)
     newEventId || curRow[IDX.RECORDS.EVENT_ID],                                 // EVENT_ID(11)
@@ -1721,20 +1737,20 @@ function updateSupportRecord(recordData) {
     if (isManual && manualSh) {
       // 手動案件: CASES_MANUAL シートに直接書き込み
       if (recordData.prefecture !== undefined && recordData.prefecture !== null) {
-        manualSh.getRange(manualRowIdx, IDX.CASES.PREFECTURE + 1).setValue(String(recordData.prefecture).trim());
+        manualSh.getRange(manualRowIdx, IDX.CASES.PREFECTURE + 1).setValue(sanitizeForSheet_(String(recordData.prefecture).trim()));
       }
       if (recordData.serviceType !== undefined && recordData.serviceType !== null) {
-        manualSh.getRange(manualRowIdx, IDX.CASES.SERVICE + 1).setValue(String(recordData.serviceType).trim());
+        manualSh.getRange(manualRowIdx, IDX.CASES.SERVICE + 1).setValue(sanitizeForSheet_(String(recordData.serviceType).trim()));
       }
     } else if (caseRowIdx !== -1) {
       // 通常案件: 案件補正シートに書き込み
       var ovrSheet = ensureCasesOverrideSheet_(ss);
       var ovrRowIdx = getOrCreateOverrideRowIndex_(ovrSheet, caseId);
       if (recordData.prefecture !== undefined && recordData.prefecture !== null) {
-        ovrSheet.getRange(ovrRowIdx, IDX.CASES_OVERRIDE.PREFECTURE + 1).setValue(String(recordData.prefecture).trim());
+        ovrSheet.getRange(ovrRowIdx, IDX.CASES_OVERRIDE.PREFECTURE + 1).setValue(sanitizeForSheet_(String(recordData.prefecture).trim()));
       }
       if (recordData.serviceType !== undefined && recordData.serviceType !== null) {
-        ovrSheet.getRange(ovrRowIdx, IDX.CASES_OVERRIDE.SERVICE + 1).setValue(String(recordData.serviceType).trim());
+        ovrSheet.getRange(ovrRowIdx, IDX.CASES_OVERRIDE.SERVICE + 1).setValue(sanitizeForSheet_(String(recordData.serviceType).trim()));
       }
     }
   }
@@ -2122,7 +2138,7 @@ function updateSettingsAdmin(patch) {
       for (var i = 1; i < data.length; i++) {
         if (String(data[i][0]) === key) {
           before[key] = String(data[i][2] || '');
-          sheet.getRange(i + 1, 3).setValue(String(patch[key] || ''));
+          sheet.getRange(i + 1, 3).setValue(sanitizeForSheet_(String(patch[key] || '')));
           after[key] = String(patch[key] || '');
           found = true;
           break;
@@ -2130,7 +2146,7 @@ function updateSettingsAdmin(patch) {
       }
       if (!found) {
         // シートに行がない場合は末尾に追加して保存
-        var newVal = String(patch[key] || '');
+        var newVal = sanitizeForSheet_(String(patch[key] || ''));
         var label = SETTINGS_LABEL_MAP_[key] || key;
         var newRow = sheet.getLastRow() + 1;
         sheet.appendRow([key, label, newVal, '', '']);
@@ -2406,11 +2422,11 @@ function addManualCase(payload) {
   sheet.appendRow([
     pk,
     payload.email,
-    payload.officeName,
-    payload.requesterName,
-    payload.details,
-    payload.prefecture || '',
-    payload.serviceType || ''
+    sanitizeForSheet_(String(payload.officeName)),
+    sanitizeForSheet_(String(payload.requesterName)),
+    sanitizeForSheet_(String(payload.details)),
+    sanitizeForSheet_(String(payload.prefecture || '')),
+    sanitizeForSheet_(String(payload.serviceType || ''))
   ]);
 
   appendAuditLog_(actor, 'add_manual_case', 'case', pk, null, {
@@ -2780,19 +2796,19 @@ function updateCaseDataAdmin(caseId, payload) {
           manualSheet.getRange(manualRowIndex, IDX.CASES.EMAIL + 1).setValue(String(casePatch.email || '').trim());
         }
         if (Object.prototype.hasOwnProperty.call(casePatch, 'officeName')) {
-          manualSheet.getRange(manualRowIndex, IDX.CASES.OFFICE + 1).setValue(String(casePatch.officeName || '').trim());
+          manualSheet.getRange(manualRowIndex, IDX.CASES.OFFICE + 1).setValue(sanitizeForSheet_(String(casePatch.officeName || '').trim()));
         }
         if (Object.prototype.hasOwnProperty.call(casePatch, 'requesterName')) {
-          manualSheet.getRange(manualRowIndex, IDX.CASES.NAME + 1).setValue(String(casePatch.requesterName || '').trim());
+          manualSheet.getRange(manualRowIndex, IDX.CASES.NAME + 1).setValue(sanitizeForSheet_(String(casePatch.requesterName || '').trim()));
         }
         if (Object.prototype.hasOwnProperty.call(casePatch, 'details')) {
-          manualSheet.getRange(manualRowIndex, IDX.CASES.DETAILS + 1).setValue(String(casePatch.details || '').trim());
+          manualSheet.getRange(manualRowIndex, IDX.CASES.DETAILS + 1).setValue(sanitizeForSheet_(String(casePatch.details || '').trim()));
         }
         if (Object.prototype.hasOwnProperty.call(casePatch, 'prefecture')) {
-          manualSheet.getRange(manualRowIndex, IDX.CASES.PREFECTURE + 1).setValue(String(casePatch.prefecture || '').trim());
+          manualSheet.getRange(manualRowIndex, IDX.CASES.PREFECTURE + 1).setValue(sanitizeForSheet_(String(casePatch.prefecture || '').trim()));
         }
         if (Object.prototype.hasOwnProperty.call(casePatch, 'serviceType')) {
-          manualSheet.getRange(manualRowIndex, IDX.CASES.SERVICE + 1).setValue(String(casePatch.serviceType || '').trim());
+          manualSheet.getRange(manualRowIndex, IDX.CASES.SERVICE + 1).setValue(sanitizeForSheet_(String(casePatch.serviceType || '').trim()));
         }
       } else {
         // 通常案件: 案件補正シートに書き込み
@@ -2801,19 +2817,19 @@ function updateCaseDataAdmin(caseId, payload) {
           overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.EMAIL + 1).setValue(String(casePatch.email || '').trim());
         }
         if (Object.prototype.hasOwnProperty.call(casePatch, 'officeName')) {
-          overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.OFFICE + 1).setValue(String(casePatch.officeName || '').trim());
+          overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.OFFICE + 1).setValue(sanitizeForSheet_(String(casePatch.officeName || '').trim()));
         }
         if (Object.prototype.hasOwnProperty.call(casePatch, 'requesterName')) {
-          overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.NAME + 1).setValue(String(casePatch.requesterName || '').trim());
+          overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.NAME + 1).setValue(sanitizeForSheet_(String(casePatch.requesterName || '').trim()));
         }
         if (Object.prototype.hasOwnProperty.call(casePatch, 'details')) {
-          overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.DETAILS + 1).setValue(String(casePatch.details || '').trim());
+          overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.DETAILS + 1).setValue(sanitizeForSheet_(String(casePatch.details || '').trim()));
         }
         if (Object.prototype.hasOwnProperty.call(casePatch, 'prefecture')) {
-          overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.PREFECTURE + 1).setValue(String(casePatch.prefecture || '').trim());
+          overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.PREFECTURE + 1).setValue(sanitizeForSheet_(String(casePatch.prefecture || '').trim()));
         }
         if (Object.prototype.hasOwnProperty.call(casePatch, 'serviceType')) {
-          overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.SERVICE + 1).setValue(String(casePatch.serviceType || '').trim());
+          overrideSheet.getRange(overrideRowIndex, IDX.CASES_OVERRIDE.SERVICE + 1).setValue(sanitizeForSheet_(String(casePatch.serviceType || '').trim()));
         }
       }
     }
@@ -2857,10 +2873,10 @@ function updateCaseDataAdmin(caseId, payload) {
       recordSheet.getRange(recordRowIndex, IDX.RECORDS.BUSINESS + 1).setValue(String(recordPatch.businessType || '').trim());
     }
     if (Object.prototype.hasOwnProperty.call(recordPatch, 'content')) {
-      recordSheet.getRange(recordRowIndex, IDX.RECORDS.CONTENT + 1).setValue(String(recordPatch.content || '').trim());
+      recordSheet.getRange(recordRowIndex, IDX.RECORDS.CONTENT + 1).setValue(sanitizeForSheet_(String(recordPatch.content || '').trim()));
     }
     if (Object.prototype.hasOwnProperty.call(recordPatch, 'remarks')) {
-      recordSheet.getRange(recordRowIndex, IDX.RECORDS.REMARKS + 1).setValue(String(recordPatch.remarks || '').trim());
+      recordSheet.getRange(recordRowIndex, IDX.RECORDS.REMARKS + 1).setValue(sanitizeForSheet_(String(recordPatch.remarks || '').trim()));
     }
     if (Object.prototype.hasOwnProperty.call(recordPatch, 'eventId')) {
       recordSheet.getRange(recordRowIndex, IDX.RECORDS.EVENT_ID + 1).setValue(String(recordPatch.eventId || '').trim());
