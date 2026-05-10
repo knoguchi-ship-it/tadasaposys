@@ -1,5 +1,43 @@
 # Changelog
 
+## [1.11.6] - 2026-05-10
+
+### Fixed
+- **管理機能ステータス遷移バグ完全修正**（11件の致命的・重大バグ）
+  - `adminTransitionStatus_()` を新設し、全管理者経由のSTATUS変更を統一処理
+  - `completed → inProgress`: HISTORY保存 + supportCount+1 + フィールドクリア（reopenCase相当）
+  - `→ unhandled`: STAFF/DATE/METHOD/CONTENT/REMARKS/MEET_URL/ATTACHMENTS/TOOLS/SUB_STAFF を全クリア
+  - `reassignCaseAdmin`: unhandled以外では STATUS を変更しない（旧: 常にinProgressに強制）
+  - `updateCaseDataAdmin` の `status`: `adminTransitionStatus_()` 経由に変更
+  - `scheduledDateTime`: フロントで空欄時はpayloadから除外（日程の誤消去防止）
+  - `supportCount`: フロントで空欄時はpayloadから除外（誤リセット防止）
+  - `applyCaseTransitionResult()` 追加: API戻り値で全フィールドを正確に楽観的更新
+
+### Added
+- `completed → inProgress`（管理者経由）で上限超過時は `caseLimitOverride` を自動 +1
+- `adminTransitionStatus_()` が戻り値で全変更フィールドのサマリを返す
+
+### Fixed (インフラ)
+- `.claspignore` に `node_modules/`・テスト関連ファイルを追加（clasp push エラー修正）
+
+---
+
+## [1.11.5] - 2026-05-10
+
+### Added
+- **GitHub Actions CI**: `.github/workflows/playwright.yml` を追加（ubuntu-latest / Node22 / 失敗時アーティファクト保存）
+- **Jest 単体テスト（34テスト）**: `getFiscalYear` / `sanitizeForSheet_` / `parseNullablePositiveInteger_` / `normalizeEmail_` / `parseBoolean_` 等のビジネスロジック
+
+### Fixed
+- **WCAG 2.1 AA color-contrast 全違反修正**: `text-slate-400→text-slate-500`（91件）、新着バッジ `bg-rose-500→bg-rose-600`、月間件数バッジ等
+- `07-a11y.spec.ts` から `disableRules(['color-contrast'])` を削除（8/8 PASS 確認）
+
+### Changed
+- `コード.js`: 関数内 `var` 795件を `let` に移行（top-level GAS グローバル 10件は `var` 維持）
+- `docs/HANDOVER.md`: リファクタリングロードマップ（§8）を追記
+
+---
+
 ## [1.11.4] - 2026-05-10
 
 ### Security

@@ -9,7 +9,7 @@
 
 介護事業所向け無料 IT サポート管理システム。GAS 上の React SPA で、Google スプレッドシートをデータストアとして使用。
 
-- **現行バージョン:** v1.11.3
+- **現行バージョン:** v1.11.6
 - **詳細設計:** `docs/SDD.md`
 - **引き継ぎ書:** `docs/HANDOVER.md`
 - **運用手順:** `docs/RUNBOOK.md`
@@ -121,6 +121,8 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 
 **v1.11.0 以降の初回デプロイ後:** GAS エディタで `setupScheduledEmailTrigger()` を1回手動実行（予約送信の5分間隔トリガ登録）。
 
+**⚠️ `clasp push` 前に `.claspignore` を確認**: `node_modules/` が除外対象に含まれていることを確認すること（含まれていないと GAS がエラーになる）。
+
 詳細手順・ロールバック・インシデント対応: `docs/RUNBOOK.md`
 
 ---
@@ -152,8 +154,8 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 |---------|------|------|
 | `CLAUDE.md`（本ファイル） | Claude Code 専用指示 | Claude Code |
 | `AGENTS.md` | OpenAI Codex 専用指示 | OpenAI Codex |
-| `docs/SDD.md` | システム詳細設計書 v1.11.3 | AI・開発者 |
-| `docs/HANDOVER.md` | 引き継ぎ書 v1.11.3 | 開発者 |
+| `docs/SDD.md` | システム詳細設計書 v1.11.6 | AI・開発者 |
+| `docs/HANDOVER.md` | 引き継ぎ書 v1.11.6 | 開発者 |
 | `docs/ADR.md` | アーキテクチャ判断記録 | AI・開発者 |
 | `docs/RUNBOOK.md` | 運用手順書（デプロイ・障害対応） | 開発者・運用者 |
 | `docs/Manual.md` | 操作マニュアル v1.11.3 | エンドユーザー |
