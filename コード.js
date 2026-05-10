@@ -1,5 +1,5 @@
 /**
- * タダサポ管理システム - Backend Logic (v1.11.3)
+ * タダサポ管理システム - Backend Logic (v1.11.7)
  *
  * 概要:
  * - Google Spreadsheets をデータベースとして利用
@@ -168,6 +168,40 @@ function parseNullablePositiveInteger_(value) {
 
 function normalizeEmail_(email) {
   return String(email || '').trim().toLowerCase();
+}
+
+// ── 日程・カレンダー関連の設定ヘルパー（v1.11.7）─────────────
+function getScheduleBufferMin_() {
+  let raw = String(getSetting_('SCHEDULE_BUFFER_MIN', '30') || '').trim();
+  let num = Number(raw);
+  if (!isFinite(num) || num < 0) return 30;
+  return Math.floor(num);
+}
+
+function getTeamCalendarId_() {
+  let id = String(getSetting_('TEAM_CALENDAR_ID', '') || '').trim();
+  if (id) return id;
+  let fallback = String(getSetting_('SHARED_CALENDAR_ID', '') || '').trim();
+  return fallback || '';
+}
+
+function parseDisplayCalendarsJson_(raw) {
+  if (!raw) return [];
+  let parsed;
+  try { parsed = JSON.parse(String(raw)); } catch (e) { return []; }
+  if (!Array.isArray(parsed)) return [];
+  let result = [];
+  for (let i = 0; i < parsed.length; i++) {
+    let item = parsed[i] || {};
+    let name = String(item.name || '').trim();
+    let id = String(item.id || '').trim();
+    if (id) result.push({ name: name || id, id: id });
+  }
+  return result;
+}
+
+function getDisplayCalendars_() {
+  return parseDisplayCalendarsJson_(getSetting_('DISPLAY_CALENDARS_JSON', ''));
 }
 
 function parseBoolean_(v, defaultValue) {
@@ -1483,6 +1517,144 @@ function createGoogleMeetEvent(title, startTime, description, durationMinutes) {
 }
 
 // ======================================================================
+// 日程の確定・変更：空き状況取得 ＆ 重複検知（v1.11.7）
+// ======================================================================
+/**
+ * 2つの時間帯が重なるか判定する（端点接触は重なり扱いにしない）
+ * pure: テスト容易。境界値: aEnd === bStart の場合は false
+ */
+function eventsOverlap_(aStart, aEnd, bStart, bEnd) {
+  let as = (aStart instanceof Date) ? aStart.getTime() : new Date(aStart).getTime();
+  let ae = (aEnd instanceof Date) ? aEnd.getTime() : new Date(aEnd).getTime();
+  let bs = (bStart instanceof Date) ? bStart.getTime() : new Date(bStart).getTime();
+  let be = (bEnd instanceof Date) ? bEnd.getTime() : new Date(bEnd).getTime();
+  return as < be && ae > bs;
+}
+
+/**
+ * 開始時刻と継続分から「バッファ込み占有時間帯」を返す。pure。
+ * 戻り値: { start: Date, end: Date }
+ */
+function computeBufferedWindow_(start, durationMin, bufferMin) {
+  let s = (start instanceof Date) ? new Date(start.getTime()) : new Date(start);
+  let dur = Math.max(0, Number(durationMin) || 0);
+  let buf = Math.max(0, Number(bufferMin) || 0);
+  let plain = new Date(s.getTime() + dur * 60000);
+  return {
+    start: new Date(s.getTime() - buf * 60000),
+    end: new Date(plain.getTime() + buf * 60000),
+    plainStart: s,
+    plainEnd: plain
+  };
+}
+
+/**
+ * 期間内のチームカレンダー＋表示専用カレンダーのイベントを返す。
+ * 日程確定モーダル内のカレンダーUI（Phase3）で利用。
+ * @param {string} rangeStartIso ISO日時
+ * @param {string} rangeEndIso   ISO日時
+ * @returns {{events: Array, settings: {bufferMin: number, teamCalendarId: string, displayCalendars: Array}}}
+ */
+function getScheduleAvailability(rangeStartIso, rangeEndIso) {
+  ensureAdminSchema_();
+  let start = rangeStartIso ? new Date(rangeStartIso) : new Date();
+  let end = rangeEndIso ? new Date(rangeEndIso) : new Date(start.getTime() + 30 * 24 * 3600 * 1000);
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+    throw new Error('期間の指定が不正です。');
+  }
+
+  let teamId = getTeamCalendarId_();
+  let displays = getDisplayCalendars_();
+  let bufferMin = getScheduleBufferMin_();
+
+  let result = { events: [], errors: [], settings: { bufferMin: bufferMin, teamCalendarId: teamId, displayCalendars: displays } };
+
+  let fetchFrom = function(calendarId, label, isEditable) {
+    if (!calendarId) return [];
+    let cal;
+    try { cal = CalendarApp.getCalendarById(calendarId); } catch (e) { cal = null; }
+    if (!cal) {
+      result.errors.push((label || calendarId) + ' にアクセスできませんでした');
+      return [];
+    }
+    let events;
+    try { events = cal.getEvents(start, end); } catch (e) {
+      result.errors.push((label || calendarId) + ' のイベント取得に失敗しました');
+      return [];
+    }
+    let mapped = [];
+    for (let i = 0; i < events.length; i++) {
+      let ev = events[i];
+      mapped.push({
+        id: ev.getId(),
+        calendarId: calendarId,
+        calendarName: label || calendarId,
+        title: ev.getTitle() || '(無題)',
+        start: ev.getStartTime().toISOString(),
+        end: ev.getEndTime().toISOString(),
+        isEditable: !!isEditable
+      });
+    }
+    return mapped;
+  };
+
+  if (teamId) result.events.push.apply(result.events, fetchFrom(teamId, 'チームカレンダー', true));
+  for (let i = 0; i < displays.length; i++) {
+    result.events.push.apply(result.events, fetchFrom(displays[i].id, displays[i].name, false));
+  }
+  return result;
+}
+
+/**
+ * 指定日時帯がチーム＋表示専用カレンダーと重複していないか判定する。
+ * バッファ込みで判定し、重複があれば一覧を返す。
+ * @param {string} startIso             希望開始時刻（ISO）
+ * @param {number} durationMin          希望継続時間（分）
+ * @param {string} [excludeEventId]     除外したいイベントID（編集中の自分自身）
+ * @returns {{hasConflict: boolean, conflicts: Array, bufferMin: number}}
+ */
+function checkScheduleConflict(startIso, durationMin, excludeEventId) {
+  if (!startIso) throw new Error('開始日時が必要です。');
+  let bufferMin = getScheduleBufferMin_();
+  let win = computeBufferedWindow_(new Date(startIso), durationMin, bufferMin);
+  if (isNaN(win.start.getTime()) || isNaN(win.end.getTime())) {
+    throw new Error('日時のパースに失敗しました。');
+  }
+
+  let teamId = getTeamCalendarId_();
+  let displays = getDisplayCalendars_();
+  let allCals = [];
+  if (teamId) allCals.push({ id: teamId, name: 'チームカレンダー' });
+  for (let i = 0; i < displays.length; i++) allCals.push({ id: displays[i].id, name: displays[i].name });
+
+  let exclude = String(excludeEventId || '');
+  let conflicts = [];
+
+  for (let c = 0; c < allCals.length; c++) {
+    let cal;
+    try { cal = CalendarApp.getCalendarById(allCals[c].id); } catch (e) { cal = null; }
+    if (!cal) continue;
+    let events;
+    try { events = cal.getEvents(win.start, win.end); } catch (e) { continue; }
+    for (let i = 0; i < events.length; i++) {
+      let ev = events[i];
+      if (exclude && ev.getId() === exclude) continue;
+      let evWin = computeBufferedWindow_(ev.getStartTime(), Math.round((ev.getEndTime().getTime() - ev.getStartTime().getTime()) / 60000), bufferMin);
+      if (eventsOverlap_(win.start, win.end, evWin.start, evWin.end)) {
+        conflicts.push({
+          calendarName: allCals[c].name,
+          title: ev.getTitle() || '(無題)',
+          start: ev.getStartTime().toISOString(),
+          end: ev.getEndTime().toISOString()
+        });
+      }
+    }
+  }
+
+  return { hasConflict: conflicts.length > 0, conflicts: conflicts, bufferMin: bufferMin };
+}
+
+// ======================================================================
 // 既存カレンダーイベントの日時を更新
 // ======================================================================
 function getApiCalendarId_() {
@@ -1882,6 +2054,12 @@ function getEditableSettingsKeys_() {
     'ZOOM_ACCOUNT_ID',
     'ZOOM_CLIENT_ID',
     'ZOOM_CLIENT_SECRET',
+    'ZOOM_FIXED_URL',
+    'ZOOM_FIXED_ID',
+    'ZOOM_FIXED_PASS',
+    'TEAM_CALENDAR_ID',
+    'DISPLAY_CALENDARS_JSON',
+    'SCHEDULE_BUFFER_MIN',
     'SUPPORT_TOOLS',
     'TOOL_MONTHLY_LIMITS'
   ];
@@ -2111,6 +2289,12 @@ var SETTINGS_LABEL_MAP_ = {
   ZOOM_ACCOUNT_ID:             'Zoom Account ID',
   ZOOM_CLIENT_ID:              'Zoom Client ID',
   ZOOM_CLIENT_SECRET:          'Zoom Client Secret',
+  ZOOM_FIXED_URL:              '固定Zoom URL（いつものタダスクID）',
+  ZOOM_FIXED_ID:               '固定Zoom ID',
+  ZOOM_FIXED_PASS:             '固定Zoomパスコード',
+  TEAM_CALENDAR_ID:            'チームカレンダーID（書込先）',
+  DISPLAY_CALENDARS_JSON:      '表示専用カレンダー（JSON）',
+  SCHEDULE_BUFFER_MIN:         '予約前後インターバル（分）',
   SUPPORT_TOOLS:               '対応ツール一覧'
 };
 
@@ -3239,11 +3423,20 @@ function setupSettingsSheet() {
     ['ZOOM_ACCOUNT_ID',    'アカウント ID',            '', 'aBcDeFgHiJkLmN_12345',              'Zoom Marketplace → アプリ管理 → 「Account ID」の値。\nZoom連携を使わない場合は空欄でOK。'],
     ['ZOOM_CLIENT_ID',     'クライアント ID',          '', 'xYz123AbC456dEf',                   '同画面の「Client ID」の値。'],
     ['ZOOM_CLIENT_SECRET', 'クライアントシークレット', '', 'a1B2c3D4e5F6g7H8i9J0',             '同画面の「Client Secret」の値。\n※外部に漏らさないでください。'],
+    ['ZOOM_FIXED_URL',     '固定Zoom URL',             '', 'https://zoom.us/j/97381145741?pwd=...', '「いつものタダスクID」モードで再利用する固定 Zoom ミーティングの参加URL。\n空欄の場合は固定IDモードを使用しません（毎回新規発行）。'],
+    ['ZOOM_FIXED_ID',      '固定Zoom ID',              '', '973 8114 5741',                     '「いつものタダスクID」の Zoom ミーティング ID（ハイフン/スペース可）。'],
+    ['ZOOM_FIXED_PASS',    '固定Zoomパスコード',       '', 'tadasc',                            '「いつものタダスクID」の参加パスコード。'],
 
     // カテゴリ: カレンダー連携
     ['#カレンダー', 'カレンダー連携設定', '', '', ''],
     ['SHARED_CALENDAR_ID', '共有カレンダー ID',        '', 'abc123xyz@group.calendar.google.com', 'タダサポ共有カレンダーのID。\nGoogleカレンダー → 設定 → カレンダーID で確認できます。\n空欄の場合は担当者のデフォルトカレンダーに作成します。'],
     ['ATTACHMENT_FOLDER_ID', '添付ファイル保存先フォルダID', '', '1AbCdEfGhIjKlMnOpQrStUvWxYz', '完了報告/記録修正でアップロードした添付ファイルの保存先Google DriveフォルダID。\nGoogle Drive フォルダURLの /folders/ の後ろの値を入力してください。'],
+
+    // カテゴリ: 日程・予約管理（v1.11.7）
+    ['#日程・予約管理', '日程・予約管理設定（v1.11.7+）', '', '', ''],
+    ['TEAM_CALENDAR_ID', 'チームカレンダー ID（書込先）', 'c_c6938b18dde61c51ff917d22bea83e6852d1b960250fd583cf0993865cd0172d@group.calendar.google.com', 'xxx@group.calendar.google.com', 'Zoom予約・日程確定時に必ず登録するチーム共有カレンダーのID。\n空欄の場合は SHARED_CALENDAR_ID にフォールバックします。\n方法=Zoomの場合は本IDへの登録が強制されます（重複防止）。'],
+    ['DISPLAY_CALENDARS_JSON', '表示専用カレンダー（重複監視）', '[{"name":"タダスク","id":"c_b6f7dbbd799d55c2ef9f64afb519043a93d11f2408706940f87db8eb2e06d028@group.calendar.google.com"}]', '[{"name":"タダスク","id":"xxx@group.calendar.google.com"}]', '日程の重複検知に使用する読み取り専用カレンダーのリスト（JSON配列）。\nname=表示名, id=カレンダーID。複数登録可。\n空配列「[]」も可。'],
+    ['SCHEDULE_BUFFER_MIN', '予約前後インターバル（分）', '30', '30', '日程確定の重複判定で前後に確保するバッファ時間（分）。\n0以上の整数。デフォルト30分。\n例: 14:00開始の60分予約 + バッファ30分 → 13:30〜15:30 を占有。'],
 
     // カテゴリ: メールテンプレート
     ['#メールテンプレート', 'メールテンプレート設定', '', '', ''],
@@ -4282,6 +4475,88 @@ function sendScheduledRow_(s) {
   // メール履歴に記録
   recordEmail_(s.caseId, scheduledActor, recipientEmail, s.subject, s.body);
   return { status: 'sent' };
+}
+
+/**
+ * v1.11.7 で追加された日程・Zoom予約関連の設定キーを既存の設定シートに追加する。
+ * GASエディタからこの関数を1回だけ手動実行してください。
+ * 既に存在するキーはスキップされます。
+ */
+function addScheduleZoomSettings() {
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
+  if (!sheet) {
+    Logger.log('「設定」シートが見つかりません。先に setupSettingsSheet を実行してください。');
+    return;
+  }
+
+  let data = sheet.getDataRange().getValues();
+  let existingKeys = {};
+  for (let i = 0; i < data.length; i++) existingKeys[String(data[i][0]).trim()] = true;
+
+  // 既に全部あるならスキップ
+  let targetKeys = ['ZOOM_FIXED_URL','ZOOM_FIXED_ID','ZOOM_FIXED_PASS','TEAM_CALENDAR_ID','DISPLAY_CALENDARS_JSON','SCHEDULE_BUFFER_MIN'];
+  let missing = targetKeys.filter(function(k){ return !existingKeys[k]; });
+  if (!missing.length) {
+    Logger.log('日程・Zoom予約関連の設定キーは既に全て存在します。');
+    return;
+  }
+
+  let newRows = [
+    ['#日程・予約管理', '日程・予約管理設定（v1.11.7+）', '', '', ''],
+    ['ZOOM_FIXED_URL',     '固定Zoom URL',             '', 'https://zoom.us/j/97381145741?pwd=...', '「いつものタダスクID」モードで再利用する固定 Zoom ミーティングの参加URL。\n空欄の場合は固定IDモードを使用しません（毎回新規発行）。'],
+    ['ZOOM_FIXED_ID',      '固定Zoom ID',              '', '973 8114 5741',                     '「いつものタダスクID」の Zoom ミーティング ID。'],
+    ['ZOOM_FIXED_PASS',    '固定Zoomパスコード',       '', 'tadasc',                            '「いつものタダスクID」の参加パスコード。'],
+    ['TEAM_CALENDAR_ID',   'チームカレンダー ID（書込先）', 'c_c6938b18dde61c51ff917d22bea83e6852d1b960250fd583cf0993865cd0172d@group.calendar.google.com', 'xxx@group.calendar.google.com', 'Zoom予約・日程確定時に必ず登録するチーム共有カレンダーID。\n空欄時は SHARED_CALENDAR_ID にフォールバック。\n方法=Zoomの場合は本IDへの登録が強制されます（重複防止）。'],
+    ['DISPLAY_CALENDARS_JSON', '表示専用カレンダー（重複監視）', '[{"name":"タダスク","id":"c_b6f7dbbd799d55c2ef9f64afb519043a93d11f2408706940f87db8eb2e06d028@group.calendar.google.com"}]', '[{"name":"タダスク","id":"xxx@group.calendar.google.com"}]', '日程の重複検知に使用する読み取り専用カレンダーのリスト（JSON配列）。\nname=表示名, id=カレンダーID。複数登録可。'],
+    ['SCHEDULE_BUFFER_MIN', '予約前後インターバル（分）', '30', '30', '日程確定の重複判定で前後に確保するバッファ時間（分）。\n0以上の整数。']
+  ];
+
+  // システム情報カテゴリの前に挿入。なければ末尾。
+  let insertBefore = -1;
+  for (let i = 0; i < data.length; i++) {
+    if (String(data[i][0]) === '#システム情報') { insertBefore = i + 1; break; }
+  }
+
+  // 既存キーは飛ばす
+  let toInsert = newRows.filter(function(row){
+    let k = String(row[0]).trim();
+    if (k.charAt(0) === '#') return true;
+    return !existingKeys[k];
+  });
+  // カテゴリ行が単独になりそうなら除く
+  if (toInsert.length === 1 && String(toInsert[0][0]).charAt(0) === '#') return;
+
+  let startRow;
+  if (insertBefore > 0) {
+    sheet.insertRowsBefore(insertBefore, toInsert.length);
+    sheet.getRange(insertBefore, 1, toInsert.length, 5).setValues(toInsert);
+    startRow = insertBefore;
+  } else {
+    let last = sheet.getLastRow();
+    sheet.getRange(last + 1, 1, toInsert.length, 5).setValues(toInsert);
+    startRow = last + 1;
+  }
+
+  // スタイル適用
+  for (let j = 0; j < toInsert.length; j++) {
+    let r = startRow + j;
+    let key = String(toInsert[j][0]);
+    if (key.charAt(0) === '#') {
+      sheet.getRange(r, 1, 1, 5).setBackground('#f0fdfa').setFontColor('#0d9488').setFontWeight('bold').setFontSize(11);
+      sheet.setRowHeight(r, 32);
+    } else {
+      sheet.getRange(r, 3).setBackground('#fffbeb').setBorder(true, true, true, true, null, null, '#f59e0b', SpreadsheetApp.BorderStyle.SOLID).setFontWeight('bold');
+      sheet.getRange(r, 1).setFontColor('#9ca3af').setFontSize(8);
+      sheet.getRange(r, 2).setFontWeight('bold').setFontColor('#1e293b');
+      sheet.getRange(r, 4).setFontColor('#9ca3af').setFontSize(9);
+      sheet.getRange(r, 5).setFontColor('#64748b').setFontSize(9);
+      sheet.setRowHeight(r, 40);
+    }
+  }
+
+  _settingsCache = null;
+  Logger.log('日程・Zoom予約関連の設定行を追加しました（' + toInsert.length + '行）。');
 }
 
 /**

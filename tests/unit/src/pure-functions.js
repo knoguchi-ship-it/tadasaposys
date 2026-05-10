@@ -60,6 +60,56 @@ function parsePositiveIntegerOrDefault(raw, defaultValue) {
   return intNum > 0 ? intNum : Number(defaultValue);
 }
 
+// ── 日程・カレンダー（v1.11.7）────────────────────────────
+// コード.js: parseDisplayCalendarsJson_()
+function parseDisplayCalendarsJson(raw) {
+  if (!raw) return [];
+  var parsed;
+  try { parsed = JSON.parse(String(raw)); } catch (e) { return []; }
+  if (!Array.isArray(parsed)) return [];
+  var result = [];
+  for (var i = 0; i < parsed.length; i++) {
+    var item = parsed[i] || {};
+    var name = String(item.name || '').trim();
+    var id = String(item.id || '').trim();
+    if (id) result.push({ name: name || id, id: id });
+  }
+  return result;
+}
+
+// コード.js: eventsOverlap_()
+function eventsOverlap(aStart, aEnd, bStart, bEnd) {
+  var as = (aStart instanceof Date) ? aStart.getTime() : new Date(aStart).getTime();
+  var ae = (aEnd instanceof Date) ? aEnd.getTime() : new Date(aEnd).getTime();
+  var bs = (bStart instanceof Date) ? bStart.getTime() : new Date(bStart).getTime();
+  var be = (bEnd instanceof Date) ? bEnd.getTime() : new Date(bEnd).getTime();
+  return as < be && ae > bs;
+}
+
+// コード.js: computeBufferedWindow_()
+function computeBufferedWindow(start, durationMin, bufferMin) {
+  var s = (start instanceof Date) ? new Date(start.getTime()) : new Date(start);
+  var dur = Math.max(0, Number(durationMin) || 0);
+  var buf = Math.max(0, Number(bufferMin) || 0);
+  var plain = new Date(s.getTime() + dur * 60000);
+  return {
+    start: new Date(s.getTime() - buf * 60000),
+    end: new Date(plain.getTime() + buf * 60000),
+    plainStart: s,
+    plainEnd: plain
+  };
+}
+
+// コード.js: getScheduleBufferMin_() のパース部分
+// 空文字・null・undefined は default を返す（GAS側は getSetting_ がdefault適用するためここに来ない想定）
+function parseScheduleBufferMin(raw, defaultValue) {
+  var s = String(raw == null ? '' : raw).trim();
+  if (!s) return Number(defaultValue);
+  var num = Number(s);
+  if (!isFinite(num) || num < 0) return Number(defaultValue);
+  return Math.floor(num);
+}
+
 module.exports = {
   getFiscalYear,
   parseNullablePositiveInteger,
@@ -67,4 +117,8 @@ module.exports = {
   parseBoolean,
   sanitizeForSheet,
   parsePositiveIntegerOrDefault,
+  parseDisplayCalendarsJson,
+  eventsOverlap,
+  computeBufferedWindow,
+  parseScheduleBufferMin,
 };

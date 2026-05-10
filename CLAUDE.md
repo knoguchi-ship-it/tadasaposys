@@ -108,7 +108,35 @@ npx serve -s . -l 3000
 
 ## デプロイ
 
+### 🔒 デプロイは必ずバージョンアップ（絶対厳守 / URL不変原則）
+
+**新規デプロイ作成は禁止。** 必ず固定 deploymentId への `-i` 付きバージョン更新で行う。新規デプロイすると Webapp URL が変わり、タダメンに案内済みのブックマーク・QR・メールリンクが全て失効する。
+
+- 固定 deploymentId: `AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ`
+- ✅ 正: `clasp deploy -i AKfycbw...nuq0ZJHhhUQ -d "vX.X.X"`
+- ❌ 禁: `clasp deploy -d "vX.X.X"` / `clasp deploy`（新URL発行）
+- GASエディタ操作時も「新しいデプロイ」ではなく「デプロイを管理 → 既存デプロイの ✏️ 編集 → バージョン: 新バージョン」を使うこと
+
+### 🔒 Webapp 設定グランドルール（絶対厳守）
+
+新規/再デプロイ時、Webapp 設定は**必ず以下に固定**すること。逸脱はセキュリティホール（過去に「実行=自分 / アクセス=Googleアカウント全員」の誤設定で運用された事故あり）。
+
+| 項目 | 必ずこの値 |
+|------|-----------|
+| 次のユーザーとして実行 | **ウェブ アプリケーションにアクセスしているユーザー** (`executeAs: USER_ACCESSING`) |
+| アクセスできるユーザー | **NPO法人タダカヨ 内の全員** (`access: DOMAIN`) |
+
+**禁止設定:**
+- ❌ 実行ユーザー = 自分（`USER_DEPLOYING`）→ 監査・権限境界が崩壊
+- ❌ アクセス = Google アカウントを持つ全員（`ANYONE_WITH_GOOGLE_ACCOUNT`）/ 全員（`ANYONE`）→ ドメイン外流出
+
+`appsscript.json` の `webapp` セクションが上記であることを `clasp push` 前に必ず確認。`clasp deploy` 後はブラウザの GAS デプロイ管理画面で目視確認すること。
+
+### デプロイ手順
+
 ```bash
+# 0. appsscript.json の webapp 設定確認（USER_ACCESSING / DOMAIN）
+
 # 1. 必ず先に git commit（clasp pull でローカルが上書きされる対策）
 git add <files> && git commit -m "feat: vX.X.X - 説明"
 
@@ -117,6 +145,8 @@ clasp push --force
 
 # 3. デプロイ更新
 clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ -d "vX.X.X"
+
+# 4. ブラウザの GAS デプロイ管理画面で「実行=アクセスしているユーザー / アクセス=NPO法人タダカヨ 内の全員」を目視確認
 ```
 
 **v1.11.0 以降の初回デプロイ後:** GAS エディタで `setupScheduledEmailTrigger()` を1回手動実行（予約送信の5分間隔トリガ登録）。

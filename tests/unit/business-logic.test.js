@@ -12,6 +12,10 @@ const {
   parseBoolean,
   sanitizeForSheet,
   parsePositiveIntegerOrDefault,
+  parseDisplayCalendarsJson,
+  eventsOverlap,
+  computeBufferedWindow,
+  parseScheduleBufferMin,
 } = require('./src/pure-functions');
 
 // ============================================================
@@ -215,5 +219,141 @@ describe('parsePositiveIntegerOrDefault', () => {
 
   test('小数は切り捨て', () => {
     expect(parsePositiveIntegerOrDefault('3.9', 10)).toBe(3);
+  });
+});
+
+// ============================================================
+// parseDisplayCalendarsJson — 表示専用カレンダー設定（v1.11.7）
+// ============================================================
+describe('parseDisplayCalendarsJson', () => {
+  test('有効な配列を返す', () => {
+    const raw = '[{"name":"タダスク","id":"abc@group.calendar.google.com"}]';
+    expect(parseDisplayCalendarsJson(raw)).toEqual([
+      { name: 'タダスク', id: 'abc@group.calendar.google.com' }
+    ]);
+  });
+
+  test('複数件の配列', () => {
+    const raw = '[{"name":"A","id":"a@x"},{"name":"B","id":"b@y"}]';
+    expect(parseDisplayCalendarsJson(raw)).toHaveLength(2);
+  });
+
+  test('空文字・null・undefined は空配列', () => {
+    expect(parseDisplayCalendarsJson('')).toEqual([]);
+    expect(parseDisplayCalendarsJson(null)).toEqual([]);
+    expect(parseDisplayCalendarsJson(undefined)).toEqual([]);
+  });
+
+  test('壊れたJSONは空配列', () => {
+    expect(parseDisplayCalendarsJson('{invalid')).toEqual([]);
+    expect(parseDisplayCalendarsJson('not json')).toEqual([]);
+  });
+
+  test('配列でないJSONは空配列', () => {
+    expect(parseDisplayCalendarsJson('{"name":"A"}')).toEqual([]);
+    expect(parseDisplayCalendarsJson('"string"')).toEqual([]);
+  });
+
+  test('id が無いエントリはスキップ', () => {
+    const raw = '[{"name":"NoId"},{"name":"Valid","id":"v@x"}]';
+    expect(parseDisplayCalendarsJson(raw)).toEqual([{ name: 'Valid', id: 'v@x' }]);
+  });
+
+  test('name が無ければ id が name にフォールバック', () => {
+    const raw = '[{"id":"only-id@x"}]';
+    expect(parseDisplayCalendarsJson(raw)).toEqual([{ name: 'only-id@x', id: 'only-id@x' }]);
+  });
+});
+
+// ============================================================
+// eventsOverlap — 時間帯重複判定（v1.11.7）
+// ============================================================
+describe('eventsOverlap', () => {
+  const t = (s) => new Date(s);
+
+  test('完全に重なる', () => {
+    expect(eventsOverlap(t('2026-05-10T10:00'), t('2026-05-10T11:00'),
+                        t('2026-05-10T10:30'), t('2026-05-10T10:45'))).toBe(true);
+  });
+
+  test('部分重複（前にズレ）', () => {
+    expect(eventsOverlap(t('2026-05-10T10:00'), t('2026-05-10T11:00'),
+                        t('2026-05-10T09:30'), t('2026-05-10T10:30'))).toBe(true);
+  });
+
+  test('部分重複（後ろにズレ）', () => {
+    expect(eventsOverlap(t('2026-05-10T10:00'), t('2026-05-10T11:00'),
+                        t('2026-05-10T10:30'), t('2026-05-10T11:30'))).toBe(true);
+  });
+
+  test('境界（端点接触）は重なりなし', () => {
+    expect(eventsOverlap(t('2026-05-10T10:00'), t('2026-05-10T11:00'),
+                        t('2026-05-10T11:00'), t('2026-05-10T12:00'))).toBe(false);
+    expect(eventsOverlap(t('2026-05-10T10:00'), t('2026-05-10T11:00'),
+                        t('2026-05-10T09:00'), t('2026-05-10T10:00'))).toBe(false);
+  });
+
+  test('完全に離れている', () => {
+    expect(eventsOverlap(t('2026-05-10T10:00'), t('2026-05-10T11:00'),
+                        t('2026-05-10T13:00'), t('2026-05-10T14:00'))).toBe(false);
+  });
+
+  test('ISO文字列でも動作する', () => {
+    expect(eventsOverlap('2026-05-10T10:00:00', '2026-05-10T11:00:00',
+                        '2026-05-10T10:30:00', '2026-05-10T10:45:00')).toBe(true);
+  });
+});
+
+// ============================================================
+// computeBufferedWindow — バッファ込み占有時間帯計算（v1.11.7）
+// ============================================================
+describe('computeBufferedWindow', () => {
+  test('60分予約 + バッファ30分', () => {
+    const win = computeBufferedWindow(new Date('2026-05-10T14:00:00'), 60, 30);
+    expect(win.start.toISOString()).toBe(new Date('2026-05-10T13:30:00').toISOString());
+    expect(win.end.toISOString()).toBe(new Date('2026-05-10T15:30:00').toISOString());
+    expect(win.plainStart.toISOString()).toBe(new Date('2026-05-10T14:00:00').toISOString());
+    expect(win.plainEnd.toISOString()).toBe(new Date('2026-05-10T15:00:00').toISOString());
+  });
+
+  test('バッファ0分はそのまま', () => {
+    const win = computeBufferedWindow(new Date('2026-05-10T14:00:00'), 60, 0);
+    expect(win.start.getTime()).toBe(win.plainStart.getTime());
+    expect(win.end.getTime()).toBe(win.plainEnd.getTime());
+  });
+
+  test('負のバッファは 0 として扱う', () => {
+    const win = computeBufferedWindow(new Date('2026-05-10T14:00:00'), 60, -10);
+    expect(win.start.getTime()).toBe(win.plainStart.getTime());
+  });
+
+  test('負の継続時間は 0 として扱う', () => {
+    const win = computeBufferedWindow(new Date('2026-05-10T14:00:00'), -30, 10);
+    expect(win.plainStart.getTime()).toBe(win.plainEnd.getTime());
+  });
+});
+
+// ============================================================
+// parseScheduleBufferMin — バッファ分パース（v1.11.7）
+// ============================================================
+describe('parseScheduleBufferMin', () => {
+  test('正の整数', () => {
+    expect(parseScheduleBufferMin('30', 30)).toBe(30);
+    expect(parseScheduleBufferMin('15', 30)).toBe(15);
+    expect(parseScheduleBufferMin('0', 30)).toBe(0);
+  });
+
+  test('空文字・無効値はデフォルト', () => {
+    expect(parseScheduleBufferMin('', 30)).toBe(30);
+    expect(parseScheduleBufferMin('abc', 30)).toBe(30);
+    expect(parseScheduleBufferMin(null, 30)).toBe(30);
+  });
+
+  test('負の値はデフォルト', () => {
+    expect(parseScheduleBufferMin('-5', 30)).toBe(30);
+  });
+
+  test('小数は切り捨て', () => {
+    expect(parseScheduleBufferMin('29.9', 30)).toBe(29);
   });
 });

@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.11.7] - 2026-05-10
+
+### Added — 日程確定・変更の刷新（Phase 1: バックエンド土台）
+- 設定シートに6キー追加（既存環境向けマイグレーション関数 `addScheduleZoomSettings()`）
+  - `TEAM_CALENDAR_ID`: チームカレンダーID（書込み先）
+  - `DISPLAY_CALENDARS_JSON`: 重複監視する読取専用カレンダー（JSON配列）
+  - `SCHEDULE_BUFFER_MIN`: 予約前後インターバル（分、デフォ30）
+  - `ZOOM_FIXED_URL` / `ZOOM_FIXED_ID` / `ZOOM_FIXED_PASS`: 「いつものタダスクID」用固定Zoom
+- バックエンド関数追加（`コード.js`）
+  - `getScheduleAvailability(rangeStart, rangeEnd)`: チーム+表示専用カレンダーのイベント統合取得（Phase3で利用）
+  - `checkScheduleConflict(start, durationMin, excludeEventId)`: バッファ込み重複判定
+  - 純粋関数 `eventsOverlap_()` / `computeBufferedWindow_()` / `parseDisplayCalendarsJson_()`
+  - 設定ヘルパー `getScheduleBufferMin_()` / `getTeamCalendarId_()` / `getDisplayCalendars_()`
+- 単体テスト 21件追加（合計34→55）
+  - `parseDisplayCalendarsJson` / `eventsOverlap` / `computeBufferedWindow` / `parseScheduleBufferMin`
+- `getEditableSettingsKeys_()` に6キーを追加し、管理者設定ダイアログから編集可能に
+- `setupSettingsSheet()` に「#日程・予約管理」カテゴリを追加（新規セットアップ時）
+
+### Notes
+- Phase 1 では Zoom 発行ロジックは未変更。Phase 2 で `createZoomMeeting_()` を強化し、固定IDモードと統合予定
+- 既存運用の影響なし（新キーは未参照、新関数は未呼出し）
+
+---
+
 ## [1.11.6] - 2026-05-10
 
 ### Fixed
