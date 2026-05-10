@@ -305,8 +305,12 @@ npm run test:unit  # 34テスト / 約0.2秒
 | color-contrast（旧バージョンデータ） | 修正済み | v1.11.5 で全違反を解消。既存 DB 内のデータは未修正 |
 | `updateSupportHistory` 担当者チェックなし | 中リスク残存 | 担当者以外が過去履歴を編集可能（別 Issue で管理） |
 | 管理機能で作成された不整合データ（v1.11.5 以前） | 残存可能性あり | v1.11.6 で今後の操作は整合性保証済み。旧データは修復スクリプトを別途検討 |
-| SDD.md / Manual.md ドキュメント | v1.11.6 対応済み | 2026/05/10 更新 |
+| SDD.md / Manual.md ドキュメント | v1.12.0 対応済み | 2026/05/11 更新 |
 | GitHub Actions CI | ワークフローファイル設定済み | `.github/workflows/playwright.yml` |
+| **GAS 上の `temp/index.html` `temp/コード.js`** | 残存（無害化済み） | clasp push 事故で残存したスタブファイル。doGet 等の関数定義は除去済みで動作影響なし。GAS エディタから手動削除推奨 |
+| **`appsscript.json` の `exceptionLogging`** | 監視継続 | 過去に GAS 側で `STACKDRIVER`→`NONE` に変更された痕跡あり。v1.11.8 デプロイ時に復元済み。デプロイ前は git diff で要確認 |
+| **GoogleMeet 以外（電話/対面/メール等）でのカレンダー登録** | 既存仕様の歪み | UI は「カレンダーに登録します」と表示するが、バックエンドで実装されていない（pre-existing）。Phase 5 候補 |
+| **chiTeam カレンダーへの個人スタッフの書込権限** | 運用前提 | 全タダメンが TEAM_CALENDAR_ID にイベント作成権限を持つ前提。新メンバー追加時は要確認 |
 
 ---
 
@@ -347,21 +351,34 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 
 ### バージョン管理ルール
 
-- `コード.js` 先頭コメント・SDD・HANDOVER のバージョンは常に一致させること
-- 現行: **v1.11.6**
+- `コード.js` 先頭コメント・SDD・HANDOVER・Manual・CHANGELOG・CLAUDE.md・AGENTS.md のバージョンは常に一致させること
+- 現行: **v1.12.0**
+
+### 🔒 デプロイ時の絶対グランドルール（CLAUDE.md / AGENTS.md にも記載）
+
+1. **Webapp 設定固定**: `executeAs: USER_ACCESSING` / `access: DOMAIN`（NPO法人タダカヨ内）
+   - ❌ 禁止: 実行=自分（`USER_DEPLOYING`） / アクセス=Googleアカウント全員（`ANYONE_WITH_GOOGLE_ACCOUNT`）
+   - 過去にこの誤設定でセキュリティホールが発生。介護事業所の個人情報を扱うため再発禁止
+2. **既存 deploymentId へのバージョンアップのみ**: `clasp deploy -i AKfycbw...nuq0ZJHhhUQ -d "vX.X.X"`
+   - ❌ 禁止: `-i` 省略コマンド / GAS の「新しいデプロイ」ボタン
+   - 新規デプロイは URL が変わり、案内済みのブックマーク・QR・メールリンクが全失効する
+3. デプロイ前に `appsscript.json` の `webapp` 設定を git diff で確認、デプロイ後は GAS デプロイ管理画面で目視確認
 
 ---
 
 ## 11. 次フェーズ候補
 
-| ID | 内容 | 優先度 |
-|----|------|--------|
-| R1 | 管理機能不整合データの修復スクリプト | 中 |
-| R2 | `updateSupportHistory` 担当者チェック追加 | 中 |
-| 7-1 | CSV/スプレッドシートエクスポート機能 | 中 |
-| 7-3 | 検索のスマート化（条件保存等） | 低 |
-| T1 | 管理機能ステータス遷移の E2E テスト追加 | 高（v1.11.6の修正を保護） |
-| T2 | `var→let/const` の残り最適化（`const` 候補の特定） | 低 |
+| ID | 内容 | 優先度 | メモ |
+|----|------|--------|------|
+| R1 | 管理機能不整合データの修復スクリプト | 中 | v1.11.5 以前のデータが対象。過去の不整合を一括検出・補正 |
+| R2 | `updateSupportHistory` 担当者チェック追加 | 中 | 担当者以外の過去履歴編集をブロック |
+| **R3** | **GoogleMeet 以外でのカレンダー登録未実装の修正** | **中** | 電話/対面/メール等で useCalendar=ON にしてもイベント未作成（pre-existing バグ） |
+| **R4** | **GAS 上の temp/index.html・temp/コード.js を削除** | **低** | スタブ化済みで無害だがクリーンアップ。GASエディタから手動削除 |
+| 7-1 | CSV/スプレッドシートエクスポート機能 | 中 | 案件・サポート記録のCSV出力 |
+| 7-3 | 検索のスマート化（条件保存等） | 低 | 検索条件のお気に入り機能 |
+| **T1** | **日程確定刷新（v1.11.7-v1.12.0）の E2E テスト追加** | **高** | 重複検知・Zoom強制登録・FullCalendarドラッグ・固定Zoomラジオ。本番カレンダー依存のためモック整備が必要 |
+| T2 | 管理機能ステータス遷移の E2E テスト追加 | 高 | v1.11.6 の修正を保護 |
+| T3 | `var→let/const` の残り最適化（`const` 候補の特定） | 低 | |
 
 ---
 
@@ -383,4 +400,135 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 | **v1.11.7** | 2026/05/10 | 日程確定刷新 Phase 1: バックエンド土台 + 設定キー6個追加 + 自動マイグレーション |
 | **v1.11.8** | 2026/05/10 | Phase 2: 重複検知 + Zoom時チームカレンダー強制登録 |
 | **v1.11.9** | 2026/05/11 | Phase 3: FullCalendar 埋込み（ドラッグ選択 + バッファ可視化） |
-| **v1.12.0** | 2026/05/11 | Phase 4: 「いつものタダスクID」モード追加・ドキュメント完全更新 |
+| **v1.12.0** | 2026/05/11 | Phase 4: 「いつものタダスクID」モード追加・ドキュメント完全更新（@142-143） |
+
+---
+
+## 13. 直近セッション作業ログ（2026/05/10〜2026/05/11）
+
+このセッションで実施した日程確定刷新プロジェクトと整合性監査の記録。次の担当者がコンテキストを引き継ぐためのリファレンス。
+
+### 13-1. 確立したグランドルール（CLAUDE.md / AGENTS.md / RUNBOOK.md に明文化）
+
+- **Webapp 設定固定**: `USER_ACCESSING` / `DOMAIN` から逸脱禁止（過去事故あり）
+- **既存 deploymentId へのバージョンアップのみ**: 新規デプロイ作成は URL 失効を招くため禁止
+
+### 13-2. 日程確定刷新プロジェクト（v1.11.7〜v1.12.0）
+
+**動機:** Zoom がタダスク業務とアカウント共有しており、ダブルブッキング事故が発生。日程確定モーダルに視覚的な空き状況確認と重複検知を導入。
+
+| Phase | バージョン | デプロイ | 主な追加 |
+|-------|----------|--------|--------|
+| 1 | v1.11.7 | @137-138 | バックエンド土台（`getScheduleAvailability` / `checkScheduleConflict` / 純粋関数群）、設定キー6個、自動マイグレーション |
+| 2 | v1.11.8 | @139 | 重複検知UI（赤帯ブロック）、method=Zoom 時のチームカレンダー強制登録 |
+| 3 | v1.11.9 | @140-141 | FullCalendar 6.1.18 グローバルバンドル埋込み、ドラッグ選択、バッファ斜線表示 |
+| 4 | v1.12.0 | @142 | 「いつものタダスクID」（固定Zoom）ラジオモード、全ドキュメント更新 |
+| 整合性 | v1.12.0-r2 | @143 | 整合性監査結果の修正（バージョン文字列・SETTINGS_LABEL_MAP_補完・ADR-011/012追加） |
+
+### 13-3. 仕様変更（要周知）
+
+| 項目 | 旧（〜v1.11.6） | 新（v1.12.0〜） |
+|------|--------------|--------------|
+| 方法=Zoom + カレンダー登録チェックOFF | 何もしない | チームカレンダーには登録（重複防止のため必須） |
+| 重複する日程の送信 | そのまま登録 | 赤帯エラーで送信ブロック |
+| 重複チェック対象 | （なし） | **方法=Zoom 時のみ**（他の方法はチェックなし） |
+| カレンダー視覚化 | datetime-local のみ | FullCalendar の週/月ビュー埋込み |
+
+### 13-4. 設定シート新キー（自動マイグレーションで追加済み）
+
+`ensureAttachmentSchema_()` から `addScheduleZoomSettings()` を自動呼出し（SCHEMA_VERSION_=6）。次回ユーザー初回アクセス時に設定シートへ追加される。
+
+| キー | 既定値 | 用途 |
+|-----|------|-----|
+| `TEAM_CALENDAR_ID` | チームタダカヨカレンダーID | Zoom予約・日程確定の書込み先（強制） |
+| `DISPLAY_CALENDARS_JSON` | `[{"name":"タダスク","id":"..."}]` | 重複監視する読取専用カレンダー |
+| `SCHEDULE_BUFFER_MIN` | `30` | 重複判定で前後に確保するバッファ（分） |
+| `ZOOM_FIXED_URL` | （空） | 「いつものタダスクID」の参加URL |
+| `ZOOM_FIXED_ID` | （空） | 同 ミーティングID |
+| `ZOOM_FIXED_PASS` | （空） | 同 パスコード |
+
+### 13-5. 整合性監査結果（v1.12.0-r2 で修正完了）
+
+監査範囲: 全 `*.md` `*.js` `*.html` `*.json` のバージョン文字列、純粋関数の同期、設定キーの網羅性、ADR の意思決定記録、グランドルール準拠。
+
+修正内容:
+- AGENTS.md / CLAUDE.md / HANDOVER.md / RUNBOOK.md のバージョン表記不整合（8箇所）
+- ADR-011（FullCalendar 採用）/ ADR-012（Zoom 強制登録 + 限定重複検知）追加
+- `SETTINGS_LABEL_MAP_` に欠落していた4キー（`MAIL_NEW_SUBJECT` / `MAIL_SCHEDULE_SUBJECT` / `MAIL_SCHEDULE_BODY` / `TOOL_MONTHLY_LIMITS`）を補完
+
+検証結果:
+```
+Jest 単体テスト   : 55/55 PASS
+JSX 構文          : OK
+pure-functions.js : 10/10 関数同期
+設定キー          : getEditableSettingsKeys_(25) ≡ SETTINGS_LABEL_MAP_(25) ≡ settingsMeta(25)
+Webapp 設定       : USER_ACCESSING / DOMAIN ✅
+deploymentId      : 固定値維持
+```
+
+---
+
+## 14. 次の担当者へのクイックスタート
+
+### 1. 最初に読むもの（30分）
+
+1. **本ファイル `docs/HANDOVER.md`** §1〜§13（現状把握）
+2. **`CLAUDE.md`** または **`AGENTS.md`**（AI 開発支援を使う場合）
+3. **`docs/SDD.md`** §1（データモデルと IDX 定数）
+4. **`docs/ADR.md`**（10件の設計判断）
+
+### 2. ローカル環境構築（10分）
+
+```bash
+git clone <repo>
+cd tadasaposys
+npm install
+npx serve -s . -l 3000  # → http://localhost:3000
+```
+
+モックデータ14パターンで全機能の UI を確認できる（GAS API は IS_LOCAL モックでスタブ化）。
+
+### 3. テスト走行（5分）
+
+```bash
+npm run test:unit  # Jest 55件
+npm test           # Playwright E2E 49件
+```
+
+### 4. 本番デプロイ（変更がある場合）
+
+**絶対グランドルール（§10「バージョン管理ルール」参照）を厳守**:
+1. `appsscript.json` の `webapp` 設定が `USER_ACCESSING` / `DOMAIN` であることを確認
+2. `git commit` してから `clasp push --force`
+3. `clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ -d "vX.X.X"`
+4. デプロイ後、ブラウザの GAS デプロイ管理画面で設定を目視確認
+
+### 5. 推奨される次の作業（優先度順）
+
+1. **T1** — 日程確定刷新の E2E テスト追加（最優先 / 重複検知・FullCalendar・Zoomモードを保護）
+2. **R3** — GoogleMeet 以外のカレンダー登録未実装を修正（pre-existing バグ）
+3. **R4** — GAS 上の temp/* スタブを手動削除
+4. **R1/R2** — 管理機能関連の修復スクリプトと担当者チェック追加
+5. **7-1** — CSV エクスポート機能
+
+### 6. 困ったとき
+
+- **設計の意図を知りたい**: `docs/ADR.md`（ADR-001〜012）
+- **データモデルの詳細**: `docs/SDD.md` §1
+- **デプロイ事故対応**: `docs/RUNBOOK.md` §4-5
+- **コードの場所を探す**: `コード.js` は約4500行・1ファイル / `index.html` は約5400行・1ファイル（モックデータも含む）。`docs/HANDOVER.md` §5 にバックエンド関数一覧あり
+
+### 7. 連絡先・関連リソース
+
+- **本番URL（不変）**: https://script.google.com/a/macros/tadakayo.jp/s/AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ/exec
+- **GAS プロジェクト**: ID `1UMg3CaTlbZW0YfjzgqbOwd-XOYdIsVELmGpsP7O-MrwFSiAJdS-ySLvP`
+- **タダサポDB**: ID `1hllLdETiK0sk0xW_y0V6vOmnlK7kIkHBjntYiCTom4w`
+- **フォーム回答シート**: ID `1cvwtRJSK3gD1SLhG3TBD0uJFsR3ApIpZsYWaruDnJ5A`（IMPORTRANGE で案件リスト生成）
+
+---
+
+**🎁 最後に**
+
+このプロジェクトは介護事業所への無料 IT サポートを支える社会的意義のある仕組みです。タダメン（運営スタッフ）の運用負担を最小化し、サポート相手の事業所に最大の価値を届けることが最終目的です。技術的な意思決定はすべて「タダメンが楽に・ミスなく業務を回せること」と「相談者に迷惑をかけないこと」の二軸で判断してください。
+
+不明点があれば `docs/ADR.md` の意思決定背景を読み、それでも分からなければ過去の Issue / PR / コミット履歴を辿ってください。よろしくお願いします。
