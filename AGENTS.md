@@ -1,6 +1,6 @@
-# タダサポ管理システム — CLAUDE.md
+# タダサポ管理システム — AGENTS.md
 
-> **Claude Code 専用の開発指示ファイル。** 毎会話で自動読み込みされる。
+> **OpenAI Codex 専用の開発指示ファイル。** 自動読み込みされる。
 > 詳細仕様は各ドキュメントを参照。コードを触る前に必ずこのファイルを確認すること。
 
 ---
@@ -26,6 +26,36 @@ appsscript.json — GASマニフェスト
 
 - `src/` フォルダは廃止済み。**絶対に作らないこと**
 - 新規ファイル追加は原則不要。上記2ファイルを編集する
+
+---
+
+## シェル実行ポリシー（Codex 向け）
+
+以下のコマンドは読み取り専用操作として安全に実行してよい:
+
+```bash
+# 行数確認・差分確認
+wc -l index.html コード.js
+git diff --stat
+git log --oneline -10
+git status
+
+# ローカルプレビュー起動（変更なし）
+npx serve -s . -l 3000
+```
+
+以下は**ユーザー確認なしに実行しないこと:**
+
+```bash
+# GAS への書き込み・デプロイ
+clasp push
+clasp deploy
+
+# git への書き込み
+git add
+git commit
+git push
+```
 
 ---
 
@@ -102,24 +132,20 @@ npx serve -s . -l 3000
 # → http://localhost:3000 でプレビュー（モックデータ14パターンで動作）
 ```
 
-代替: `python -m http.server 3000 --directory .`
-
 ---
 
 ## デプロイ
 
 ```bash
-# 1. 必ず先に git commit（clasp pull でローカルが上書きされる対策）
+# 1. 必ず先に git commit
 git add <files> && git commit -m "feat: vX.X.X - 説明"
 
-# 2. GAS にプッシュ（--force 必須、なしだとサイレントスキップが起きる場合がある）
+# 2. GAS にプッシュ（--force 必須）
 clasp push --force
 
 # 3. デプロイ更新
 clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ -d "vX.X.X"
 ```
-
-**v1.11.0 以降の初回デプロイ後:** GAS エディタで `setupScheduledEmailTrigger()` を1回手動実行（予約送信の5分間隔トリガ登録）。
 
 詳細手順・ロールバック・インシデント対応: `docs/RUNBOOK.md`
 
@@ -148,15 +174,14 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 
 ## ドキュメント索引
 
-| ファイル | 用途 | 対象 |
-|---------|------|------|
-| `CLAUDE.md`（本ファイル） | Claude Code 専用指示 | Claude Code |
-| `AGENTS.md` | OpenAI Codex 専用指示 | OpenAI Codex |
-| `docs/SDD.md` | システム詳細設計書 v1.11.3 | AI・開発者 |
-| `docs/HANDOVER.md` | 引き継ぎ書 v1.11.3 | 開発者 |
-| `docs/ADR.md` | アーキテクチャ判断記録 | AI・開発者 |
-| `docs/RUNBOOK.md` | 運用手順書（デプロイ・障害対応） | 開発者・運用者 |
-| `docs/Manual.md` | 操作マニュアル v1.11.3 | エンドユーザー |
-| `docs/RD.md` | 要件定義 | 参照用 |
-| `CHANGELOG.md` | 変更履歴 v1.8.1〜 | 全員 |
-| `SECURITY.md` | セキュリティ情報・脆弱性報告 | 全員 |
+| ファイル | 用途 |
+|---------|------|
+| `CLAUDE.md` | Claude Code 専用指示 |
+| `AGENTS.md`（本ファイル） | OpenAI Codex 専用指示 |
+| `docs/SDD.md` | システム詳細設計書 v1.11.3 |
+| `docs/HANDOVER.md` | 引き継ぎ書 v1.11.3 |
+| `docs/ADR.md` | アーキテクチャ判断記録 |
+| `docs/RUNBOOK.md` | 運用手順書 |
+| `docs/Manual.md` | 操作マニュアル |
+| `CHANGELOG.md` | 変更履歴 |
+| `SECURITY.md` | セキュリティ情報 |
