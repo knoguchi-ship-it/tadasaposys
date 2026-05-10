@@ -79,11 +79,11 @@ tadasaposys/
 │   ├── fixtures/           ← カスタム Fixture
 │   └── unit/               ← Jest 単体テスト（34テスト）
 └── docs/
-    ├── SDD.md              ← 設計書 v1.11.6
+    ├── SDD.md              ← 設計書 v1.12.0
     ├── HANDOVER.md         ← 本ドキュメント
     ├── ADR.md              ← アーキテクチャ判断記録（ADR-001〜010）
     ├── RUNBOOK.md          ← 運用手順書
-    ├── Manual.md           ← 操作マニュアル v1.11.6
+    ├── Manual.md           ← 操作マニュアル v1.12.0
     ├── RD.md               ← 要件定義
     ├── playwright-guide.html ← テスト導入・実行ガイド（HTML）
     └── test-criteria.html  ← テスト品質基準チェックリスト（HTML）

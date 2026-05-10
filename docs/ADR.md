@@ -173,3 +173,57 @@
 - `completed → inProgress` で上限超過時に `caseLimitOverride` を自動調整するロジックも一元管理。
 
 **短所:** 関数内の分岐が多く、将来の新ステータス追加時に分岐の追加が必要。
+
+---
+
+## ADR-011: FullCalendar 6.1.x をグローバルバンドルで埋込み
+
+**ステータス:** 承認済み — v1.11.9
+
+**文脈:** v1.11.7 までの日程確定モーダルは `<input type="datetime-local">` のみで、空き状況を視覚的に確認できなかった。タダスクや既存案件との重複を毎回手動で確認する運用負担があり、日程被りの事故リスクがあった。
+
+**選択肢:**
+- **A. importmap 経由で `@fullcalendar/core` 等を ES Module として読み込む**: 既存の React 用 importmap と同じパターン。ただし `?deps=react@18.2.0` 強制と独立した依存ツリーになりバージョン管理が複雑化。
+- **B. `@fullcalendar/react` ラッパーを使う**: React ネイティブで宣言的だが、React 18.2.0 厳格固定（ADR-004）と相性が悪く、CDN 解決の工夫が必要。
+- **C. グローバル UMD バンドル（`fullcalendar@6.1.18/index.global.min.js`）を `<script>` で読み込み**: core/daygrid/timegrid/interaction が同梱。既存の React コードと完全独立。
+
+**決定事項:** **C. グローバルバンドル**を採用する。
+
+`window.FullCalendar.Calendar` を `useRef` + `useEffect` でマウントするラッパーコンポーネント `ScheduleAvailabilityCalendar` を実装。
+
+**長所:**
+- React 18.2.0 固定制約と完全に独立して動作
+- CDN キャッシュ後はバンドル取得コストが消滅
+- 公式リファレンス実装と同じパターンで学習コスト最小
+- バンドル内のプラグインバージョンが整合済みで、組合せ起因のバグ無し
+
+**短所:**
+- 初回読込みで ~200KB 増加（jsDelivr CDN 配信）
+- 宣言的でない（命令的 imperative API を React の useEffect 内で扱う）
+
+---
+
+## ADR-012: 方法=Zoom 時のチームカレンダー強制登録 + 重複検知
+
+**ステータス:** 承認済み — v1.11.8 / v1.11.9-r2 で確定
+
+**文脈:** Zoom はタダスク業務とアカウントを共有しており、過去にダブルブッキングで会議が衝突した事故があった。一方、GoogleMeet / 電話 / 対面 / メール等は会議リソース競合の概念がなく、重複しても運用上問題ない。
+
+**選択肢:**
+- **A. すべての方法で重複チェック**: 一貫性は高いが、電話・対面で誤検知が出てユーザー摩擦が大きい。
+- **B. Zoom + GoogleMeet+カレンダー登録 で重複チェック**: Phase 2 当初案。Meet も会議室扱いだが、複数 Meet 同時開催可能なので過剰。
+- **C. 方法=Zoom 時のみ重複チェック**: Zoom リソース競合の防止に焦点化。他の方法はチェックなし。
+
+**決定事項:** **C. Zoom 限定** を採用（v1.11.9-r2 で確定）。
+
+加えて、Zoom 利用時は **`TEAM_CALENDAR_ID` への登録を必須化**する（`useCalendar` チェックの有無に関わらず）。これにより `getScheduleAvailability` がチームカレンダーを真実のソースとして重複検知できる。
+
+**長所:**
+- Zoom 衝突リスクが最重要なので、そこに集中投資
+- 他の方法はユーザー操作を妨げない
+- 個人カレンダー登録は引き続き選択制で柔軟性維持
+- 監視対象は `TEAM_CALENDAR_ID` + `DISPLAY_CALENDARS_JSON` で運用可変
+
+**短所:**
+- 仕様変更：Zoom + useCalendar=OFF が「何もしない」→「チームのみ登録」に挙動変化（Manual.md / CHANGELOG で周知済み）
+- `TEAM_CALENDAR_ID` にスタッフが書込権限を持つ前提（既存運用で満たされている）

@@ -9,7 +9,7 @@
 
 介護事業所向け無料 IT サポート管理システム。GAS 上の React SPA で、Google スプレッドシートをデータストアとして使用。
 
-- **現行バージョン:** v1.11.6
+- **現行バージョン:** v1.12.0
 - **詳細設計:** `docs/SDD.md`
 - **引き継ぎ書:** `docs/HANDOVER.md`
 - **運用手順:** `docs/RUNBOOK.md`
@@ -136,15 +136,38 @@ npx serve -s . -l 3000
 
 ## デプロイ
 
+### 🔒 デプロイは必ずバージョンアップ（絶対厳守 / URL不変原則）
+
+新規デプロイ作成は禁止。必ず固定 deploymentId への `-i` 付きバージョン更新で行う。新規デプロイすると Webapp URL が変わり、タダメンに案内済みのブックマーク・QR・メールリンクが全て失効する。
+
+- 固定 deploymentId: `AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ`
+- ✅ 正: `clasp deploy -i AKfycbw...nuq0ZJHhhUQ -d "vX.X.X"`
+- ❌ 禁: `clasp deploy -d "vX.X.X"` / `clasp deploy`（新URL発行）
+
+### 🔒 Webapp 設定グランドルール（絶対厳守）
+
+| 項目 | 必ずこの値 |
+|------|-----------|
+| 次のユーザーとして実行 | **ウェブ アプリケーションにアクセスしているユーザー** (`USER_ACCESSING`) |
+| アクセスできるユーザー | **NPO法人タダカヨ 内の全員** (`access: DOMAIN`) |
+
+過去に「実行=自分 / アクセス=Googleアカウント全員」の誤設定でセキュリティホールが発生した事例があるため絶対厳守。
+
+### デプロイ手順
+
 ```bash
+# 0. appsscript.json の webapp 設定確認（USER_ACCESSING / DOMAIN）
+
 # 1. 必ず先に git commit
 git add <files> && git commit -m "feat: vX.X.X - 説明"
 
 # 2. GAS にプッシュ（--force 必須）
 clasp push --force
 
-# 3. デプロイ更新
+# 3. デプロイ更新（既存IDへバージョンアップのみ）
 clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ -d "vX.X.X"
+
+# 4. ブラウザの GAS デプロイ管理画面で「実行=アクセスしているユーザー / アクセス=NPO法人タダカヨ 内の全員」を目視確認
 ```
 
 詳細手順・ロールバック・インシデント対応: `docs/RUNBOOK.md`
@@ -178,10 +201,10 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 |---------|------|
 | `CLAUDE.md` | Claude Code 専用指示 |
 | `AGENTS.md`（本ファイル） | OpenAI Codex 専用指示 |
-| `docs/SDD.md` | システム詳細設計書 v1.11.3 |
-| `docs/HANDOVER.md` | 引き継ぎ書 v1.11.3 |
-| `docs/ADR.md` | アーキテクチャ判断記録 |
+| `docs/SDD.md` | システム詳細設計書 v1.12.0 |
+| `docs/HANDOVER.md` | 引き継ぎ書 v1.12.0 |
+| `docs/ADR.md` | アーキテクチャ判断記録（ADR-001〜012） |
 | `docs/RUNBOOK.md` | 運用手順書 |
-| `docs/Manual.md` | 操作マニュアル |
+| `docs/Manual.md` | 操作マニュアル v1.12.0 |
 | `CHANGELOG.md` | 変更履歴 |
 | `SECURITY.md` | セキュリティ情報 |

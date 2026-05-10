@@ -2391,7 +2391,10 @@ var SETTINGS_LABEL_MAP_ = {
   MAIL_INITIAL_SUBJECT:        '初回メール件名',
   MAIL_INITIAL_BODY:           '初回メール本文',
   MAIL_INITIAL_INCLUDE_DETAILS:'初回メールに相談内容を含める',
+  MAIL_NEW_SUBJECT:            '新規メール件名テンプレート',
   MAIL_NEW_BODY:               '新規メール本文テンプレート',
+  MAIL_SCHEDULE_SUBJECT:       '日程確定メール件名',
+  MAIL_SCHEDULE_BODY:          '日程確定メール本文',
   MAIL_DECLINED_SUBJECT:       '回数超過メール件名',
   MAIL_DECLINED_BODY:          '回数超過メール本文',
   SHARED_CALENDAR_ID:          '共有カレンダーID',
@@ -2405,7 +2408,8 @@ var SETTINGS_LABEL_MAP_ = {
   TEAM_CALENDAR_ID:            'チームカレンダーID（書込先）',
   DISPLAY_CALENDARS_JSON:      '表示専用カレンダー（JSON）',
   SCHEDULE_BUFFER_MIN:         '予約前後インターバル（分）',
-  SUPPORT_TOOLS:               '対応ツール一覧'
+  SUPPORT_TOOLS:               '対応ツール一覧',
+  TOOL_MONTHLY_LIMITS:         'ツール月間上限'
 };
 
 function updateSettingsAdmin(patch) {

@@ -1,7 +1,32 @@
-# 運用手順書 (RUNBOOK) — タダサポ管理システム v1.11.3
+# 運用手順書 (RUNBOOK) — タダサポ管理システム v1.12.0
 
 **対象者:** 開発者・システム管理者
-**最終更新:** 2026/05/10
+**最終更新:** 2026/05/11
+
+---
+
+## 🔒 グランドルール（絶対厳守）
+
+### Webapp 設定（変更禁止）
+
+`appsscript.json` の `webapp` セクションは以下に固定。逸脱はセキュリティホール。
+
+| 項目 | 必ずこの値 |
+|------|-----------|
+| 次のユーザーとして実行 | **ウェブ アプリケーションにアクセスしているユーザー** (`USER_ACCESSING`) |
+| アクセスできるユーザー | **NPO法人タダカヨ 内の全員** (`access: DOMAIN`) |
+
+**禁止:** 実行=自分（`USER_DEPLOYING`） / アクセス=Googleアカウント全員（`ANYONE_WITH_GOOGLE_ACCOUNT`）
+
+### デプロイ方式（URL不変原則）
+
+**新規デプロイは禁止。** 必ず固定 deploymentId へ `-i` 付きでバージョンアップする。
+
+- 固定 deploymentId: `AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ`
+- ✅ 正: `clasp deploy -i AKfycbw...nuq0ZJHhhUQ -d "vX.X.X"`
+- ❌ 禁: `-i` を省略したコマンド / GASエディタの「新しいデプロイ」ボタン
+
+新規デプロイすると Webapp URL が変わり、タダメンに案内済みのブックマーク・QR・メールリンクが全失効する。
 
 ---
 
