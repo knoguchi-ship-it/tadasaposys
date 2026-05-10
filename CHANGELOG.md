@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.11.9] - 2026-05-11
+
+### Added — 日程確定刷新 Phase 3（FullCalendar 埋込み）
+- 日程確定モーダルに **FullCalendar 6.1.18 グローバルバンドル** を埋込み
+  - importmap ではなく `<script>` タグで CDN 直リンク（React 18.2.0 制約と独立）
+  - core / daygrid / timegrid / interaction が同梱
+- `ScheduleAvailabilityCalendar` コンポーネント新規追加
+  - 週ビュー / 月ビュー切替
+  - チームカレンダー（黄色） + 表示専用カレンダー（赤色）でカテゴリ色分け
+  - **ドラッグで時間枠を選択** → `editFormData.scheduledDateTime` と `duration` が自動反映
+  - 既存予定の前後 `SCHEDULE_BUFFER_MIN` 分は **斜線パターン** でバッファ表示
+  - 自分の編集対象（excludeEventId）は表示から除外
+  - `nowIndicator` で現在時刻を視覚化
+- モーダル幅を schedule モード時のみ `max-w-lg` → `max-w-4xl` に拡大
+- 既存の `datetime-local` 入力も併存（A11y / キーボード操作互換）
+- `Api.getScheduleAvailability(rangeStart, rangeEnd)` 追加（IS_LOCAL モック付き）
+
+### Internal
+- カスタムCSS追加（`.schedule-cal`, `.buffer-bg`, `.draft-bg`）
+- view 切替時に events を再フェッチ（FullCalendar 標準の events 関数経由）
+
+### Notes
+- 既存運用への影響: なし（純粋追加機能）
+- バンドルサイズ: ~200KB 増（CDN キャッシュ後は問題なし）
+- Phase 4 で固定Zoomラジオ + ドキュメント更新の上、v1.12.0 リリース予定
+
+---
+
 ## [1.11.8] - 2026-05-10
 
 ### Added — 日程確定刷新 Phase 2（重複検知 + Zoom チームカレンダー強制登録）

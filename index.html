@@ -66,6 +66,23 @@
     }
   }
   </script>
+
+  <!-- FullCalendar v6.1.18 グローバルバンドル（v1.11.9 / Phase 3）
+       importmap ではなく素のCDNを使うのは、既存の React 18.2.0 固定制約と独立して動作させるため。
+       バンドルには core/daygrid/timegrid/interaction が含まれる。 -->
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.18/index.global.min.js"></script>
+
+  <!-- v1.11.9: 重複監視カレンダーUI 用カスタムスタイル -->
+  <style>
+    .schedule-cal .fc { font-size: 11px; }
+    .schedule-cal .fc-toolbar-title { font-size: 13px; font-weight: 800; }
+    .schedule-cal .fc-button { font-size: 10px !important; padding: 4px 8px !important; font-weight: 700 !important; }
+    .schedule-cal .fc-timegrid-slot { height: 1.5rem !important; }
+    .schedule-cal .fc-event { border-radius: 6px !important; padding: 1px 3px !important; cursor: default !important; }
+    .schedule-cal .buffer-bg { background: repeating-linear-gradient(45deg, #fee2e2, #fee2e2 6px, #fff 6px, #fff 12px) !important; opacity: 0.7 !important; }
+    .schedule-cal .draft-bg { background-color: #6366f1 !important; opacity: 0.25 !important; }
+    .schedule-cal .fc-highlight { background-color: rgba(99, 102, 241, 0.15) !important; }
+  </style>
 </head>
 <body class="antialiased text-slate-900">
   <div id="root"></div>
@@ -969,6 +986,35 @@
           google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).updateMeetUrl(caseId, newUrl);
         });
       },
+      // v1.11.9: 期間内のチーム＋表示専用カレンダーのイベントを取得（Phase3 カレンダーUI用）
+      getScheduleAvailability: (rangeStartIso, rangeEndIso) => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            // モック: 適当に2件返す（重複検知のテスト用）
+            const base = new Date(rangeStartIso);
+            const tomorrow14 = new Date(base);
+            tomorrow14.setDate(tomorrow14.getDate() + 1);
+            tomorrow14.setHours(14, 0, 0, 0);
+            const tomorrow15 = new Date(tomorrow14.getTime() + 60 * 60000);
+            const dayAfter10 = new Date(base);
+            dayAfter10.setDate(dayAfter10.getDate() + 2);
+            dayAfter10.setHours(10, 0, 0, 0);
+            const dayAfter11 = new Date(dayAfter10.getTime() + 60 * 60000);
+            resolve({
+              events: [
+                { id: 'mock-1', calendarId: 'team', calendarName: 'チームカレンダー', title: '既存案件A', start: tomorrow14.toISOString(), end: tomorrow15.toISOString(), isEditable: true },
+                { id: 'mock-2', calendarId: 'tadasuku', calendarName: 'タダスク', title: 'タダスク予約X', start: dayAfter10.toISOString(), end: dayAfter11.toISOString(), isEditable: false }
+              ],
+              errors: [],
+              settings: { bufferMin: 30, teamCalendarId: 'mock-team', displayCalendars: [{ name: 'タダスク', id: 'mock-tadasuku' }] }
+            });
+          }, 250));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message)))
+            .getScheduleAvailability(rangeStartIso, rangeEndIso);
+        });
+      },
       // v1.11.8: 日程重複検知（フロント側ライブチェック）
       checkScheduleConflict: (startIso, durationMin, excludeEventId) => {
         if (IS_LOCAL) {
@@ -1067,6 +1113,107 @@
             {open ? <ChevronUp size={14} className="text-slate-500"/> : <ChevronDown size={14} className="text-slate-500"/>}
           </button>
           {open && <div className="px-4 py-3 space-y-3 text-xs leading-relaxed text-slate-600">{children}</div>}
+        </div>
+      );
+    }
+
+    // ======================================================================
+    // ScheduleAvailabilityCalendar (v1.11.9 / Phase 3)
+    // FullCalendar グローバルバンドルをラップする React コンポーネント。
+    // 日程確定モーダル内に埋め込み、チーム＋表示専用カレンダーのイベントを
+    // バッファ込みで可視化する。ドラッグ選択で editFormData を更新。
+    // ======================================================================
+    function ScheduleAvailabilityCalendar({ scheduledDateTime, duration, excludeEventId, onSelect }) {
+      const containerRef = useRef(null);
+      const calRef = useRef(null);
+      const [errorMsg, setErrorMsg] = useState(null);
+
+      // FullCalendar インスタンスは1回だけ初期化（dependencies空）
+      useEffect(() => {
+        if (!containerRef.current) return;
+        if (typeof window === 'undefined' || !window.FullCalendar) {
+          setErrorMsg('カレンダーライブラリの読み込みに失敗しました。');
+          return;
+        }
+        const cal = new window.FullCalendar.Calendar(containerRef.current, {
+          initialView: 'timeGridWeek',
+          locale: 'ja',
+          headerToolbar: { left: 'prev,next today', center: 'title', right: 'timeGridWeek,dayGridMonth' },
+          height: 460,
+          slotMinTime: '08:00:00',
+          slotMaxTime: '21:00:00',
+          allDaySlot: false,
+          nowIndicator: true,
+          selectable: true,
+          selectMirror: true,
+          select: (info) => {
+            const dur = Math.max(15, Math.round((info.end - info.start) / 60000));
+            const dt = info.start;
+            const yyyy = dt.getFullYear();
+            const mm = String(dt.getMonth() + 1).padStart(2, '0');
+            const dd = String(dt.getDate()).padStart(2, '0');
+            const hh = String(dt.getHours()).padStart(2, '0');
+            const mi = String(dt.getMinutes()).padStart(2, '0');
+            onSelect && onSelect({ scheduledDateTime: `${yyyy}-${mm}-${dd}T${hh}:${mi}`, duration: String(dur) });
+            cal.unselect();
+          },
+          eventClick: () => { /* 既存予定はクリック無効化 */ },
+          events: (info, success, failure) => {
+            Api.getScheduleAvailability(info.startStr, info.endStr)
+              .then(res => {
+                const buffer = (res && res.settings && res.settings.bufferMin) || 30;
+                const out = [];
+                (res.events || []).forEach(ev => {
+                  if (excludeEventId && ev.id === excludeEventId) return; // 自己除外
+                  const calColor = ev.calendarName === 'チームカレンダー' ? '#facc15' : '#ef4444';
+                  out.push({
+                    id: ev.id,
+                    title: ev.title,
+                    start: ev.start,
+                    end: ev.end,
+                    backgroundColor: calColor,
+                    borderColor: calColor,
+                    textColor: '#1e293b',
+                    editable: false,
+                    extendedProps: { calendarName: ev.calendarName }
+                  });
+                  if (buffer > 0) {
+                    const s = new Date(ev.start), e = new Date(ev.end);
+                    out.push({ start: new Date(s.getTime() - buffer * 60000).toISOString(), end: ev.start, display: 'background', classNames: ['buffer-bg'] });
+                    out.push({ start: ev.end, end: new Date(e.getTime() + buffer * 60000).toISOString(), display: 'background', classNames: ['buffer-bg'] });
+                  }
+                });
+                if (res.errors && res.errors.length) {
+                  setErrorMsg(res.errors.join(' / '));
+                } else {
+                  setErrorMsg(null);
+                }
+                success(out);
+              })
+              .catch(e => { setErrorMsg(e.message || String(e)); failure(e); });
+          }
+        });
+        cal.render();
+        calRef.current = cal;
+        return () => { try { cal.destroy(); } catch (e) {} calRef.current = null; };
+      }, []);
+
+      // 選択中の日時が変わったらカレンダーをそこに移動
+      useEffect(() => {
+        if (!calRef.current || !scheduledDateTime) return;
+        const d = new Date(scheduledDateTime);
+        if (!isNaN(d.getTime())) {
+          try { calRef.current.gotoDate(d); } catch (e) {}
+        }
+      }, [scheduledDateTime]);
+
+      return (
+        <div className="schedule-cal space-y-1">
+          <p className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
+            <Calendar size={10}/> 空き時間をドラッグして選択（既存予定の前後の斜線部分はバッファ時間）
+          </p>
+          <div ref={containerRef} className="rounded-xl overflow-hidden border border-indigo-100 bg-white"></div>
+          {errorMsg && <p className="text-[10px] text-rose-500 font-bold">⚠ {errorMsg}</p>}
         </div>
       );
     }
@@ -4948,7 +5095,7 @@
           {/* Unified Modal */}
           {modalMode && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[110] p-4 overflow-y-auto">
-              <div className="bg-white w-full max-w-lg rounded-[2rem] p-8 shadow-2xl animate-in zoom-in duration-200 my-auto max-h-[calc(100vh-2rem)] overflow-y-auto">
+              <div className={`bg-white w-full ${modalMode === 'schedule' ? 'max-w-4xl' : 'max-w-lg'} rounded-[2rem] p-8 shadow-2xl animate-in zoom-in duration-200 my-auto max-h-[calc(100vh-2rem)] overflow-y-auto`}>
                 <div className="flex justify-between items-center mb-6">
                   <div>
                     <h3 className="font-black text-lg text-slate-800">
@@ -5001,6 +5148,16 @@
                           </select>
                         </div>
                       </div>
+                      {modalMode === 'schedule' && (
+                        <ScheduleAvailabilityCalendar
+                          scheduledDateTime={editFormData.scheduledDateTime}
+                          duration={editFormData.duration}
+                          excludeEventId={selectedCase?.eventId || ''}
+                          onSelect={({ scheduledDateTime, duration }) => {
+                            setEditFormData(prev => ({ ...prev, scheduledDateTime, duration }));
+                          }}
+                        />
+                      )}
                       {modalMode === 'schedule' && (
                         <div className="space-y-2">
                           {editFormData.method === 'Zoom' && (
