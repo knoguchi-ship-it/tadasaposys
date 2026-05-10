@@ -1,5 +1,5 @@
 /**
- * タダサポ管理システム - Backend Logic (v1.11.7)
+ * タダサポ管理システム - Backend Logic (v1.11.8)
  *
  * 概要:
  * - Google Spreadsheets をデータベースとして利用
@@ -1656,6 +1656,53 @@ function checkScheduleConflict(startIso, durationMin, excludeEventId) {
   return { hasConflict: conflicts.length > 0, conflicts: conflicts, bufferMin: bufferMin };
 }
 
+/**
+ * チームカレンダー（TEAM_CALENDAR_ID）にイベントを作成する。
+ * v1.11.8: method=Zoom 時の強制登録に使用。フォールバックで SHARED_CALENDAR_ID 経由。
+ * @returns {{eventId: string|null, calendarId: string|null}}
+ */
+function createTeamCalendarEvent_(title, startTime, durationMinutes, description) {
+  let teamId = getTeamCalendarId_();
+  if (!teamId) {
+    console.warn('TEAM_CALENDAR_ID 未設定のためチームカレンダー登録をスキップ');
+    return { eventId: null, calendarId: null };
+  }
+  let cal;
+  try { cal = CalendarApp.getCalendarById(teamId); } catch (e) { cal = null; }
+  if (!cal) {
+    console.error('チームカレンダーにアクセスできません: ' + teamId);
+    return { eventId: null, calendarId: null };
+  }
+  let dur = (durationMinutes && Number(durationMinutes) > 0) ? Number(durationMinutes) : 60;
+  let start = new Date(startTime);
+  let end = new Date(start.getTime() + dur * 60 * 1000);
+  try {
+    let event = cal.createEvent(title, start, end, { description: String(description || '') });
+    return { eventId: event.getId(), calendarId: teamId };
+  } catch (e) {
+    console.error('チームカレンダーイベント作成失敗: ' + e.message);
+    return { eventId: null, calendarId: null };
+  }
+}
+
+/**
+ * 重複検知のエラーメッセージを組み立てる
+ */
+function formatScheduleConflictMessage_(conflictResult) {
+  let lines = conflictResult.conflicts.map(function(c) {
+    let s = new Date(c.start);
+    let e = new Date(c.end);
+    let m = (s.getMonth() + 1);
+    let d = s.getDate();
+    let hh = String(s.getHours()).padStart(2, '0');
+    let mm = String(s.getMinutes()).padStart(2, '0');
+    let eh = String(e.getHours()).padStart(2, '0');
+    let em = String(e.getMinutes()).padStart(2, '0');
+    return '・[' + c.calendarName + '] ' + c.title + '（' + m + '/' + d + ' ' + hh + ':' + mm + '〜' + eh + ':' + em + '）';
+  });
+  return 'スケジュール重複：以下の予定と被っています（前後' + conflictResult.bufferMin + '分のバッファを含む）。\n' + lines.join('\n');
+}
+
 // ======================================================================
 // 既存カレンダーイベントの日時を更新
 // ======================================================================
@@ -1810,36 +1857,73 @@ function updateSupportRecord(recordData) {
 
   let currentEventId = data[rowIndex - 1][IDX.RECORDS.EVENT_ID];
 
-  // skipCalendar=true の場合はカレンダー・Meet・Zoom登録をスキップ
-  if (recordData.scheduledDateTime && !currentMeetUrl && !recordData.skipCalendar) {
-    if (recordData.method === 'GoogleMeet') {
-      try {
-        let meetResult = createGoogleMeetEvent(eventTitle, recordData.scheduledDateTime, recordData.details, recordData.duration);
-        newEventId = meetResult.eventId;
-        newMeetUrl = meetResult.meetUrl;
-      } catch(e) { console.error('Google Meet作成エラー: ' + e.message); }
+  // v1.11.8: 重複検知（書込み直前）。Zoom強制登録 / GoogleMeet+useCalendar の場合に適用。
+  // skipConflictCheck=true でバイパス可能（フロントが再確認を放棄する場合）。
+  let willTouchSharedCalendar = recordData.scheduledDateTime && !currentMeetUrl &&
+    (recordData.method === 'Zoom' || (recordData.method === 'GoogleMeet' && !recordData.skipCalendar));
+  if (willTouchSharedCalendar && !recordData.skipConflictCheck) {
+    let confDur = (recordData.duration && Number(recordData.duration) > 0) ? Number(recordData.duration) : 60;
+    let conflictResult = checkScheduleConflict(recordData.scheduledDateTime, confDur, currentEventId || null);
+    if (conflictResult.hasConflict) {
+      throw new Error(formatScheduleConflictMessage_(conflictResult));
+    }
+  }
 
-    } else if (recordData.method === 'Zoom') {
+  if (recordData.scheduledDateTime && !currentMeetUrl) {
+    if (recordData.method === 'Zoom') {
+      // v1.11.8: チームカレンダーへ強制登録 + 個人カレンダーは useCalendar に従う
       let zDur = (recordData.duration && Number(recordData.duration) > 0) ? Number(recordData.duration) : 60;
       let zStart = new Date(recordData.scheduledDateTime);
-      let zEnd = new Date(zStart.getTime() + zDur * 60 * 1000);
       let appUrl = ScriptApp.getService().getUrl() || '';
 
-      // Zoom会議作成を試みる（API設定が不完全でも後続のカレンダー作成には影響させない）
+      // Zoom URL 発行（API 失敗時もカレンダー登録は継続）
       try {
         let zoomResult = createZoomMeeting(eventTitle, recordData.scheduledDateTime, zDur);
         newMeetUrl = zoomResult.joinUrl;
       } catch(e) { console.error('Zoom会議作成エラー（カレンダーのみ作成します）: ' + e.message); }
 
-      // カレンダーイベントは Zoom 成否に関わらず作成する
+      let zDesc = (newMeetUrl ? 'Zoom URL: ' + newMeetUrl + '\n\n' : '') +
+                  (recordData.details || '') +
+                  (appUrl ? '\n\nタダサポ管理: ' + appUrl : '');
+
+      // チームカレンダーへ強制登録（重複防止のため必須）
+      let teamEvent = createTeamCalendarEvent_(eventTitle, zStart, zDur, zDesc);
+      if (teamEvent.eventId) {
+        newEventId = teamEvent.eventId;
+      } else {
+        // チームカレンダー未設定/アクセス不可時は SHARED_CALENDAR_ID にフォールバック
+        try {
+          let zSharedCalId = getSetting_('SHARED_CALENDAR_ID', '');
+          let zCalFb = (zSharedCalId && zSharedCalId !== 'primary') ? CalendarApp.getCalendarById(zSharedCalId) : null;
+          if (!zCalFb) zCalFb = CalendarApp.getDefaultCalendar();
+          let zEnd = new Date(zStart.getTime() + zDur * 60 * 1000);
+          let zEvent = zCalFb.createEvent(eventTitle, zStart, zEnd, { description: zDesc });
+          newEventId = zEvent.getId();
+        } catch(e) { console.error('Zoom用フォールバックカレンダー作成エラー: ' + e.message); }
+      }
+
+      // useCalendar=true の場合、個人/共有カレンダー（SHARED_CALENDAR_ID）にも追加登録
+      // ただし TEAM_CALENDAR_ID と同一の場合は二重登録を避けるためスキップ
+      if (!recordData.skipCalendar) {
+        try {
+          let teamId = getTeamCalendarId_();
+          let zSharedCalId = getSetting_('SHARED_CALENDAR_ID', '');
+          let zCal = (zSharedCalId && zSharedCalId !== 'primary') ? CalendarApp.getCalendarById(zSharedCalId) : null;
+          if (!zCal) zCal = CalendarApp.getDefaultCalendar();
+          let personalCalId = zCal ? zCal.getId() : '';
+          if (zCal && personalCalId && personalCalId !== teamId) {
+            let zEnd = new Date(zStart.getTime() + zDur * 60 * 1000);
+            zCal.createEvent(eventTitle, zStart, zEnd, { description: zDesc });
+            // eventId はチーム側を維持（更新時の追跡対象）
+          }
+        } catch(e) { console.error('個人カレンダー登録エラー: ' + e.message); }
+      }
+    } else if (recordData.method === 'GoogleMeet' && !recordData.skipCalendar) {
       try {
-        let zSharedCalId = getSetting_('SHARED_CALENDAR_ID', '');
-        let zCal = (zSharedCalId && zSharedCalId !== 'primary') ? CalendarApp.getCalendarById(zSharedCalId) : null;
-        if (!zCal) zCal = CalendarApp.getDefaultCalendar();
-        let zDesc = (newMeetUrl ? 'Zoom URL: ' + newMeetUrl + '\n\n' : '') + (recordData.details || '') + (appUrl ? '\n\nタダサポ管理: ' + appUrl : '');
-        let zEvent = zCal.createEvent(eventTitle, zStart, zEnd, { description: zDesc });
-        newEventId = zEvent.getId();
-      } catch(e) { console.error('カレンダーイベント作成エラー: ' + e.message); }
+        let meetResult = createGoogleMeetEvent(eventTitle, recordData.scheduledDateTime, recordData.details, recordData.duration);
+        newEventId = meetResult.eventId;
+        newMeetUrl = meetResult.meetUrl;
+      } catch(e) { console.error('Google Meet作成エラー: ' + e.message); }
     }
   } else if (recordData.scheduledDateTime && currentEventId && !recordData.skipCalendar) {
     // 既存カレンダーイベントの日時を更新

@@ -968,6 +968,28 @@
         return new Promise((resolve, reject) => {
           google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).updateMeetUrl(caseId, newUrl);
         });
+      },
+      // v1.11.8: 日程重複検知（フロント側ライブチェック）
+      checkScheduleConflict: (startIso, durationMin, excludeEventId) => {
+        if (IS_LOCAL) {
+          // ローカルモック: 偶然 14:00開始の予定があれば重複扱い
+          return new Promise(resolve => setTimeout(() => {
+            const s = new Date(startIso);
+            const fakeConflict = s.getHours() === 14 && s.getMinutes() === 0;
+            resolve({
+              hasConflict: fakeConflict,
+              conflicts: fakeConflict ? [{
+                calendarName: 'タダスク', title: 'モック重複予定',
+                start: startIso, end: new Date(s.getTime() + 30 * 60000).toISOString()
+              }] : [],
+              bufferMin: 30
+            });
+          }, 200));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message)))
+            .checkScheduleConflict(startIso, durationMin, excludeEventId || '');
+        });
       }
     };
 
@@ -1097,6 +1119,8 @@
       const [modalMode, setModalMode] = useState(null);
       const [editFormData, setEditFormData] = useState({});
       const [useCalendar, setUseCalendar] = useState(true);
+      // v1.11.8: 日程重複検知状態
+      const [conflictState, setConflictState] = useState({ status: 'idle', conflicts: [], bufferMin: 30, error: null });
       const [existingAttachments, setExistingAttachments] = useState([]);
       const [pendingFiles, setPendingFiles] = useState([]);
       const [dragOverAttachments, setDragOverAttachments] = useState(false);
@@ -2034,6 +2058,15 @@
       const handleEditSave = async (ev) => {
         ev.preventDefault();
         if (!selectedCase) return;
+        // v1.11.8: 重複検知でブロック中は送信不可
+        if (conflictState.status === 'conflict') {
+          showToast('重複する予定があるため日時を変更してください。', { type: 'error', title: '送信できません' });
+          return;
+        }
+        if (conflictState.status === 'checking') {
+          showToast('重複チェック中です。少しお待ちください。', { type: 'info' });
+          return;
+        }
         startSubmit('保存中...');
 
         try {
@@ -2297,6 +2330,7 @@
         if (!selectedCase) return;
         setModalMode(mode);
         setUseCalendar(true); // 毎回デフォルトONでリセット
+        setConflictState({ status: 'idle', conflicts: [], bufferMin: 30, error: null }); // v1.11.8: 重複状態リセット
         setEditFormData({
           scheduledDateTime: selectedCase.scheduledDateTime ? (() => {
             var d = new Date(selectedCase.scheduledDateTime);
@@ -2313,6 +2347,40 @@
         setPendingFiles([]);
         setDragOverAttachments(false);
       };
+
+      // v1.11.8: 日程重複ライブ検知（method=Zoom または method=GoogleMeet+useCalendar 時に判定）
+      useEffect(() => {
+        if (modalMode !== 'schedule' && modalMode !== 'edit' && modalMode !== 'report') {
+          setConflictState({ status: 'idle', conflicts: [], bufferMin: 30, error: null });
+          return;
+        }
+        const dt = editFormData.scheduledDateTime;
+        const method = editFormData.method || '';
+        const dur = Number(editFormData.duration) || 60;
+        const willTouchSharedCalendar = method === 'Zoom' || (method === 'GoogleMeet' && useCalendar);
+        if (!dt || !willTouchSharedCalendar) {
+          setConflictState({ status: 'idle', conflicts: [], bufferMin: 30, error: null });
+          return;
+        }
+        // 既に登録済みのカレンダーイベントは除外（編集時の自己衝突回避）
+        const excludeId = (selectedCase && selectedCase.eventId) ? selectedCase.eventId : '';
+        setConflictState(prev => ({ ...prev, status: 'checking' }));
+        const handle = setTimeout(() => {
+          Api.checkScheduleConflict(dt, dur, excludeId)
+            .then(res => {
+              setConflictState({
+                status: res.hasConflict ? 'conflict' : 'ok',
+                conflicts: res.conflicts || [],
+                bufferMin: res.bufferMin || 30,
+                error: null
+              });
+            })
+            .catch(err => {
+              setConflictState({ status: 'error', conflicts: [], bufferMin: 30, error: err.message || String(err) });
+            });
+        }, 500); // debounce
+        return () => clearTimeout(handle);
+      }, [modalMode, editFormData.scheduledDateTime, editFormData.method, editFormData.duration, useCalendar, selectedCase?.eventId]);
 
       // API 戻り値で案件ステートを更新する共通ヘルパー
       const applyCaseTransitionResult = (caseId, result) => {
@@ -4935,6 +5003,15 @@
                       </div>
                       {modalMode === 'schedule' && (
                         <div className="space-y-2">
+                          {editFormData.method === 'Zoom' && (
+                            <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-[10px] font-bold text-rose-700 flex items-start gap-2">
+                              <AlertTriangle size={14} className="shrink-0 mt-0.5 text-rose-500"/>
+                              <div className="space-y-1">
+                                <p className="font-black">Zoom時はチームタダカヨカレンダーへ自動登録（必須）</p>
+                                <p className="font-normal">重複防止のため、下のチェックの有無に関わらずチームカレンダーには必ず登録されます。Zoom URL も自動発行されます。</p>
+                              </div>
+                            </div>
+                          )}
                           <label className="flex items-center gap-2 cursor-pointer select-none">
                             <input
                               type="checkbox"
@@ -4942,23 +5019,51 @@
                               onChange={e => setUseCalendar(e.target.checked)}
                               className="w-4 h-4 accent-indigo-600"
                             />
-                            <span className="text-[10px] font-black text-indigo-600">Googleカレンダーに登録する</span>
+                            <span className="text-[10px] font-black text-indigo-600">
+                              {editFormData.method === 'Zoom' ? '個人/共有カレンダーにも登録する' : 'Googleカレンダーに登録する'}
+                            </span>
                           </label>
-                          {useCalendar && (
+                          {useCalendar && editFormData.method !== 'Zoom' && (
                             <p className="text-[10px] text-indigo-500 font-bold flex items-start gap-1 pl-6">
                               <Video size={12} className="shrink-0 mt-0.5"/>
-                              {editFormData.method === 'Zoom'
-                                ? 'カレンダーに予定を登録します。Zoom URLは別途ご用意ください。'
-                                : editFormData.method === 'GoogleMeet'
+                              {editFormData.method === 'GoogleMeet'
                                 ? 'Meet URLが自動発行されカレンダーに登録されます。'
                                 : 'カレンダーに予定を登録します。'}
                             </p>
                           )}
-                          {editFormData.method === 'Zoom' && (
-                            <p className="text-[10px] text-red-500 font-bold flex items-start gap-1 pl-6">
-                              <AlertTriangle size={12} className="shrink-0 mt-0.5"/>
-                              Zoomを利用する際は、タダスクなどで使用予定がないか必ず確認して下さい
-                            </p>
+                        </div>
+                      )}
+                      {/* v1.11.8: 重複検知バナー */}
+                      {(modalMode === 'schedule' || modalMode === 'edit' || modalMode === 'report') &&
+                       conflictState.status !== 'idle' && (
+                        <div className={`rounded-xl p-3 text-[10px] font-bold flex items-start gap-2 ${
+                          conflictState.status === 'conflict' ? 'bg-rose-50 border border-rose-300 text-rose-700' :
+                          conflictState.status === 'ok' ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' :
+                          conflictState.status === 'error' ? 'bg-amber-50 border border-amber-200 text-amber-700' :
+                          'bg-slate-50 border border-slate-200 text-slate-500'
+                        }`}>
+                          {conflictState.status === 'checking' && (
+                            <><Loader2 size={14} className="shrink-0 mt-0.5 animate-spin"/><span>カレンダー重複をチェック中...</span></>
+                          )}
+                          {conflictState.status === 'ok' && (
+                            <><CheckCircle2 size={14} className="shrink-0 mt-0.5"/><span>この時間帯は空いています（前後{conflictState.bufferMin}分のバッファ込み）</span></>
+                          )}
+                          {conflictState.status === 'conflict' && (
+                            <div className="space-y-1 flex-1">
+                              <p className="font-black flex items-center gap-1"><AlertTriangle size={14}/> 重複する予定があります（前後{conflictState.bufferMin}分のバッファ込み）</p>
+                              <ul className="pl-4 space-y-0.5">
+                                {conflictState.conflicts.map((c, i) => {
+                                  const s = new Date(c.start);
+                                  const e = new Date(c.end);
+                                  const fmt = (d) => `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+                                  return <li key={i} className="font-normal">[{c.calendarName}] {c.title}（{fmt(s)}〜{String(e.getHours()).padStart(2,'0')}:{String(e.getMinutes()).padStart(2,'0')}）</li>;
+                                })}
+                              </ul>
+                              <p className="font-normal">日時を変更してください。</p>
+                            </div>
+                          )}
+                          {conflictState.status === 'error' && (
+                            <><AlertTriangle size={14} className="shrink-0 mt-0.5"/><span>重複チェック失敗: {conflictState.error}（送信は可能ですが手動確認推奨）</span></>
                           )}
                         </div>
                       )}
@@ -5081,7 +5186,7 @@
                       </div>
                     </div>
                   )}
-                  <button disabled={submitting} className={`relative w-full py-4 text-white rounded-xl font-black text-sm transition-all shadow-lg shadow-slate-200 ${
+                  <button disabled={submitting || conflictState.status === 'conflict' || conflictState.status === 'checking'} className={`relative w-full py-4 text-white rounded-xl font-black text-sm transition-all shadow-lg shadow-slate-200 disabled:opacity-50 disabled:cursor-not-allowed ${
                     modalMode === 'cancel' ? 'bg-amber-500 hover:bg-amber-600' : modalMode === 'schedule' ? 'bg-indigo-600 hover:bg-indigo-700' : modalMode === 'report' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-900 hover:bg-slate-800'
                   }`}>
                     <span className={submitting ? 'invisible' : ''}>{modalMode === 'cancel' ? '記録を保存してキャンセルする' : modalMode === 'schedule' ? '日時を確定してカレンダー作成' : modalMode === 'report' ? '記録を保存して完了にする' : '変更を保存'}</span>

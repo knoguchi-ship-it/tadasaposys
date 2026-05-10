@@ -1,5 +1,38 @@
 # Changelog
 
+## [1.11.8] - 2026-05-10
+
+### Added — 日程確定刷新 Phase 2（重複検知 + Zoom チームカレンダー強制登録）
+- **日程重複検知（バッファ込み）**
+  - 日程確定モーダルにライブ重複検知（500ms debounce）
+  - チームカレンダー＋表示専用カレンダー（タダスク等）と前後 `SCHEDULE_BUFFER_MIN` 分のバッファ込みで判定
+  - 重複時は赤帯バナーで重複先を一覧表示し、Submitボタンを `disabled` 化（送信ブロック）
+  - サーバー側でも書込み直前に再チェック（楽観ロック）
+  - 編集時は自分自身の `eventId` を除外して誤判定を防止
+- **method=Zoom 時のチームカレンダー強制登録**
+  - useCalendar チェックボックスの状態に関わらず、`TEAM_CALENDAR_ID` に必ず登録
+  - 個人/共有カレンダーへの登録は useCalendar=ON 時に追加（チームと同一ID時は二重登録回避）
+  - Zoom URL も S2S OAuth で自動発行（既存ロジック維持）
+- **UI改修**
+  - method=Zoom 時に専用の説明バナー表示（「チームカレンダーへ自動登録（必須）」）
+  - チェックボックスのラベルを動的変更（Zoom時=「個人/共有カレンダーにも登録する」）
+  - 検知中/OK/重複/エラーの4状態をビジュアル化
+
+### Internal
+- `createTeamCalendarEvent_()`: チームカレンダー登録ヘルパー
+- `formatScheduleConflictMessage_()`: 重複エラーメッセージ整形
+- `Api.checkScheduleConflict()`: フロント用ライブチェック（ローカルモック対応）
+- `conflictState` 状態を `App` に追加（`idle`/`checking`/`ok`/`conflict`/`error`）
+
+### Notes
+- **既存挙動の変更点**
+  - method=Zoom + useCalendar=OFF: 旧→何もしない / 新→チームカレンダーには登録（重複防止）
+  - 重複検知された日程: 旧→そのまま登録 / 新→送信ブロック
+- GoogleMeet/電話/対面/メール等は変更なし
+- Phase 3 で FullCalendar を埋込み、視覚的な空き状況確認を追加予定
+
+---
+
 ## [1.11.7] - 2026-05-10
 
 ### Added — 日程確定・変更の刷新（Phase 1: バックエンド土台）
