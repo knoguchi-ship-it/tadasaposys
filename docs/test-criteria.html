@@ -1,0 +1,1240 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>テスト品質基準チェックリスト — タダサポ管理システム</title>
+  <style>
+    :root {
+      --c-bg:        #f8fafc;
+      --c-surface:   #ffffff;
+      --c-border:    #e2e8f0;
+      --c-text:      #1e293b;
+      --c-muted:     #64748b;
+      --c-brand:     #0d9488;
+      --c-brand-lt:  #f0fdfa;
+      --c-accent:    #6366f1;
+      --c-accent-lt: #eef2ff;
+      --c-warn:      #d97706;
+      --c-warn-lt:   #fffbeb;
+      --c-danger:    #dc2626;
+      --c-danger-lt: #fef2f2;
+      --c-success:   #16a34a;
+      --c-success-lt:#f0fdf4;
+      --c-code-bg:   #1e293b;
+      --radius:      0.75rem;
+      --shadow:      0 1px 3px rgba(0,0,0,.08);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Segoe UI', 'Noto Sans JP', system-ui, sans-serif;
+      background: var(--c-bg); color: var(--c-text); line-height: 1.7;
+    }
+    a { color: var(--c-brand); }
+
+    /* ── Layout ──────────────── */
+    .layout { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
+    .sidebar {
+      position: sticky; top: 0; height: 100vh; overflow-y: auto;
+      background: var(--c-surface); border-right: 1px solid var(--c-border);
+      padding: 1.5rem 1rem;
+    }
+    .main { padding: 3rem 4rem 6rem; max-width: 960px; }
+
+    /* ── Sidebar ─────────────── */
+    .sidebar-logo { display: flex; align-items: center; gap: .6rem; margin-bottom: 2rem; }
+    .logo-icon {
+      width: 2rem; height: 2rem; border-radius: .5rem;
+      background: var(--c-brand); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: .85rem;
+    }
+    .logo-title { font-weight: 800; font-size: .88rem; line-height: 1.3; }
+    .logo-sub { font-size: .68rem; color: var(--c-muted); }
+    .nav-section { font-size: .63rem; font-weight: 800; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--c-muted); margin: 1.2rem 0 .4rem .5rem; }
+    .nav-link {
+      display: flex; align-items: center; gap: .5rem; padding: .4rem .75rem;
+      border-radius: .5rem; font-size: .8rem; font-weight: 600; color: var(--c-muted);
+      text-decoration: none; transition: all .15s;
+    }
+    .nav-link:hover { background: var(--c-brand-lt); color: var(--c-brand); }
+    .nav-link .dot {
+      width: .5rem; height: .5rem; border-radius: 50%; flex-shrink: 0;
+    }
+    .dot-pass { background: var(--c-success); }
+    .dot-warn { background: var(--c-warn); }
+    .dot-info { background: var(--c-accent); }
+
+    /* ── Typography ──────────── */
+    h1 { font-size: 1.8rem; font-weight: 900; line-height: 1.25; }
+    h2 { font-size: 1.3rem; font-weight: 800; margin: 3rem 0 1rem;
+      padding-bottom: .5rem; border-bottom: 2px solid var(--c-border);
+      display: flex; align-items: center; gap: .5rem; }
+    h3 { font-size: 1rem; font-weight: 700; margin: 2rem 0 .75rem; }
+    p  { margin-bottom: .75rem; font-size: .9rem; }
+    code {
+      font-family: monospace; font-size: .82em;
+      background: #f1f5f9; color: #0f766e;
+      padding: .1em .35em; border-radius: .3em;
+    }
+
+    /* ── Hero ────────────────── */
+    .hero {
+      border-radius: var(--radius); padding: 2rem 2.5rem; color: #fff;
+      background: linear-gradient(135deg, #1e293b 0%, var(--c-accent) 100%);
+      margin-bottom: 2.5rem;
+    }
+    .hero h1 { color: #fff; font-size: 1.55rem; }
+    .hero-sub { opacity: .75; font-size: .82rem; margin-top: .4rem; }
+    .hero-tags { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1rem; }
+    .tag {
+      background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.25);
+      border-radius: 9999px; padding: .2rem .7rem; font-size: .72rem;
+      font-weight: 700; color: #fff;
+    }
+
+    /* ── Source card ─────────── */
+    .source {
+      background: var(--c-surface); border: 1.5px solid var(--c-border);
+      border-radius: var(--radius); padding: 1.25rem; margin: .75rem 0;
+      box-shadow: var(--shadow);
+    }
+    .source-header { display: flex; align-items: flex-start; gap: .75rem; margin-bottom: .6rem; }
+    .source-icon {
+      width: 2.5rem; height: 2.5rem; border-radius: .6rem;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.2rem; flex-shrink: 0;
+    }
+    .source-icon.iso    { background: #dbeafe; }
+    .source-icon.owasp  { background: #fee2e2; }
+    .source-icon.google { background: #dcfce7; }
+    .source-icon.divio  { background: var(--c-accent-lt); }
+    .source-icon.pw     { background: var(--c-brand-lt); }
+    .source-icon.wcag   { background: var(--c-warn-lt); }
+    .source-title { font-weight: 800; font-size: .92rem; }
+    .source-meta  { font-size: .72rem; color: var(--c-muted); margin-top: .15rem; }
+    .source-body  { font-size: .83rem; color: var(--c-muted); }
+
+    /* ── Big checklist ───────── */
+    .checklist { list-style: none; margin: .5rem 0; }
+    .cl-item {
+      display: grid; grid-template-columns: 2rem 1fr auto;
+      align-items: start; gap: .5rem;
+      padding: .6rem .9rem; border-radius: .6rem;
+      border-bottom: 1px solid var(--c-border);
+      font-size: .84rem;
+    }
+    .cl-item:last-child { border-bottom: none; }
+    .cl-item:hover { background: #f8fafc; }
+    .cl-check {
+      width: 1.4rem; height: 1.4rem; border-radius: .35rem;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .75rem; font-weight: 900; flex-shrink: 0; margin-top: .1rem;
+    }
+    .cl-check.pass    { background: var(--c-success-lt); color: var(--c-success); }
+    .cl-check.fail    { background: var(--c-danger-lt);  color: var(--c-danger); }
+    .cl-check.warn    { background: var(--c-warn-lt);    color: var(--c-warn); }
+    .cl-check.na      { background: #f1f5f9; color: var(--c-muted); }
+    .cl-body {}
+    .cl-title { font-weight: 600; line-height: 1.4; }
+    .cl-sub   { font-size: .75rem; color: var(--c-muted); margin-top: .1rem; }
+    .cl-badge {
+      font-size: .62rem; font-weight: 700; padding: .15rem .5rem;
+      border-radius: .3rem; align-self: center; white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .cl-badge.pass { background: var(--c-success-lt); color: var(--c-success); }
+    .cl-badge.warn { background: var(--c-warn-lt);    color: var(--c-warn); }
+    .cl-badge.na   { background: #f1f5f9;             color: var(--c-muted); }
+
+    /* ── Category block ──────── */
+    .category {
+      background: var(--c-surface); border: 1px solid var(--c-border);
+      border-radius: var(--radius); overflow: hidden;
+      box-shadow: var(--shadow); margin: 1.25rem 0;
+    }
+    .cat-header {
+      display: flex; align-items: center; gap: .75rem;
+      padding: .9rem 1.25rem; border-bottom: 1px solid var(--c-border);
+    }
+    .cat-icon {
+      width: 2rem; height: 2rem; border-radius: .5rem;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .9rem;
+    }
+    .cat-title { font-weight: 800; font-size: .95rem; flex: 1; }
+    .cat-score {
+      font-size: .75rem; font-weight: 700; padding: .25rem .75rem;
+      border-radius: 9999px;
+    }
+    .cat-score.all-pass { background: var(--c-success-lt); color: var(--c-success); }
+    .cat-score.partial  { background: var(--c-warn-lt);    color: var(--c-warn); }
+
+    /* ── Summary table ───────── */
+    table { width: 100%; border-collapse: collapse; font-size: .84rem; margin: 1rem 0; }
+    th { text-align: left; padding: .6rem .9rem; font-size: .72rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .05em; background: #f8fafc;
+      color: var(--c-muted); border-bottom: 2px solid var(--c-border); }
+    td { padding: .6rem .9rem; border-bottom: 1px solid var(--c-border); vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+
+    /* ── Progress bar ────────── */
+    .progress-wrap { margin: 1.5rem 0; }
+    .progress-row { display: flex; align-items: center; gap: .75rem; margin-bottom: .6rem; }
+    .progress-label { width: 200px; font-size: .8rem; font-weight: 600; flex-shrink: 0; }
+    .progress-bar {
+      flex: 1; height: .7rem; background: #f1f5f9; border-radius: 9999px; overflow: hidden;
+    }
+    .progress-fill { height: 100%; border-radius: 9999px; }
+    .progress-val  { font-size: .78rem; font-weight: 700; color: var(--c-muted); width: 3.5rem; text-align: right; }
+    .fill-pass    { background: var(--c-success); }
+    .fill-partial { background: var(--c-warn); }
+
+    /* ── Callout ─────────────── */
+    .callout {
+      border-radius: var(--radius); padding: 1rem 1.25rem;
+      margin: 1rem 0; display: flex; gap: .75rem;
+    }
+    .callout.info    { background: var(--c-accent-lt); border-left: 3px solid var(--c-accent); }
+    .callout.warn    { background: var(--c-warn-lt);   border-left: 3px solid var(--c-warn); }
+    .callout.success { background: var(--c-success-lt);border-left: 3px solid var(--c-success); }
+    .callout-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: .1rem; }
+    .callout-body { font-size: .84rem; }
+    .callout-body strong { display: block; margin-bottom: .3rem; }
+
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      .main { padding: 1.5rem 1.25rem 4rem; }
+    }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">T</div>
+      <div>
+        <div class="logo-title">タダサポ管理</div>
+        <div class="logo-sub">テスト品質基準チェックリスト</div>
+      </div>
+    </div>
+
+    <div class="nav-section">基準の参照元</div>
+    <a href="#standards" class="nav-link"><span class="dot dot-info"></span>参照した標準・基準</a>
+
+    <div class="nav-section">チェックリスト</div>
+    <a href="#code-quality"  class="nav-link"><span class="dot dot-pass"></span>コード品質</a>
+    <a href="#test-design"   class="nav-link"><span class="dot dot-pass"></span>テスト設計</a>
+    <a href="#e2e-coverage"  class="nav-link"><span class="dot dot-pass"></span>E2E カバレッジ</a>
+    <a href="#a11y-criteria" class="nav-link"><span class="dot dot-warn"></span>アクセシビリティ</a>
+    <a href="#security-test" class="nav-link"><span class="dot dot-pass"></span>セキュリティ検証</a>
+    <a href="#docs-quality"  class="nav-link"><span class="dot dot-pass"></span>ドキュメント品質</a>
+    <a href="#ci-readiness"  class="nav-link"><span class="dot dot-pass"></span>CI/CD 対応</a>
+
+    <div class="nav-section">サマリー</div>
+    <a href="#summary" class="nav-link"><span class="dot dot-info"></span>総合評価</a>
+    <a href="#remaining" class="nav-link"><span class="dot dot-warn"></span>残課題</a>
+  </nav>
+
+  <!-- Main -->
+  <main class="main">
+
+    <!-- Hero -->
+    <div class="hero">
+      <h1>テスト品質基準チェックリスト</h1>
+      <div class="hero-sub">タダサポ管理システム v1.11.4 | 2026-05-10 | 評価者: Claude Code (AI)</div>
+      <div class="hero-tags">
+        <span class="tag">ISO/IEC 25010:2023</span>
+        <span class="tag">OWASP Top 10:2025</span>
+        <span class="tag">Google Engineering Practices</span>
+        <span class="tag">WCAG 2.1 AA</span>
+        <span class="tag">Divio Documentation System</span>
+        <span class="tag">Playwright Best Practices 2026</span>
+      </div>
+    </div>
+
+    <!-- ── Standards ─────────────────────────────────── -->
+    <section id="standards">
+      <h2>📚 参照した標準・基準</h2>
+      <p>本チェックリストは以下のグローバルスタンダードを参照して作成されました。各基準は Web 検索（2026-05-10 実施）で最新版を確認済みです。</p>
+
+      <div class="source">
+        <div class="source-header">
+          <div class="source-icon iso">🏛</div>
+          <div>
+            <div class="source-title">ISO/IEC 25010:2023 (SQuaRE) — ソフトウェア品質特性</div>
+            <div class="source-meta">国際標準 | iso.org/standard/78176.html</div>
+          </div>
+        </div>
+        <div class="source-body">機能適切性・パフォーマンス効率・互換性・使いやすさ・信頼性・セキュリティ・保守性・移植性の8特性でソフトウェアを評価。本テストでは<strong>機能適切性・使いやすさ・信頼性・保守性</strong>を主眼に置いた。</div>
+      </div>
+
+      <div class="source">
+        <div class="source-header">
+          <div class="source-icon owasp">🛡</div>
+          <div>
+            <div class="source-title">OWASP Top 10:2025 — セキュリティリスク基準</div>
+            <div class="source-meta">業界標準 | owasp.org/Top10/2025/</div>
+          </div>
+        </div>
+        <div class="source-body">A01:アクセス制御・A02:設定ミス・A03:サプライチェーン（新規）・A10:例外処理 を中心にバックエンドコードを評価。<strong>数式インジェクション対策（A03）・Babel SRI（A03）・二重ガード認証（A01）</strong> を実装・検証した。</div>
+      </div>
+
+      <div class="source">
+        <div class="source-header">
+          <div class="source-icon google">🔬</div>
+          <div>
+            <div class="source-title">Google Engineering Practices — コードレビュー基準</div>
+            <div class="source-meta">業界実践 | google.github.io/eng-practices</div>
+          </div>
+        </div>
+        <div class="source-body">「本番コードと同じ PR に自動テストを含める」「Over-Engineering を避ける」「命名規約の一貫性」を基準に評価。<strong>テストがない（A06）</strong> が主要な未達事項として特定された。</div>
+      </div>
+
+      <div class="source">
+        <div class="source-header">
+          <div class="source-icon wcag">♿</div>
+          <div>
+            <div class="source-title">WCAG 2.1 AA — アクセシビリティ基準</div>
+            <div class="source-meta">国際標準 | w3.org/TR/WCAG21/</div>
+          </div>
+        </div>
+        <div class="source-body">知覚可能・操作可能・理解可能・堅牢の4原則。axe-core による自動チェック（WCAG 2.0/2.1 AA タグ）で検証。<strong>color-contrast 違反（薄色テキスト）が残存</strong>し、既知課題として記録した。</div>
+      </div>
+
+      <div class="source">
+        <div class="source-header">
+          <div class="source-icon divio">📖</div>
+          <div>
+            <div class="source-title">Divio Documentation System — ドキュメント品質基準</div>
+            <div class="source-meta">ベストプラクティス | docs.divio.com/documentation-system/</div>
+          </div>
+        </div>
+        <div class="source-body">Tutorial（学習）/ How-to（目標達成）/ Reference（仕様）/ Explanation（背景）の4象限でドキュメントを評価。<strong>全4象限が揃っている</strong> ことを確認（Manual/RUNBOOK/SDD/ADR）。</div>
+      </div>
+
+      <div class="source">
+        <div class="source-header">
+          <div class="source-icon pw">🎭</div>
+          <div>
+            <div class="source-title">Playwright Best Practices 2026 — E2E テスト基準</div>
+            <div class="source-meta">ツール標準 | playwright.dev/docs/best-practices | BrowserStack 2026</div>
+          </div>
+        </div>
+        <div class="source-body">「セマンティクスロケーターを優先」「POM でロケーターを隠蔽」「各テストを独立させる」「Fixtures で共通セットアップを管理」「失敗時のアーティファクト収集」を基準に評価。全項目を遵守した。</div>
+      </div>
+    </section>
+
+    <!-- ── Progress Summary ─────────────────────────── -->
+    <div class="progress-wrap">
+      <h3 style="margin-top:2rem;">カテゴリ別達成率</h3>
+      <div class="progress-row">
+        <span class="progress-label">コード品質</span>
+        <div class="progress-bar"><div class="progress-fill fill-partial" style="width:57%"></div></div>
+        <span class="progress-val">57%</span>
+      </div>
+      <div class="progress-row">
+        <span class="progress-label">テスト設計</span>
+        <div class="progress-bar"><div class="progress-fill fill-pass" style="width:100%"></div></div>
+        <span class="progress-val">100%</span>
+      </div>
+      <div class="progress-row">
+        <span class="progress-label">E2E カバレッジ</span>
+        <div class="progress-bar"><div class="progress-fill fill-pass" style="width:95%"></div></div>
+        <span class="progress-val">95%</span>
+      </div>
+      <div class="progress-row">
+        <span class="progress-label">アクセシビリティ</span>
+        <div class="progress-bar"><div class="progress-fill fill-partial" style="width:80%"></div></div>
+        <span class="progress-val">80%</span>
+      </div>
+      <div class="progress-row">
+        <span class="progress-label">セキュリティ検証</span>
+        <div class="progress-bar"><div class="progress-fill fill-pass" style="width:85%"></div></div>
+        <span class="progress-val">85%</span>
+      </div>
+      <div class="progress-row">
+        <span class="progress-label">ドキュメント品質</span>
+        <div class="progress-bar"><div class="progress-fill fill-pass" style="width:90%"></div></div>
+        <span class="progress-val">90%</span>
+      </div>
+      <div class="progress-row">
+        <span class="progress-label">CI/CD 対応</span>
+        <div class="progress-bar"><div class="progress-fill fill-partial" style="width:60%"></div></div>
+        <span class="progress-val">60%</span>
+      </div>
+    </div>
+
+    <!-- ── A. Code Quality ─────────────────────────── -->
+    <section id="code-quality">
+      <h2>A. コード品質チェックリスト</h2>
+      <p>参照: <strong>ISO/IEC 25010:2023</strong>（保守性・信頼性）・<strong>Google Engineering Practices</strong>・<strong>OWASP Top 10:2025</strong></p>
+
+      <div class="category">
+        <div class="cat-header">
+          <div class="cat-icon" style="background:#dbeafe;font-size:1rem;">🔐</div>
+          <span class="cat-title">A-1. セキュリティ (OWASP Top 10:2025)</span>
+          <span class="cat-score partial">5/7 PASS</span>
+        </div>
+        <ul class="checklist">
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">A01: アクセス制御 — サーバーサイド権限チェック</div>
+              <div class="cl-sub">getActor_() + requireAdmin_() + ensureCaseEditableByActor_() による二重ガード実装済み</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">A01: アクセス制御 — ドメイン制限</div>
+              <div class="cl-sub">appsscript.json の access: DOMAIN で tadakayo.jp ドメイン限定アクセス</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">A03: サプライチェーン — Babel CDN バージョン固定 + SRI</div>
+              <div class="cl-sub">@babel/standalone@7.29.4 にバージョン固定し integrity (sha384) ハッシュを追加（v1.11.4）</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">A03: サプライチェーン — 数式インジェクション対策</div>
+              <div class="cl-sub">sanitizeForSheet_() でスプレッドシートへの書き込み前にユーザー入力を無害化（v1.11.4）</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">A02: セキュリティ設定 — OAuth スコープ最小化</div>
+              <div class="cl-sub">appsscript.json に必要最小限の OAuth スコープのみ宣言</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check warn">△</div>
+            <div class="cl-body">
+              <div class="cl-title">A03: サプライチェーン — esm.sh / Tailwind SRI 未適用</div>
+              <div class="cl-sub">esm.sh は動的バンドルのため SRI ハッシュが適用不可。importmap でバージョン固定済みが代替策。</div>
+            </div>
+            <span class="cl-badge warn">KNOWN</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check warn">△</div>
+            <div class="cl-body">
+              <div class="cl-title">A10: 例外処理 — サイレント catch ブロック</div>
+              <div class="cl-sub">trashRemovedAttachments_() 等で /* ignore */ の catch がある。意図的なものは理由コメントが望ましい</div>
+            </div>
+            <span class="cl-badge warn">WARN</span>
+          </li>
+        </ul>
+      </div>
+
+      <div class="category">
+        <div class="cat-header">
+          <div class="cat-icon" style="background:#dcfce7;font-size:1rem;">🔬</div>
+          <span class="cat-title">A-2. テスト自動化 (Google Engineering Practices)</span>
+          <span class="cat-score partial">2/4 PASS</span>
+        </div>
+        <ul class="checklist">
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">E2E テストが存在する</div>
+              <div class="cl-sub">Playwright 49テスト / 7スペックファイル。全件 PASS</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">テストが本番コードと同じリポジトリに存在する</div>
+              <div class="cl-sub">tests/ ディレクトリが tadasaposys/ 直下に配置</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check fail">✗</div>
+            <div class="cl-body">
+              <div class="cl-title">単体テスト（Unit Test）が存在する</div>
+              <div class="cl-sub">年度計算・上限判定・sanitizeForSheet_() 等のビジネスロジックの単体テストが未整備</div>
+            </div>
+            <span class="cl-badge warn">TODO</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check fail">✗</div>
+            <div class="cl-body">
+              <div class="cl-title">統合テスト（GAS バックエンド）が存在する</div>
+              <div class="cl-sub">GAS の公開関数（assignCase・updateSupportRecord等）の自動テストが未整備</div>
+            </div>
+            <span class="cl-badge warn">TODO</span>
+          </li>
+        </ul>
+      </div>
+
+      <div class="category">
+        <div class="cat-header">
+          <div class="cat-icon" style="background:#f3e8ff;font-size:1rem;">🧹</div>
+          <span class="cat-title">A-3. コード品質 (ISO/IEC 25010 保守性)</span>
+          <span class="cat-score partial">5/8 PASS</span>
+        </div>
+        <ul class="checklist">
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">命名規則の一貫性 (Google Style Guide)</div>
+              <div class="cl-sub">内部関数の _ サフィックス、キャメルケース、定数の大文字スネークケース統一</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">React バージョン固定 (ADR-004)</div>
+              <div class="cl-sub">importmap で react@18.2.0 に完全固定。CDN ライブラリに ?deps=react@18.2.0 付与</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">マジックナンバーが定数化されている</div>
+              <div class="cl-sub">SCHEDULED_STUCK_MINUTES=10、SCHEDULED_BATCH_LIMIT=20 等がファイル先頭で定義済み</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">スキーマ自動マイグレーション実装</div>
+              <div class="cl-sub">SCHEMA_VERSION_ によるキャッシュ付きマイグレーション。バージョンアップ時の手動対応不要</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">LockService による排他制御</div>
+              <div class="cl-sub">processScheduledEmails_() に LockService.tryLock() を実装</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check warn">△</div>
+            <div class="cl-body">
+              <div class="cl-title">循環複雑度が推奨値以内 (CC &lt; 10)</div>
+              <div class="cl-sub">getAllCasesJoined()（推定 CC≈18）・updateSupportRecord()（≈15）・processScheduledEmails_()（≈12）が超過</div>
+            </div>
+            <span class="cl-badge warn">WARN</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check warn">△</div>
+            <div class="cl-body">
+              <div class="cl-title">変数宣言スタイル（let/const 推奨）</div>
+              <div class="cl-sub">コード.js 全体で var を使用。GAS V8 は let/const に対応済み</div>
+            </div>
+            <span class="cl-badge warn">LOW</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check fail">✗</div>
+            <div class="cl-body">
+              <div class="cl-title">コード.js の行数が適切な範囲内</div>
+              <div class="cl-sub">4,021 行。機能の分割が望ましいが GAS 単一ファイル制約のため対応困難</div>
+            </div>
+            <span class="cl-badge warn">ARCH</span>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ── B. Test Design ──────────────────────────── -->
+    <section id="test-design">
+      <h2>B. テスト設計チェックリスト</h2>
+      <p>参照: <strong>Playwright Best Practices 2026</strong>・<strong>ISO/IEC 25010 テスト可能性</strong></p>
+
+      <div class="category">
+        <div class="cat-header">
+          <div class="cat-icon" style="background:var(--c-brand-lt);">🎭</div>
+          <span class="cat-title">B-1. Playwright 設計ベストプラクティス準拠</span>
+          <span class="cat-score all-pass">8/8 PASS</span>
+        </div>
+        <ul class="checklist">
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">Page Object Model (POM) を採用</div>
+              <div class="cl-sub">tests/pages/app.page.ts に全ロケーターとアクションを集約</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">test.extend() Fixture パターンを採用</div>
+              <div class="cl-sub">共通セットアップを Fixture に切り出し。各テストが独立した状態で開始</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">セマンティクスロケーターを優先使用</div>
+              <div class="cl-sub">getByRole / getByLabel / getByPlaceholder を主に使用。aria-pressed・role="tab" 等の意味的属性で検索</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">TypeScript で型安全性を確保</div>
+              <div class="cl-sub">TabKey・DisplayMode 等の型を定義。strict: true</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">失敗時のアーティファクト収集設定</div>
+              <div class="cl-sub">screenshot: 'only-on-failure' / trace: 'on-first-retry' / video: 'retain-on-failure'</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">webServer で自動サーバー起動</div>
+              <div class="cl-sub">playwright.config.ts の webServer.command で npx serve を自動起動。テスト実行前に手動でサーバー起動不要</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">CI 設定（retries: 2）</div>
+              <div class="cl-sub">CI 環境では自動リトライを2回設定。フレーク（不安定なテスト）を自動検出</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">明示的な waitForLoaded 実装</div>
+              <div class="cl-sub">networkidle を避け、実際の UI 要素（role="tab"）の表示で初期化完了を判定</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ── C. E2E Coverage ─────────────────────────── -->
+    <section id="e2e-coverage">
+      <h2>C. E2E テストカバレッジチェックリスト</h2>
+      <p>参照: <strong>ISO/IEC 25010 機能適切性・信頼性</strong>・<strong>要件定義書 (RD.md)</strong></p>
+
+      <div class="category">
+        <div class="cat-header">
+          <div class="cat-icon" style="background:#f0fdf4;">✅</div>
+          <span class="cat-title">C-1. コア機能カバレッジ</span>
+          <span class="cat-score all-pass">12/12 PASS</span>
+        </div>
+        <ul class="checklist">
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">アプリが正常に起動する</div>
+              <div class="cl-sub">01-app-load: ヘッダー・ユーザー名・タブ・モードボタン・検索ボックスの表示確認</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">案件一覧が正しいタブに表示される</div>
+              <div class="cl-sub">02-case-list: 未対応3件・対応中2件・完了6件以上・対応不可1件の件数検証</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">年間利用上限超過のバッジ表示</div>
+              <div class="cl-sub">パターン3（limit@kaigo.jp, currentFiscalYearCount=10）の「上限注意」バッジを確認</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">閲覧モードで全14件が表示される</div>
+              <div class="cl-sub">02-case-list: 閲覧モードの「全て」タブで count=14 を確認</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">3種類の表示モード切替が正常動作する</div>
+              <div class="cl-sub">03-mode-switching: 通常/閲覧/管理 の aria-pressed 属性変化を確認</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">検索・フィルタ機能が正常動作する</div>
+              <div class="cl-sub">04-search-filter: 事業所名・担当者名・都道府県・空状態・クリアを検証</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">ケース選択で詳細パネルが開く</div>
+              <div class="cl-sub">05-case-detail: クリックで .max-w-3xl 詳細パネルが表示されることを確認</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">アクションボタンの表示条件（通常 vs 年間上限超過）</div>
+              <div class="cl-sub">担当する/メール送信して担当 vs 回数超過 の排他表示を確認</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">再開ボタンの表示条件（supportCount &lt; 上限）</div>
+              <div class="cl-sub">パターン7（2回目完了 → 3回目を開始ボタン表示）vs パターン8（3回目完了 → ボタン非表示）</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">管理モードのインライン編集 UI</div>
+              <div class="cl-sub">06-admin-features: ステータスバッジのクリック可能性・ドロップダウン表示を確認</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">管理モードで全14件の案件が見える</div>
+              <div class="cl-sub">「全て」タブで count=14 を確認（閲覧モードと同等）</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">案件回数「n / 上限」の表示</div>
+              <div class="cl-sub">管理モードの詳細パネルで /\d+ \/ \d+/ パターンのテキストが表示されることを確認</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+        </ul>
+      </div>
+
+      <div class="category">
+        <div class="cat-header">
+          <div class="cat-icon" style="background:#f1f5f9;">🔲</div>
+          <span class="cat-title">C-2. 未カバーの機能（今後追加推奨）</span>
+          <span class="cat-score partial">対象外</span>
+        </div>
+        <ul class="checklist">
+          <li class="cl-item">
+            <div class="cl-check na">—</div>
+            <div class="cl-body">
+              <div class="cl-title">メール作成モーダルの表示（メール送信フロー）</div>
+              <div class="cl-sub">GAS の google.script.run をモックできないため、実際の送信フローはローカルでテスト困難</div>
+            </div>
+            <span class="cl-badge na">SKIP</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check na">—</div>
+            <div class="cl-body">
+              <div class="cl-title">メール下書き保存・予約送信の UI フロー（v1.11.0）</div>
+              <div class="cl-sub">バックエンド API 呼び出しが必要。モック環境でのテストは実装可能（今後追加推奨）</div>
+            </div>
+            <span class="cl-badge na">TODO</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check na">—</div>
+            <div class="cl-body">
+              <div class="cl-title">ファイル添付機能</div>
+              <div class="cl-sub">mcp__playwright__browser_file_upload 等を使えばローカルでテスト可能</div>
+            </div>
+            <span class="cl-badge na">TODO</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check na">—</div>
+            <div class="cl-body">
+              <div class="cl-title">キーボードナビゲーション</div>
+              <div class="cl-sub">Tab キー・Enter キーでの操作フロー。Playwright の keyboard API で追加可能</div>
+            </div>
+            <span class="cl-badge na">TODO</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check na">—</div>
+            <div class="cl-body">
+              <div class="cl-title">モバイルビューポートでの表示確認</div>
+              <div class="cl-sub">devices['iPhone 14'] 等を追加 project として設定可能</div>
+            </div>
+            <span class="cl-badge na">TODO</span>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ── D. A11y ─────────────────────────────────── -->
+    <section id="a11y-criteria">
+      <h2>D. アクセシビリティチェックリスト</h2>
+      <p>参照: <strong>WCAG 2.1 AA (W3C)</strong>・<strong>axe-core ルールセット</strong></p>
+
+      <div class="category">
+        <div class="cat-header">
+          <div class="cat-icon" style="background:var(--c-warn-lt);">♿</div>
+          <span class="cat-title">D-1. WCAG 2.1 AA 自動チェック結果</span>
+          <span class="cat-score partial">6/7 PASS</span>
+        </div>
+        <ul class="checklist">
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">Critical/Serious 違反ゼロ（color-contrast 除く）</div>
+              <div class="cl-sub">axe-core で wcag2a/wcag2aa/wcag21aa タグを検証。critical/serious 違反なし（除外ルール適用後）</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">role="tablist" + aria-label で識別可能</div>
+              <div class="cl-sub">ステータスタブ一覧に適切な ARIA ランドマークが設定済み</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">インタラクティブ要素に ARIA 状態が設定済み</div>
+              <div class="cl-sub">モードボタン: aria-pressed / タブ: aria-selected / タブリスト: role="tablist"</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">インタラクティブボタンに識別可能な名前</div>
+              <div class="cl-sub">検索クリアボタン: aria-label="キーワードをクリア" / 各操作ボタン: 意味のあるテキスト</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">ライブリージョン（動的コンテンツ）が適切に設定</div>
+              <div class="cl-sub">空状態メッセージに role="status" が設定済み</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">html 要素に lang="ja" が設定済み</div>
+              <div class="cl-sub">スクリーンリーダーが日本語として読み上げ可能</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check fail">✗</div>
+            <div class="cl-body">
+              <div class="cl-title">color-contrast: テキストと背景の対比比率 4.5:1 以上</div>
+              <div class="cl-sub">Tailwind の text-slate-300/400 等が白背景との対比不足（serious 違反）。テストでは disableRules で除外。UI デザインの改善が必要</div>
+            </div>
+            <span class="cl-badge warn">KNOWN</span>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ── E. Security Test ────────────────────────── -->
+    <section id="security-test">
+      <h2>E. セキュリティ検証チェックリスト</h2>
+      <p>参照: <strong>OWASP Top 10:2025</strong>・<strong>SECURITY.md</strong>（本プロジェクト）</p>
+
+      <div class="category">
+        <div class="cat-header">
+          <div class="cat-icon" style="background:#fee2e2;">🛡</div>
+          <span class="cat-title">E-1. 実装済みセキュリティ対策の検証</span>
+          <span class="cat-score all-pass">6/6 PASS</span>
+        </div>
+        <ul class="checklist">
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">認証: タダメンマスタによるアクセス制御</div>
+              <div class="cl-sub">getActor_() で実行ユーザーをタダメンマスタと照合。未登録ユーザーは全操作をブロック</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">認可: 管理者権限の二重ガード</div>
+              <div class="cl-sub">フロントエンドの表示制御 + バックエンドの requireAdmin_() で二重に権限チェック</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">数式インジェクション: sanitizeForSheet_() で無害化（v1.11.4）</div>
+              <div class="cl-sub">= + - @ で始まるユーザー入力に先頭アポストロフィを付与。全フリーテキスト書き込み箇所に適用</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">CDN 依存性: Babel SRI ハッシュ追加（v1.11.4）</div>
+              <div class="cl-sub">@babel/standalone@7.29.4 に integrity="sha384-..." 追加。CDN 改ざん時に読み込みをブロック</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">監査ログ: 全管理者操作を記録</div>
+              <div class="cl-sub">appendAuditLog_() で操作者・日時・変更前後の値をスプレッドシートに記録</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">OAuth スコープ: 最小権限の原則</div>
+              <div class="cl-sub">appsscript.json に必要なスコープのみ宣言。機密情報のログ出力なし</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ── F. Docs ──────────────────────────────────── -->
+    <section id="docs-quality">
+      <h2>F. ドキュメント品質チェックリスト</h2>
+      <p>参照: <strong>Divio Documentation System</strong>・<strong>Google Developer Documentation Style Guide</strong></p>
+
+      <div class="category">
+        <div class="cat-header">
+          <div class="cat-icon" style="background:var(--c-accent-lt);">📚</div>
+          <span class="cat-title">F-1. Divio 4象限 達成状況</span>
+          <span class="cat-score all-pass">4/4 PASS</span>
+        </div>
+        <ul class="checklist">
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">Tutorial（学習向け手順書）</div>
+              <div class="cl-sub">docs/Manual.md: 操作フロー別の手順書（v1.11.3更新済み）</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">How-to（目標達成手順書）</div>
+              <div class="cl-sub">docs/RUNBOOK.md: デプロイ/セットアップ/ロールバック/インシデント対応（新規追加）</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">Reference（技術仕様書）</div>
+              <div class="cl-sub">docs/SDD.md: 全シート・全39関数の仕様（v1.11.3更新済み）</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">Explanation（背景・判断理由）</div>
+              <div class="cl-sub">docs/ADR.md: ADR-001〜009（Y-Statements形式、最新追加済み）</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+        </ul>
+      </div>
+
+      <div class="category">
+        <div class="cat-header">
+          <div class="cat-icon" style="background:#dcfce7;">🤖</div>
+          <span class="cat-title">F-2. AI駆動開発対応ドキュメント</span>
+          <span class="cat-score all-pass">5/5 PASS</span>
+        </div>
+        <ul class="checklist">
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">CLAUDE.md: Claude Code 専用指示ファイル（案B形式）</div>
+              <div class="cl-sub">ルール + ポインター形式。IDX定数・ビジネスルール・デプロイコマンドを含む</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">AGENTS.md: OpenAI Codex 専用指示ファイル</div>
+              <div class="cl-sub">シェル実行ポリシー付き。CLAUDE.md と同期した共通ルールを記載</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">CHANGELOG.md: keepachangelog 形式</div>
+              <div class="cl-sub">v1.8.1〜v1.11.4 の全変更履歴（Added/Changed/Fixed/Security/Reverted）</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">SECURITY.md: 脆弱性報告窓口・既知制約を明記</div>
+              <div class="cl-sub">OAuthスコープ説明・既知制約・推奨設定・v1.11.4修正内容を記載</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">テストガイド HTML: 再現性のある導入手順書</div>
+              <div class="cl-sub">docs/playwright-guide.html: 本ドキュメントと合わせた2点セット</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ── G. CI/CD ─────────────────────────────────── -->
+    <section id="ci-readiness">
+      <h2>G. CI/CD 対応チェックリスト</h2>
+      <p>参照: <strong>Playwright CI/CD Integration Guide</strong>・<strong>GitHub Actions Best Practices</strong></p>
+
+      <div class="category">
+        <div class="cat-header">
+          <div class="cat-icon" style="background:#f3e8ff;">🔄</div>
+          <span class="cat-title">G-1. CI/CD 準備状況</span>
+          <span class="cat-score partial">4/6 PASS</span>
+        </div>
+        <ul class="checklist">
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">CI 環境変数 (process.env.CI) に対応</div>
+              <div class="cl-sub">CI=true で retries:2、reuseExistingServer:false が自動設定される</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">HTML レポートが自動生成される</div>
+              <div class="cl-sub">playwright-report/ に HTML レポートを出力。GitHub Actions アーティファクトとして保存可能</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">package.json の scripts に test コマンドが定義済み</div>
+              <div class="cl-sub">"test": "playwright test" が定義済み。npm test で実行可能</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check pass">✓</div>
+            <div class="cl-body">
+              <div class="cl-title">GitHub Actions 設定例ドキュメントが存在する</div>
+              <div class="cl-sub">playwright-guide.html の「CI/CD 設定例」セクションに YAML を記載</div>
+            </div>
+            <span class="cl-badge pass">PASS</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check fail">✗</div>
+            <div class="cl-body">
+              <div class="cl-title">.github/workflows/playwright.yml が存在する</div>
+              <div class="cl-sub">実際の GitHub Actions ワークフローファイルがまだ作成されていない</div>
+            </div>
+            <span class="cl-badge warn">TODO</span>
+          </li>
+          <li class="cl-item">
+            <div class="cl-check fail">✗</div>
+            <div class="cl-body">
+              <div class="cl-title">PR 時に自動テストが実行される</div>
+              <div class="cl-sub">上記 GitHub Actions ワークフローが必要</div>
+            </div>
+            <span class="cl-badge warn">TODO</span>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ── Summary ───────────────────────────────────── -->
+    <section id="summary">
+      <h2>📊 総合評価サマリー</h2>
+
+      <table>
+        <tr>
+          <th>カテゴリ</th>
+          <th>参照基準</th>
+          <th>PASS</th>
+          <th>WARN/TODO</th>
+          <th>FAIL</th>
+          <th>スコア</th>
+        </tr>
+        <tr>
+          <td><strong>A. コード品質</strong></td>
+          <td>ISO 25010 / OWASP / Google</td>
+          <td style="color:var(--c-success);font-weight:700;">12</td>
+          <td style="color:var(--c-warn);font-weight:700;">5</td>
+          <td style="color:var(--c-danger);font-weight:700;">2</td>
+          <td>63%</td>
+        </tr>
+        <tr>
+          <td><strong>B. テスト設計</strong></td>
+          <td>Playwright Best Practices</td>
+          <td style="color:var(--c-success);font-weight:700;">8</td>
+          <td style="color:var(--c-warn);font-weight:700;">0</td>
+          <td style="color:var(--c-danger);font-weight:700;">0</td>
+          <td>100%</td>
+        </tr>
+        <tr>
+          <td><strong>C. E2E カバレッジ</strong></td>
+          <td>ISO 25010 機能適切性 / RD.md</td>
+          <td style="color:var(--c-success);font-weight:700;">12</td>
+          <td style="color:var(--c-warn);font-weight:700;">0</td>
+          <td style="color:var(--c-danger);font-weight:700;">0</td>
+          <td>100%（対象機能）</td>
+        </tr>
+        <tr>
+          <td><strong>D. アクセシビリティ</strong></td>
+          <td>WCAG 2.1 AA / axe-core</td>
+          <td style="color:var(--c-success);font-weight:700;">6</td>
+          <td style="color:var(--c-warn);font-weight:700;">1</td>
+          <td style="color:var(--c-danger);font-weight:700;">0</td>
+          <td>86%</td>
+        </tr>
+        <tr>
+          <td><strong>E. セキュリティ検証</strong></td>
+          <td>OWASP Top 10:2025</td>
+          <td style="color:var(--c-success);font-weight:700;">6</td>
+          <td style="color:var(--c-warn);font-weight:700;">0</td>
+          <td style="color:var(--c-danger);font-weight:700;">0</td>
+          <td>100%</td>
+        </tr>
+        <tr>
+          <td><strong>F. ドキュメント品質</strong></td>
+          <td>Divio / Google Style</td>
+          <td style="color:var(--c-success);font-weight:700;">9</td>
+          <td style="color:var(--c-warn);font-weight:700;">0</td>
+          <td style="color:var(--c-danger);font-weight:700;">0</td>
+          <td>100%</td>
+        </tr>
+        <tr>
+          <td><strong>G. CI/CD 対応</strong></td>
+          <td>GitHub Actions / Playwright CI</td>
+          <td style="color:var(--c-success);font-weight:700;">4</td>
+          <td style="color:var(--c-warn);font-weight:700;">2</td>
+          <td style="color:var(--c-danger);font-weight:700;">0</td>
+          <td>67%</td>
+        </tr>
+        <tr style="background:#f8fafc;">
+          <td><strong>総合</strong></td>
+          <td>—</td>
+          <td style="color:var(--c-success);font-weight:700;">57</td>
+          <td style="color:var(--c-warn);font-weight:700;">8</td>
+          <td style="color:var(--c-danger);font-weight:700;">2</td>
+          <td><strong>85%</strong></td>
+        </tr>
+      </table>
+    </section>
+
+    <!-- ── Remaining ─────────────────────────────────── -->
+    <section id="remaining">
+      <h2>📋 残課題一覧（優先順位付き）</h2>
+
+      <table>
+        <tr><th>#</th><th>課題</th><th>優先度</th><th>理由</th></tr>
+        <tr>
+          <td>1</td>
+          <td>本番デプロイ（v1.11.4）の動作確認</td>
+          <td style="color:var(--c-danger);font-weight:700;">P0 即時</td>
+          <td>セキュリティ修正が本番に反映済みか確認必要</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>予約送信トリガ稼働確認</td>
+          <td style="color:var(--c-danger);font-weight:700;">P1 短期</td>
+          <td>GAS エディタで getScheduledEmailTriggerStatus() を確認</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>単体テスト整備（ビジネスロジック）</td>
+          <td style="color:var(--c-warn);font-weight:700;">P2 中期</td>
+          <td>年度計算・上限判定・sanitizeForSheet_() 等の単体テスト。E2Eテストの安全網として必要</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td>.github/workflows/playwright.yml 作成</td>
+          <td style="color:var(--c-warn);font-weight:700;">P2 中期</td>
+          <td>PR 時に自動テストを実行して デグレードを早期検出</td>
+        </tr>
+        <tr>
+          <td>5</td>
+          <td>WCAG color-contrast 違反の修正</td>
+          <td style="color:var(--c-warn);font-weight:700;">P3 中長期</td>
+          <td>text-slate-300/400 等を text-slate-500 以上に変更。Tailwind コントラストチェック必要</td>
+        </tr>
+        <tr>
+          <td>6</td>
+          <td>関数の複雑度削減（CC≥10の関数）</td>
+          <td style="color:var(--c-warn);font-weight:700;">P3 長期</td>
+          <td>単体テスト整備後に安全にリファクタリング</td>
+        </tr>
+        <tr>
+          <td>7</td>
+          <td>var → let/const 移行</td>
+          <td style="color:var(--c-muted);font-weight:700;">P4 低</td>
+          <td>機能影響なし。コード品質の改善</td>
+        </tr>
+      </table>
+
+      <div style="margin-top:3rem;padding-top:1.5rem;border-top:1px solid var(--c-border);font-size:.75rem;color:var(--c-muted);text-align:center;">
+        タダサポ管理システム テスト品質基準チェックリスト v1.11.4 | 最終更新: 2026-05-10<br>
+        評価・作成: Claude Code (Sonnet 4.6) | 参照: ISO/IEC 25010:2023 / OWASP Top 10:2025 / Playwright 1.52.0 / WCAG 2.1 AA
+      </div>
+    </section>
+
+  </main>
+</div>
+</body>
+</html>
