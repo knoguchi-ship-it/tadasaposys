@@ -1,0 +1,20 @@
+{
+  "name": "tadasaposys",
+  "version": "1.11.4",
+  "description": "タダサポ管理システム — E2E テスト",
+  "private": true,
+  "scripts": {
+    "test":          "playwright test",
+    "test:ui":       "playwright test --ui",
+    "test:headed":   "playwright test --headed",
+    "test:debug":    "playwright test --debug",
+    "test:report":   "playwright show-report",
+    "test:a11y":     "playwright test tests/e2e/07-a11y.spec.ts"
+  },
+  "devDependencies": {
+    "@playwright/test":    "^1.52.0",
+    "@axe-core/playwright": "^4.10.2",
+    "typescript":          "^5.8.3",
+    "@types/node":         "^22.0.0"
+  }
+}
