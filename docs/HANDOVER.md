@@ -1,8 +1,8 @@
 # 開発者向け引継ぎ資料 (HANDOVER.md)
 
 **Project:** タダサポ管理システム
-**Version:** 1.12.0（現行リリース）
-**Date:** 2026/05/11
+**Version:** 1.12.1（現行リリース）
+**Date:** 2026/05/28
 **Author:** Development Team
 
 ---
@@ -12,7 +12,7 @@
 ### 本番稼働中
 
 - **URL**: `https://script.google.com/a/macros/tadakayo.jp/s/AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ/exec`
-- **デプロイバージョン**: @142（v1.12.0）
+- **デプロイバージョン**: @142（v1.12.0、v1.12.1 は未デプロイ）
 - **Webapp 設定**: `executeAs: USER_ACCESSING` / `access: DOMAIN`（tadakayo.jp ドメインのみ）
 - **認証**: タダメンマスタ（B列=氏名, C列=メール, D列=ROLE）で認証
 
@@ -33,8 +33,8 @@
 | 回数超過メール送信 → 対応不可 | ✅ | v1.8.1 |
 | メール機能（5モード、CC/BCC、スレッド対応） | ✅ | v1.8.1〜 |
 | メール下書き保存（自動復元プロンプト付き） | ✅ | v1.11.0 |
-| メール予約送信（5分間隔トリガ、取消可能） | ✅ | v1.11.0 |
-| 「下書きあり」「予約あり」バッジ表示 | ✅ | v1.11.0 |
+| メール予約送信（5分間隔トリガ、取消可能） | 廃止 | v1.12.1（本人送信保証不可のため） |
+| 「下書きあり」バッジ表示 | ✅ | v1.11.0 |
 | 表示モード切替（通常/閲覧/管理） | ✅ | v1.8.3 |
 | 検索UI（常時表示・チップ型フィルタ・期間プリセット・並び順） | ✅ | v1.9.0 |
 | 対応ツール選択・月間上限・設定管理 | ✅ | v1.9.29〜 |
@@ -79,11 +79,11 @@ tadasaposys/
 │   ├── fixtures/           ← カスタム Fixture
 │   └── unit/               ← Jest 単体テスト（34テスト）
 └── docs/
-    ├── SDD.md              ← 設計書 v1.12.0
+    ├── SDD.md              ← 設計書 v1.12.1
     ├── HANDOVER.md         ← 本ドキュメント
     ├── ADR.md              ← アーキテクチャ判断記録（ADR-001〜010）
     ├── RUNBOOK.md          ← 運用手順書
-    ├── Manual.md           ← 操作マニュアル v1.12.0
+    ├── Manual.md           ← 操作マニュアル v1.12.1
     ├── RD.md               ← 要件定義
     ├── playwright-guide.html ← テスト導入・実行ガイド（HTML）
     └── test-criteria.html  ← テスト品質基準チェックリスト（HTML）
@@ -133,7 +133,7 @@ tadasaposys/
 | メール履歴 | 送信メールの履歴 |
 | 監査ログ | 管理者操作の監査ログ（全管理者操作を記録） |
 | メール下書き | 送信前メール一時保存（v1.11.0、11列） |
-| 予約送信キュー | 予約送信待機メール（v1.11.0、16列） |
+| 予約送信キュー | v1.12.1で予約送信廃止。既存キュー履歴・無効化確認用（16列） |
 
 ### IDX定数（コード.js 約30行目）
 
@@ -201,9 +201,10 @@ inProgress/completed → cancelled
 | `createZoomMeeting(...)` | Zoomミーティング作成 |
 | `verifyCcDryRun()` | CC設定のドライラン検証 |
 | `saveDraft / loadDraft / deleteDraft / listDraftsForCase` | メール下書き管理（v1.11.0） |
-| `scheduleEmail / cancelScheduledEmail / listScheduledForCase` | 予約送信管理（v1.11.0） |
-| `processScheduledEmails_()` | 予約送信トリガハンドラ（5分間隔・内部） |
-| `setupScheduledEmailTrigger()` | 予約送信トリガ登録（初回手動実行） |
+| `scheduleEmail / cancelScheduledEmail / listScheduledForCase` | v1.12.1で廃止。新規予約登録・一覧表示は行わない |
+| `processScheduledEmails_()` | 旧トリガー互換。送信せず未送信予約を `disabled` 化 |
+| `setupScheduledEmailTrigger()` | v1.12.1以降は新規作成せず既存トリガーを削除 |
+| `disablePendingScheduledEmails()` | 既存の `pending` / `sending` 予約を `disabled` 化 |
 
 ### 重要な内部関数（v1.11.6追加）
 
@@ -301,11 +302,11 @@ npm run test:unit  # 34テスト / 約0.2秒
 | Calendar Advanced Service | 手動有効化必要 | Meet URL作成に必要 |
 | `ATTACHMENT_FOLDER_ID` | 未設定時は添付保存不可 | 設定シートにDriveフォルダIDを設定 |
 | 新着バッジ | localStorage依存 | ブラウザをまたいだ既読状態は同期されない |
-| 予約送信トリガ | 手動登録必要 | 本番初回デプロイ後に `setupScheduledEmailTrigger()` を1回実行 |
+| 予約送信トリガ | 廃止 | `setupScheduledEmailTrigger()` は既存トリガー削除のみ。未送信予約は `disablePendingScheduledEmails()` で無効化 |
 | color-contrast（旧バージョンデータ） | 修正済み | v1.11.5 で全違反を解消。既存 DB 内のデータは未修正 |
 | `updateSupportHistory` 担当者チェックなし | 中リスク残存 | 担当者以外が過去履歴を編集可能（別 Issue で管理） |
 | 管理機能で作成された不整合データ（v1.11.5 以前） | 残存可能性あり | v1.11.6 で今後の操作は整合性保証済み。旧データは修復スクリプトを別途検討 |
-| SDD.md / Manual.md ドキュメント | v1.12.0 対応済み | 2026/05/11 更新 |
+| SDD.md / Manual.md ドキュメント | v1.12.1 対応済み | 2026/05/28 更新 |
 | GitHub Actions CI | ワークフローファイル設定済み | `.github/workflows/playwright.yml` |
 | **GAS 上の `temp/index.html` `temp/コード.js`** | 残存（無害化済み） | clasp push 事故で残存したスタブファイル。doGet 等の関数定義は除去済みで動作影響なし。GAS エディタから手動削除推奨 |
 | **`appsscript.json` の `exceptionLogging`** | 監視継続 | 過去に GAS 側で `STACKDRIVER`→`NONE` に変更された痕跡あり。v1.11.8 デプロイ時に復元済み。デプロイ前は git diff で要確認 |
@@ -352,7 +353,7 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 ### バージョン管理ルール
 
 - `コード.js` 先頭コメント・SDD・HANDOVER・Manual・CHANGELOG・CLAUDE.md・AGENTS.md のバージョンは常に一致させること
-- 現行: **v1.12.0**
+- 現行: **v1.12.1**
 
 ### 🔒 デプロイ時の絶対グランドルール（CLAUDE.md / AGENTS.md にも記載）
 
@@ -401,6 +402,7 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 | **v1.11.8** | 2026/05/10 | Phase 2: 重複検知 + Zoom時チームカレンダー強制登録 |
 | **v1.11.9** | 2026/05/11 | Phase 3: FullCalendar 埋込み（ドラッグ選択 + バッファ可視化） |
 | **v1.12.0** | 2026/05/11 | Phase 4: 「いつものタダスクID」モード追加・ドキュメント完全更新（@142-143） |
+| **v1.12.1** | 2026/05/28 | 予約送信機能を廃止。旧トリガー互換は未送信キューを `disabled` 化し、即時送信・下書き保存は継続 |
 
 ---
 

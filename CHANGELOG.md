@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.12.1] - 2026-05-28
+
+### Removed
+- **メール予約送信機能を廃止**
+  - メール作成モーダルの「予約送信」ボタン、日時指定 UI、案件一覧の「予約あり」バッジ、案件詳細の予約送信一覧を撤去
+  - `getInitialData()` の `scheduledCaseIds` 返却を廃止
+  - 即時メール送信、スレッド返信、回数超過メール、下書き保存は継続
+
+### Changed
+- 旧予約送信 API は後方互換スタブ化し、新規予約登録・自動送信を行わない
+- 残存する `processScheduledEmails_` トリガーが起動してもメール送信せず、未送信予約を `disabled` に更新
+- `setupScheduledEmailTrigger()` は新規トリガーを作成せず、既存予約送信トリガーを削除する
+- 未送信予約の明示的な無効化用に `disablePendingScheduledEmails()` を追加
+
+### Reason
+- Apps Script の時間主導トリガーは作成者アカウントで実行されるため、予約送信では Web アプリのアクセスユーザー本人からの Gmail 送信を保証できない。
+
+---
+
 ## [1.12.0] - 2026-05-11
 
 ### Added — 日程確定刷新 Phase 4 / 仕上げ

@@ -202,8 +202,6 @@
     };
     // v1.11.0: メール下書きのローカル保管（キー: caseId|mode|threadId）
     let mockDrafts = {};
-    // v1.11.0: 予約送信キューのローカル保管（キー: queueId）
-    let mockScheduled = {};
 
     let mockCases = [
       // ── パターン1: 未対応（通常） ──
@@ -372,8 +370,7 @@
           return new Promise(resolve => setTimeout(() => {
             var draftCaseIds = Object.keys(mockDrafts).map(k => k.split('|')[0]);
             var uniqueDraftCaseIds = [...new Set(draftCaseIds)];
-            var scheduledCaseIds = [...new Set(Object.values(mockScheduled).filter(s => s.status === 'pending' || s.status === 'sending').map(s => s.caseId))];
-            resolve({ user: MOCK_USER, cases: buildMockCaseList(), masters: MOCK_MASTERS, draftCaseIds: uniqueDraftCaseIds, scheduledCaseIds: scheduledCaseIds, forcedCc: 'tadasapo@tadakayo.jp' });
+            resolve({ user: MOCK_USER, cases: buildMockCaseList(), masters: MOCK_MASTERS, draftCaseIds: uniqueDraftCaseIds, forcedCc: 'tadasapo@tadakayo.jp' });
           }, 300));
         }
         return new Promise((resolve, reject) => {
@@ -429,66 +426,6 @@
         }
         return new Promise((resolve, reject) => {
           google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).listDraftsForCase(caseId);
-        });
-      },
-      scheduleEmail: (payload) => {
-        if (IS_LOCAL) {
-          return new Promise((resolve, reject) => setTimeout(() => {
-            var sendAt = new Date(payload.sendAt);
-            if (isNaN(sendAt.getTime())) { reject(new Error('送信予定時刻の形式が不正です')); return; }
-            if (sendAt.getTime() - Date.now() < 60 * 1000) { reject(new Error('送信予定時刻は現在時刻より1分以上先を指定してください')); return; }
-            var queueId = 'sch-' + Date.now();
-            mockScheduled[queueId] = {
-              queueId: queueId,
-              caseId: payload.caseId,
-              staffEmail: MOCK_USER.email,
-              staffName: MOCK_USER.name,
-              mode: payload.mode,
-              threadId: payload.threadId || '',
-              subject: payload.subject || '',
-              body: payload.body || '',
-              cc: payload.cc || '',
-              bcc: payload.bcc || '',
-              tools: payload.tools || [],
-              sendAt: sendAt.toISOString(),
-              status: 'pending',
-              createdAt: new Date().toISOString()
-            };
-            console.log('=== 予約送信登録（モック） ===', queueId, sendAt.toLocaleString('ja-JP'));
-            resolve({ queueId: queueId, sendAt: sendAt.toISOString(), status: 'pending' });
-          }, 250));
-        }
-        return new Promise((resolve, reject) => {
-          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).scheduleEmail(payload);
-        });
-      },
-      cancelScheduledEmail: (queueId) => {
-        if (IS_LOCAL) {
-          return new Promise((resolve, reject) => setTimeout(() => {
-            var item = mockScheduled[queueId];
-            if (!item) { reject(new Error('予約送信が見つかりません')); return; }
-            if (item.status !== 'pending') { reject(new Error('このステータスの予約はキャンセルできません: ' + item.status)); return; }
-            item.status = 'cancelled';
-            resolve({ cancelled: true });
-          }, 150));
-        }
-        return new Promise((resolve, reject) => {
-          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).cancelScheduledEmail(queueId);
-        });
-      },
-      listScheduledForCase: (caseId) => {
-        if (IS_LOCAL) {
-          return new Promise(resolve => setTimeout(() => {
-            var out = [];
-            Object.keys(mockScheduled).forEach(k => {
-              var s = mockScheduled[k];
-              if (s.caseId === caseId && (s.status === 'pending' || s.status === 'sending')) out.push(s);
-            });
-            resolve(out);
-          }, 150));
-        }
-        return new Promise((resolve, reject) => {
-          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).listScheduledForCase(caseId);
         });
       },
       getAllCases: () => {
@@ -1233,11 +1170,6 @@
       // v1.11.0: 下書きがある案件ID集合（バッジ表示用）
       const [draftCaseIds, setDraftCaseIds] = useState([]);
       const draftCaseIdSet = useMemo(() => new Set(draftCaseIds), [draftCaseIds]);
-      // v1.11.0: 予約送信がある案件ID集合（バッジ表示用）
-      const [scheduledCaseIds, setScheduledCaseIds] = useState([]);
-      const scheduledCaseIdSet = useMemo(() => new Set(scheduledCaseIds), [scheduledCaseIds]);
-      // 選択中の案件に紐づく予約送信リスト
-      const [scheduledItems, setScheduledItems] = useState([]);
 
       const [activeTab, setActiveTab] = useState('unhandled');
       const [selectedCaseId, setSelectedCaseId] = useState(null);
@@ -1376,7 +1308,6 @@
           setCases(data.cases);
           setMasters(data.masters);
           setDraftCaseIds(data.draftCaseIds || []);
-          setScheduledCaseIds(data.scheduledCaseIds || []);
           setForcedCc(data.forcedCc || '');
           setLoading(false);
           if (data.user?.email) restoreSeen(data.user.email);
@@ -1388,7 +1319,6 @@
             setCases(data.cases);
             setMasters(data.masters);
             setDraftCaseIds(data.draftCaseIds || []);
-            setScheduledCaseIds(data.scheduledCaseIds || []);
             setForcedCc(data.forcedCc || '');
             setLoading(false);
             if (data.user?.email) restoreSeen(data.user.email);
@@ -1706,12 +1636,7 @@
         setHistoryEditDraft({});
         setMeetUrlEditing(false);
         setMeetUrlDraft('');
-        setScheduledItems([]);
         if (!selectedCaseId) return;
-        // v1.11.0: この案件の予約送信を取得
-        Api.listScheduledForCase(selectedCaseId)
-          .then(items => setScheduledItems(items || []))
-          .catch(() => setScheduledItems([]));
         // selectedCase はレンダー時に最新値が取れるので ref 不要で直接参照
         if (selectedCase && selectedCase.status === 'unhandled') return;
         setThreadLoading(true);
@@ -2032,98 +1957,6 @@
         } finally {
           setSavingDraft(false);
         }
-      };
-
-      // v1.11.0: 予約送信 - 日時ピッカー表示フラグとスケジュール済みリスト
-      const [scheduleAtInput, setScheduleAtInput] = useState(''); // datetime-local の値
-      const [showScheduleInput, setShowScheduleInput] = useState(false);
-
-      const handleSchedulePickerToggle = () => {
-        if (!showScheduleInput) {
-          // 初期値: 現在時刻 + 1時間
-          var future = new Date(Date.now() + 60 * 60 * 1000);
-          var iso = future.getFullYear() + '-'
-            + String(future.getMonth() + 1).padStart(2, '0') + '-'
-            + String(future.getDate()).padStart(2, '0') + 'T'
-            + String(future.getHours()).padStart(2, '0') + ':'
-            + String(future.getMinutes()).padStart(2, '0');
-          setScheduleAtInput(iso);
-        }
-        setShowScheduleInput(prev => !prev);
-      };
-
-      const handleScheduleSend = async () => {
-        if (!emailModal || !user) return;
-        if (!scheduleAtInput) {
-          showToast('送信予定時刻を指定してください。', { type: 'warning', title: '日時未指定' });
-          return;
-        }
-        var sendAt = new Date(scheduleAtInput);
-        if (isNaN(sendAt.getTime())) {
-          showToast('日時の形式が不正です。', { type: 'error', title: '入力エラー' });
-          return;
-        }
-        if (sendAt.getTime() - Date.now() < 60 * 1000) {
-          showToast('送信予定時刻は現在時刻より1分以上先を指定してください。', { type: 'warning', title: '時刻エラー' });
-          return;
-        }
-        startSubmit('予約登録中...');
-        try {
-          var payload = {
-            caseId: emailModal.caseId,
-            mode: emailModal.mode,
-            threadId: emailModal.threadId || '',
-            subject: emailModal.subject || '',
-            body: emailModal.body || '',
-            cc: (emailModal.cc || '').trim(),
-            bcc: (emailModal.bcc || '').trim(),
-            tools: emailModal.mode === 'initial' ? (emailModal.tools || []) : undefined,
-            sendAt: sendAt.toISOString()
-          };
-          var result = await Api.scheduleEmail(payload);
-          // 下書きがあれば削除（予約で置き換え）
-          try { await Api.deleteDraft(emailModal.caseId, emailModal.mode, emailModal.threadId || ''); } catch (e) {}
-          setScheduledCaseIds(prev => prev.includes(emailModal.caseId) ? prev : [...prev, emailModal.caseId]);
-          // 選択中の案件のリストを更新
-          if (selectedCase && selectedCase.timestamp === emailModal.caseId) {
-            try {
-              var updated = await Api.listScheduledForCase(emailModal.caseId);
-              setScheduledItems(updated || []);
-            } catch (e) {}
-          }
-          setEmailModal(null);
-          setShowScheduleInput(false);
-          var localTime = sendAt.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
-          showToast(localTime + ' に送信予約しました。', { type: 'success', title: '予約登録完了' });
-        } catch (e) {
-          showToast(e.message || String(e), { type: 'error', title: '予約登録エラー' });
-        } finally {
-          setSubmitting(false);
-        }
-      };
-
-      const handleCancelScheduled = async (queueId) => {
-        if (!queueId) return;
-        showConfirm(
-          'この予約送信をキャンセルしますか？',
-          async () => {
-            try {
-              await Api.cancelScheduledEmail(queueId);
-              setScheduledItems(prev => prev.filter(s => s.queueId !== queueId));
-              // 他の予約が残っていなければバッジから除外
-              if (selectedCase) {
-                var remaining = await Api.listScheduledForCase(selectedCase.timestamp);
-                if (!remaining || remaining.length === 0) {
-                  setScheduledCaseIds(prev => prev.filter(id => id !== selectedCase.timestamp));
-                }
-              }
-              showToast('予約送信をキャンセルしました。', { type: 'success', title: 'キャンセル完了' });
-            } catch (e) {
-              showToast(e.message || String(e), { type: 'error', title: 'キャンセルエラー' });
-            }
-          },
-          { title: '予約送信のキャンセル', confirmLabel: 'キャンセルする', variant: 'danger' }
-        );
       };
 
       // 下書きを削除し、draftCaseIds を同期更新
@@ -3508,12 +3341,6 @@
                             <Save size={8} aria-hidden="true" /> 下書きあり
                           </span>
                         )}
-                        {/* v1.11.0: 予約送信バッジ */}
-                        {scheduledCaseIdSet.has(c.timestamp) && (
-                          <span className="inline-flex items-center gap-1 bg-fuchsia-100 text-fuchsia-700 px-1.5 py-0.5 rounded text-[9px] font-black" title="送信予約中のメールがあります">
-                            <Clock size={8} aria-hidden="true" /> 予約あり
-                          </span>
-                        )}
                       </div>
                     </div>
                   </button>
@@ -4190,47 +4017,6 @@
                         })}
                       </div>
                     </section>
-                    )}
-                    {/* v1.11.0: 予約送信一覧 */}
-                    {scheduledItems.length > 0 && (
-                      <section className="bg-fuchsia-50/60 p-5 rounded-[2rem] border border-fuchsia-200 shadow-sm space-y-3">
-                        <h3 className="text-[10px] font-black text-fuchsia-600 uppercase tracking-widest flex items-center gap-2">
-                          <Clock size={12} /> 送信予約中 ({scheduledItems.length}件)
-                        </h3>
-                        <div className="space-y-2">
-                          {scheduledItems.map((s) => {
-                            var sendAtLocal = s.sendAt ? new Date(s.sendAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' }) : '';
-                            var modeLabel = s.mode === 'initial' ? '初回' : s.mode === 'schedule' ? '日程確定' : s.mode === 'reply' ? 'スレッド返信' : s.mode === 'decline' ? '回数超過' : '新規';
-                            var isSending = s.status === 'sending';
-                            return (
-                              <div key={s.queueId} className="bg-white rounded-2xl border border-fuchsia-100 p-3 flex items-start gap-3">
-                                <div className="w-8 h-8 rounded-full bg-fuchsia-100 flex items-center justify-center shrink-0">
-                                  <Clock size={14} className="text-fuchsia-600"/>
-                                </div>
-                                <div className="flex-1 min-w-0 space-y-1">
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-fuchsia-50 text-fuchsia-700">{modeLabel}</span>
-                                    <span className="text-[10px] font-black text-fuchsia-700">{sendAtLocal}</span>
-                                    {isSending && <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 animate-pulse">送信中</span>}
-                                  </div>
-                                  <p className="text-xs font-black text-slate-700 truncate">{s.subject || '(件名なし)'}</p>
-                                  <p className="text-[10px] text-slate-500 truncate">{(s.body || '').slice(0, 80)}{s.body && s.body.length > 80 ? '...' : ''}</p>
-                                  <p className="text-[9px] font-bold text-slate-500">担当: {s.staffName || s.staffEmail}</p>
-                                </div>
-                                {!isSending && (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleCancelScheduled(s.queueId)}
-                                    className="shrink-0 px-2.5 py-1.5 text-[10px] font-black text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg border border-rose-200 transition-colors"
-                                  >
-                                    取消
-                                  </button>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </section>
                     )}
                     {/* メールスレッド一覧 */}
                     {threadLoading && (
@@ -5049,51 +4835,20 @@
                               : <><Send size={16}/> 送信する</>
                     }
                   </button>
-                  {/* v1.11.0: 下書き保存 + 予約送信 */}
-                  <div className="grid grid-cols-2 gap-2">
+                  {/* v1.11.0: 下書き保存 */}
+                  <div>
                     <button
                       type="button"
                       onClick={handleSaveDraft}
                       disabled={submitting || savingDraft}
-                      className="py-3 text-slate-600 bg-slate-50 hover:bg-slate-100 border-2 border-slate-200 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 disabled:opacity-70"
+                      className="w-full py-3 text-slate-600 bg-slate-50 hover:bg-slate-100 border-2 border-slate-200 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 disabled:opacity-70"
                       title="送信せずに下書きとして保存。次回モーダルを開いたときに復元できます。"
                     >
                       {savingDraft
                         ? <><Loader2 size={14} className="animate-spin"/> 保存中…</>
                         : <><Save size={14}/> 下書き保存</>}
                     </button>
-                    <button
-                      type="button"
-                      onClick={handleSchedulePickerToggle}
-                      disabled={submitting}
-                      className={`py-3 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 border-2 ${showScheduleInput ? 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-300' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}
-                      title="指定日時に自動送信。トリガーが定期実行で送信します。"
-                    >
-                      <Clock size={14}/> {showScheduleInput ? '予約をキャンセル' : '予約送信'}
-                    </button>
                   </div>
-                  {showScheduleInput && (
-                    <div className="bg-fuchsia-50/60 border border-fuchsia-200 rounded-xl p-3 space-y-2">
-                      <label className="text-[10px] font-black text-fuchsia-600 uppercase flex items-center gap-1"><Clock size={10}/> 送信予定時刻</label>
-                      <input
-                        type="datetime-local"
-                        value={scheduleAtInput}
-                        onChange={e => setScheduleAtInput(e.target.value)}
-                        className="w-full border-2 border-white bg-white rounded-xl p-3 text-xs font-bold outline-none focus:border-fuchsia-500 shadow-sm"
-                      />
-                      <p className="text-[9px] text-fuchsia-600 leading-relaxed">※ 送信は5分おきに実行される定期処理で行われるため、指定時刻から最大5分程度遅れる場合があります。</p>
-                      <button
-                        type="button"
-                        onClick={handleScheduleSend}
-                        disabled={submitting}
-                        className="w-full py-3 bg-fuchsia-600 hover:bg-fuchsia-700 text-white rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 shadow-md shadow-fuchsia-200 disabled:opacity-70"
-                      >
-                        {submitting
-                          ? <><Loader2 size={14} className="animate-spin"/> 予約登録中…</>
-                          : <><Clock size={14}/> この時刻で予約する</>}
-                      </button>
-                    </div>
-                  )}
                 </div>
               </div>
             </div>

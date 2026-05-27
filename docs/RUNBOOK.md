@@ -79,36 +79,35 @@ GASエディタの実行ボタンから以下を順番に実行する:
 6. addAttachmentFolderSetting()— 添付フォルダ設定を追加
 ```
 
-### 1-5. 予約送信トリガの登録（v1.11.0以降必須）
+### 1-5. 予約送信トリガの削除（v1.12.1以降）
 
-GASエディタから以下を実行する（**初回のみ**。デプロイ後に実行すること）:
+予約送信は v1.12.1 で廃止。デプロイ後、旧トリガーや未送信キューが残っている場合は GAS エディタから以下を実行する:
 
 ```
+disablePendingScheduledEmails()
 setupScheduledEmailTrigger()
 ```
 
-5分間隔のトリガが登録される。トリガが正しく登録されたか確認:
+`disablePendingScheduledEmails()` は `pending` / `sending` 行を `disabled` に更新し、メール送信は行わない。`setupScheduledEmailTrigger()` は新規トリガーを作成せず、既存の `processScheduledEmails_` トリガーを削除する。削除後の確認:
 
 ```
 getScheduledEmailTriggerStatus()
-// → { active: true, triggerId: "..." } が返れば正常
+// → { active: false } が返れば正常
 ```
 
 ---
 
 ## 2. 日常運用
 
-### 2-1. トリガ状態の確認
+### 2-1. 旧予約送信キューの確認
 
-予約送信が動作しない場合、まずトリガ状態を確認する:
-
-GASエディタ → `getScheduledEmailTriggerStatus()` を実行 → `active: false` の場合は `setupScheduledEmailTrigger()` を再実行する。
+予約送信は廃止済み。旧トリガーが残っていないことを `getScheduledEmailTriggerStatus()` で確認し、`active: true` の場合は `setupScheduledEmailTrigger()` を実行して削除する。
 
 ### 2-2. スプレッドシートのメンテナンス
 
 | シート | メンテナンス内容 | 頻度 |
 |--------|----------------|------|
-| 予約送信キュー | `sent`/`failed`/`skipped` 行のアーカイブ・削除 | 月次推奨 |
+| 予約送信キュー | 廃止前の履歴確認。`pending`/`sending` があれば `disablePendingScheduledEmails()` で `disabled` 化 | 必要時 |
 | メール下書き | 古い下書き行の確認・クリーンアップ | 必要時 |
 | 監査ログ | ログの確認 | 必要時 |
 
@@ -145,7 +144,7 @@ clasp deploy \
 - [ ] 本番URLにアクセスしてアプリが起動する
 - [ ] ログインできる（タダメンマスタに登録済みのアカウントで）
 - [ ] 案件一覧が表示される
-- [ ] 予約送信トリガが生きている（必要に応じて `getScheduledEmailTriggerStatus()` 確認）
+- [ ] 予約送信トリガが残っていない（必要に応じて `getScheduledEmailTriggerStatus()` 確認）
 
 ### 3-3. バックエンドのみの変更（`コード.js` だけ変更した場合）
 
@@ -219,11 +218,8 @@ git checkout HEAD -- index.html コード.js
 2. GASエディタの「実行ログ」でエラーを確認
 3. Gmail Advanced Service が有効化されているか確認
 
-**予約送信が動作しない場合:**
-1. `getScheduledEmailTriggerStatus()` でトリガが `active: true` か確認
-2. `active: false` の場合は `setupScheduledEmailTrigger()` を再実行
-3. 予約送信キューシートで対象行の `STATUS` が `pending` のままか確認
-4. GASエディタ → 「トリガー」から `processScheduledEmails_` のトリガーを直接確認
+**予約送信について:**
+予約送信は v1.12.1 で廃止済み。メールは即時送信、後で送る文面は下書き保存を使用する。旧キューに `pending` / `sending` が残っている場合は `disablePendingScheduledEmails()` で `disabled` に更新する。
 
 ### 5-4. カレンダー連携が動作しない
 
@@ -232,15 +228,11 @@ git checkout HEAD -- index.html コード.js
 2. 設定シートの `SHARED_CALENDAR_ID` が正しいか確認（空の場合はデフォルトカレンダーを使用）
 3. デプロイユーザーが対象カレンダーの編集権限を持っているか確認
 
-### 5-5. 予約送信がスタックした
+### 5-5. 旧予約送信キューに pending/sending が残っている
 
-**症状:** 予約送信キューシートで `STATUS` が `sending` のまま長時間経過
+**症状:** 予約送信キューシートで `STATUS` が `pending` または `sending` のまま残っている
 
-**対処:** 自動復旧機能あり。`sending` のまま 10 分以上経過した行は次のトリガサイクル（最大5分後）で自動再処理される。
-
-手動で対処する場合:
-1. 予約送信キューシートで対象行の `STATUS` を `pending` に手動変更
-2. 次のトリガサイクルで再処理される
+**対処:** GAS エディタで `disablePendingScheduledEmails()` を実行する。メール送信・案件ステータス更新は行われず、対象行は `disabled` になる。
 
 ---
 
@@ -254,5 +246,5 @@ git checkout HEAD -- index.html コード.js
 | デプロイ ID | `AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ` |
 | Webapp 設定 | `executeAs: USER_ACCESSING` / `access: DOMAIN` |
 | タイムゾーン | `Etc/GMT-9`（JST） |
-| 予約送信トリガ間隔 | 5分 |
+| 予約送信トリガ間隔 | 廃止（v1.12.1以降は作成しない） |
 | スキーマバージョン | `SCHEMA_VERSION_ = '5'`（コード.js 内） |

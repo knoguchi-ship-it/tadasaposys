@@ -1,8 +1,13 @@
-# システム詳細設計書 (SDD) — タダサポ管理システム v1.12.0
+# システム詳細設計書 (SDD) — タダサポ管理システム v1.12.1
 
-**Version:** 1.12.0
-**Date:** 2026/05/11
+**Version:** 1.12.1
+**Date:** 2026/05/28
 **Status:** Released
+
+> **v1.12.1 追補（予約送信廃止）**
+> - メール予約送信機能を廃止。即時送信と下書き保存は継続。
+> - 旧予約送信トリガーはメール送信せず、未送信キューを `disabled` に更新する互換処理に変更。
+> - クリーンアップ関数 `disablePendingScheduledEmails()` を追加。
 
 > **v1.12.0 追補（日程確定刷新 Phase 1〜4）**
 > - 設定シートに6キー追加: `TEAM_CALENDAR_ID` / `DISPLAY_CALENDARS_JSON` / `SCHEDULE_BUFFER_MIN` / `ZOOM_FIXED_URL` / `ZOOM_FIXED_ID` / `ZOOM_FIXED_PASS`
@@ -33,7 +38,7 @@
 | メール履歴 | `EMAIL_HISTORY` | 送信メールのバックアップ記録 |
 | 監査ログ | `AUDIT_LOG` | 管理者操作の監査証跡 |
 | メール下書き | `EMAIL_DRAFTS` | 送信前メール一時保存（v1.11.0） |
-| 予約送信キュー | `EMAIL_SCHEDULED` | 予約送信待機メール（v1.11.0） |
+| 予約送信キュー | `EMAIL_SCHEDULED` | 予約送信は v1.12.1 で廃止。既存キュー履歴・無効化確認用に保持 |
 
 ---
 
@@ -213,9 +218,10 @@ completed  → cancelled（完了後キャンセル）
 
 ---
 
-### S-08: 予約送信キュー (Email Scheduled) ※v1.11.0追加
+### S-08: 予約送信キュー (Email Scheduled) ※v1.12.1廃止
 
-**用途:** 予約送信メールのキュー管理。5分間隔トリガ `processScheduledEmails_()` が処理する。
+**用途:** v1.11.0 で追加された予約送信メールのキュー履歴。時間主導トリガーでは作成者アカウントから送信され、アクセスユーザー本人からの送信を保証できないため v1.12.1 で廃止。
+**現行動作:** 新規登録・自動送信は行わない。既存の `pending` / `sending` 行は `disablePendingScheduledEmails()` または残存トリガー互換の `processScheduledEmails_()` により `disabled` に更新する。
 **PK:** `QUEUE_ID`（UUID、`sch-` プレフィックス）
 **全 16 列。**
 
@@ -233,21 +239,15 @@ completed  → cancelled（完了後キャンセル）
 | 9 | J | `BCC` | String | BCC |
 | 10 | K | `TOOLS` | String | 対応ツール JSON |
 | 11 | L | `SEND_AT` | Date | 送信予定日時（1分以上先） |
-| 12 | M | `STATUS` | String | `pending` / `sending` / `sent` / `failed` / `cancelled` / `skipped` |
-| 13 | N | `ERROR` | String | 失敗時のエラーメッセージ |
+| 12 | M | `STATUS` | String | 旧値: `pending` / `sending` / `sent` / `failed` / `cancelled` / `skipped`。廃止後の未送信無効化: `disabled` |
+| 13 | N | `ERROR` | String | 失敗時または廃止無効化時のメッセージ |
 | 14 | O | `CREATED_AT` | Date | キュー登録日時 |
 | 15 | P | `SENT_AT` | Date | 実際の送信完了日時 |
 
-**ステータス遷移:**
+**廃止後のステータス更新:**
 ```
-pending → sending（トリガが処理開始時にマーク）
-sending → sent（送信成功）
-sending → failed（送信失敗）
-sending → skipped（案件が cancelled/rejected になった場合）
-pending → cancelled（ユーザーが cancelScheduledEmail() で取消）
+pending/sending → disabled（予約送信機能廃止により未送信のまま無効化）
 ```
-
-**スタック復旧:** `sending` のまま 10 分以上経過した行は次のトリガサイクルで再処理する。
 
 ---
 
@@ -266,7 +266,7 @@ pending → cancelled（ユーザーが cancelScheduledEmail() で取消）
 HTML を返す Web App エントリポイント。`getInitialData()` の結果を `window.__INITIAL_DATA__` として HTML に埋め込み、初回通信往復を削減する。
 
 ### F-02: `getInitialData()`
-起動時データ取得。`user` / `cases` / `masters` / `draftCaseIds` / `scheduledCaseIds` / `forcedCc` を返す。`ensureAttachmentSchema_()` でスキーマ自動マイグレーションを実行する。
+起動時データ取得。`user` / `cases` / `masters` / `draftCaseIds` / `forcedCc` を返す。`ensureAttachmentSchema_()` でスキーマ自動マイグレーションを実行する。
 
 ### F-03: `getAllCasesJoined()`
 案件リスト + 案件手動追加 + 案件補正 + サポート記録 + メール履歴を結合し、削除済み案件を除外して返す。各案件に `currentFiscalYearCount`（今年度累計利用回数）を付与する。
@@ -367,22 +367,23 @@ CC 設定のドライラン検証。`MAIL_DRY_RUN=true` が前提。
 ### F-34: `listDraftsForCase(caseId)` ※v1.11.0
 案件に紐づく下書き一覧を返す（現在ユーザー分のみ）。
 
-### F-35: `scheduleEmail(payload)` ※v1.11.0
-メール予約送信を登録する。`sendAt` は現在時刻の1分以上先であること。
-入力: `{ caseId, mode, threadId, subject, body, cc, bcc, tools, sendAt }`
-出力: `{ queueId, sendAt, status: 'pending' }`
+### F-35: `scheduleEmail(payload)` ※v1.12.1廃止
+予約送信機能は廃止済み。呼び出された場合はエラーを返し、キュー登録しない。
 
-### F-36: `cancelScheduledEmail(queueId)` ※v1.11.0
-予約送信をキャンセル。`pending` のみ可能。本人または管理者が実行可能。
+### F-36: `cancelScheduledEmail(queueId)` ※v1.12.1廃止
+予約送信機能は廃止済み。フロントエンドからは呼び出さない。
 
-### F-37: `listScheduledForCase(caseId)` ※v1.11.0
-案件に紐づく予約送信一覧（`pending` / `sending` のみ）を返す。
+### F-37: `listScheduledForCase(caseId)` ※v1.12.1廃止
+後方互換のため空配列を返す。
 
-### F-38: `processScheduledEmails_()` ※v1.11.0（内部・トリガーハンドラ）
-5分間隔トリガから呼ばれる。`LockService` でシングル実行を保証。`pending` かつ送信時刻到来の行を `sending` にマークしてから送信処理。`sending` のまま 10 分以上経過した行はスタック扱いで再処理。
+### F-38: `processScheduledEmails_()` ※v1.12.1互換
+旧時間主導トリガーが残存していてもメール送信しない。`disablePendingScheduledEmails_()` を呼び、未送信キューを `disabled` に更新する。
 
-### F-39: `setupScheduledEmailTrigger()` ※v1.11.0（初回手動実行）
-`processScheduledEmails_` を 5 分間隔で起動するトリガを登録。本番初回デプロイ後に GAS エディタから1回だけ手動実行する。
+### F-39: `setupScheduledEmailTrigger()` ※v1.12.1廃止
+新規トリガーは作成しない。既存の `processScheduledEmails_` トリガーを削除する。
+
+### F-40: `disablePendingScheduledEmails()` ※v1.12.1追加
+既存の `pending` / `sending` 予約を `disabled` に更新するクリーンアップ関数。メール送信・案件ステータス更新は行わない。
 
 ---
 
@@ -452,12 +453,12 @@ CC 設定のドライラン検証。`MAIL_DRY_RUN=true` が前提。
 - 送信成功後に `deleteDraft()` で下書きを自動削除
 - 案件一覧に「下書きあり」バッジを表示（`draftCaseIds` セット）
 
-### UI-06: メール予約送信機能（v1.11.0）
+### UI-06: メール予約送信機能（v1.12.1廃止）
 
-- 「予約送信」ボタンで日時ピッカーを表示。1分以上先の日時を選択
-- `scheduleEmail()` で予約登録。確認後に「予約あり」バッジを表示（`scheduledCaseIds` セット）
-- 予約一覧から `cancelScheduledEmail()` で取消可能（`pending` のみ）
-- 実際の送信はバックエンドの 5 分間隔トリガが実行（送信者は `staffEmail`/`staffName` をキューから読む）
+- メール作成モーダルから「予約送信」ボタン、日時ピッカーを撤去
+- 案件一覧の「予約あり」バッジ、案件詳細の予約送信一覧を撤去
+- メール送信は即時送信のみ。送信前の一時保存は `UI-05` の下書き保存を使用する
+- 旧予約キューの未送信行は `disablePendingScheduledEmails()` で `disabled` に更新する
 
 ### UI-07: 添付ファイル
 
@@ -520,3 +521,4 @@ React 19系混在で `Minified React error #31` が発生するため固定。
 | v1.11.1 | 新規案件追加モーダルのスマホ送信バグ修正 |
 | v1.11.2 | 下書き保存・予約送信ボタンの押下フィードバック追加、MAIL_FORCE_CC を state に追加 |
 | **v1.11.3** | メール作成画面に自動CC（MAIL_FORCE_CC）の説明を追加 |
+| **v1.12.1** | 予約送信機能を廃止。旧トリガー互換は未送信キューを `disabled` 化し、即時送信・下書き保存は継続 |
