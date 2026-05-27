@@ -12,7 +12,7 @@
 ### 本番稼働中
 
 - **URL**: `https://script.google.com/a/macros/tadakayo.jp/s/AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ/exec`
-- **デプロイバージョン**: @142（v1.12.0、v1.12.1 は未デプロイ）
+- **デプロイバージョン**: @147（v1.12.1）
 - **Webapp 設定**: `executeAs: USER_ACCESSING` / `access: DOMAIN`（tadakayo.jp ドメインのみ）
 - **認証**: タダメンマスタ（B列=氏名, C列=メール, D列=ROLE）で認証
 
@@ -302,7 +302,7 @@ npm run test:unit  # 34テスト / 約0.2秒
 | Calendar Advanced Service | 手動有効化必要 | Meet URL作成に必要 |
 | `ATTACHMENT_FOLDER_ID` | 未設定時は添付保存不可 | 設定シートにDriveフォルダIDを設定 |
 | 新着バッジ | localStorage依存 | ブラウザをまたいだ既読状態は同期されない |
-| 予約送信トリガ | 廃止 | `setupScheduledEmailTrigger()` は既存トリガー削除のみ。未送信予約は `disablePendingScheduledEmails()` で無効化 |
+| 予約送信トリガ | 廃止 | `setupScheduledEmailTrigger()` は既存トリガー削除のみ。未送信予約は `disablePendingScheduledEmails()` で無効化。`clasp run` は権限エラーのため、GAS エディタから手動実行が必要 |
 | color-contrast（旧バージョンデータ） | 修正済み | v1.11.5 で全違反を解消。既存 DB 内のデータは未修正 |
 | `updateSupportHistory` 担当者チェックなし | 中リスク残存 | 担当者以外が過去履歴を編集可能（別 Issue で管理） |
 | 管理機能で作成された不整合データ（v1.11.5 以前） | 残存可能性あり | v1.11.6 で今後の操作は整合性保証済み。旧データは修復スクリプトを別途検討 |
@@ -402,7 +402,7 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 | **v1.11.8** | 2026/05/10 | Phase 2: 重複検知 + Zoom時チームカレンダー強制登録 |
 | **v1.11.9** | 2026/05/11 | Phase 3: FullCalendar 埋込み（ドラッグ選択 + バッファ可視化） |
 | **v1.12.0** | 2026/05/11 | Phase 4: 「いつものタダスクID」モード追加・ドキュメント完全更新（@142-143） |
-| **v1.12.1** | 2026/05/28 | 予約送信機能を廃止。旧トリガー互換は未送信キューを `disabled` 化し、即時送信・下書き保存は継続 |
+| **v1.12.1** | 2026/05/28 | 予約送信機能を廃止（@147）。旧トリガー互換は未送信キューを `disabled` 化し、即時送信・下書き保存は継続 |
 
 ---
 
@@ -504,6 +504,16 @@ npm test           # Playwright E2E 49件
 2. `git commit` してから `clasp push --force`
 3. `clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ -d "vX.X.X"`
 4. デプロイ後、ブラウザの GAS デプロイ管理画面で設定を目視確認
+
+### 4-1. v1.12.1 デプロイ後の残作業
+
+2026/05/28 に固定 deploymentId へ `v1.12.1` をデプロイ済み（@147）。`clasp run disablePendingScheduledEmails` は権限エラーで実行できなかったため、GAS エディタから以下を手動実行する。
+
+```javascript
+disablePendingScheduledEmails();  // pending/sending の旧予約を disabled 化
+setupScheduledEmailTrigger();     // 旧 processScheduledEmails_ トリガーを削除
+getScheduledEmailTriggerStatus(); // { active: false } を確認
+```
 
 ### 5. 推奨される次の作業（優先度順）
 
