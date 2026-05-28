@@ -195,6 +195,20 @@ npx serve -s . -l 3000
 # → http://localhost:3000 でプレビュー（モックデータ14パターンで動作）
 ```
 
+## Codex 起動
+
+このプロジェクトでは、GitHubで共有する Codex 起動方針を `.codex/config.toml` に置く。Codex CLI はリポジトリ設定を自動読込しないため、起動時は以下のランチャーを使う。
+
+```powershell
+.\codex-tadasaposys.ps1
+```
+
+適用される起動オプション:
+
+```powershell
+codex --sandbox workspace-write --ask-for-approval on-request -c approvals_reviewer=auto_review
+```
+
 ---
 
 ## デプロイ

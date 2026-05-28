@@ -1,0 +1,9 @@
+# Project-local Codex startup defaults for tadasaposys.
+#
+# This file is committed so the project-required startup policy is visible in GitHub.
+# Codex CLI runtime defaults are still loaded from the user's CODEX_HOME config, so use
+# ./codex-tadasaposys.ps1 to launch Codex with these project values applied.
+
+sandbox_mode = "workspace-write"
+approval_policy = "on-request"
+approvals_reviewer = "auto_review"

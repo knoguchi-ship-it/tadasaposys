@@ -73,6 +73,8 @@ tadasaposys/
 ├── jest.config.js          ← 単体テスト設定
 ├── .claspignore            ← GASプッシュ除外設定（node_modules等を除外）
 ├── .clasp.json             ← clasp設定（.gitignore対象）
+├── .codex/config.toml      ← Codex 起動方針（GitHub共有用）
+├── codex-tadasaposys.ps1   ← Codex プロジェクト起動ランチャー
 ├── tests/
 │   ├── e2e/                ← Playwright E2E テスト（7スペック、49テスト）
 │   ├── pages/app.page.ts   ← Page Object Model
