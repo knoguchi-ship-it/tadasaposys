@@ -24,3 +24,6 @@ Thumbs.db
 output/
 temp_testfiles/
 test*.png
+
+# Local backup/stub files (never track or deploy)
+temp/

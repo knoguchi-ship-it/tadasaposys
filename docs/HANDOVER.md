@@ -115,6 +115,7 @@ tadasaposys/
 - **clasp pull 前に git commit**: ローカルファイルが上書きされる
 - **案件リストシートへの書き込み禁止**: IMPORTRANGE 数式を破壊する
 - **.claspignore の確認**: `node_modules/` 等が除外されていることを確認してから push
+- **temp/ 配下は追跡禁止**: ローカルバックアップ・GAS上の残存スタブ確認用。Git/GAS配布対象から除外し、今後追わない
 
 ---
 
