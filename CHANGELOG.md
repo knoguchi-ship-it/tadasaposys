@@ -7,6 +7,7 @@
 - バージョン同期対象に `index.html` を明記
 - グランドルールを「判断基準 + 作業チェックリスト」の2層構造に再編
 - プロジェクト共有の Codex 起動設定 `.codex/config.toml` とランチャー `codex-tadasaposys.ps1` を追加
+- プロジェクト共有の Claude 起動設定 `.claude/settings.json` とランチャー `claude-tadasaposys.ps1` を追加
 
 ---
 

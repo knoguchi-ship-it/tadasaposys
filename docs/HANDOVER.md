@@ -66,6 +66,8 @@ tadasaposys/
 ├── appsscript.json         ← GASマニフェスト
 ├── CLAUDE.md               ← Claude Code 専用 AI 開発指示書
 ├── AGENTS.md               ← OpenAI Codex 専用 AI 開発指示書
+├── .claude/settings.json   ← Claude Code 起動方針（GitHub共有用）
+├── claude-tadasaposys.ps1  ← Claude プロジェクト起動ランチャー
 ├── CHANGELOG.md            ← バージョン変更履歴（keepachangelog形式）
 ├── SECURITY.md             ← セキュリティ情報・脆弱性報告
 ├── package.json            ← テスト依存（Playwright/Jest）

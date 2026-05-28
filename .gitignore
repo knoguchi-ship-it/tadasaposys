@@ -15,6 +15,9 @@ Thumbs.db
 
 # Claude Code internal
 .claude/
+!.claude/
+.claude/*
+!.claude/settings.json
 
 # Playwright MCP (local dev tool logs)
 .playwright-mcp/

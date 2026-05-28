@@ -209,6 +209,22 @@ npx serve -s . -l 3000
 codex --sandbox workspace-write --ask-for-approval on-request -c approvals_reviewer=auto_review
 ```
 
+## Claude 起動
+
+このプロジェクトでは、GitHubで共有する Claude Code 起動方針を `.claude/settings.json` に置く。権限確認を省略する設定は `permissionMode: bypassPermissions` として保存している。
+
+Claude CLI が `--dangerously-skip-permissions` フラグ自体をリポジトリ設定から自動付与する保証はないため、起動時は以下のランチャーを使う。
+
+```powershell
+.\claude-tadasaposys.ps1
+```
+
+適用される起動オプション:
+
+```powershell
+claude --dangerously-skip-permissions
+```
+
 ---
 
 ## デプロイ
