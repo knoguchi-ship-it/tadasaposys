@@ -8,6 +8,7 @@
 - グランドルールを「判断基準 + 作業チェックリスト」の2層構造に再編
 - プロジェクト共有の Codex 起動設定 `.codex/config.toml` とランチャー `codex-tadasaposys.ps1` を追加
 - プロジェクト共有の Claude 起動設定 `.claude/settings.json` とランチャー `claude-tadasaposys.ps1` を追加
+- ドライランテスト後は作成・更新したテストデータを必ず削除または復元し、テスト前状態へ戻すルールを追加
 
 ---
 
