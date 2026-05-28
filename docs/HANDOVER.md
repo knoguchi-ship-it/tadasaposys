@@ -507,7 +507,9 @@ npm test           # Playwright E2E 49件
 
 ### 4-1. v1.12.1 デプロイ後の残作業
 
-2026/05/28 に固定 deploymentId へ `v1.12.1` をデプロイ済み（@147）。`clasp run disablePendingScheduledEmails` は権限エラーで実行できなかったため、GAS エディタから以下を手動実行する。
+2026/05/28 に固定 deploymentId へ `v1.12.1` をデプロイ済み（@147）。ユーザーによる動作確認は完了済み。
+
+`clasp run disablePendingScheduledEmails` は権限エラーで実行できなかったため、旧予約送信キューや旧トリガーが残っている場合のみ、GAS エディタから以下を手動実行する。
 
 ```javascript
 disablePendingScheduledEmails();  // pending/sending の旧予約を disabled 化
@@ -517,11 +519,22 @@ getScheduledEmailTriggerStatus(); // { active: false } を確認
 
 ### 5. 推奨される次の作業（優先度順）
 
-1. **T1** — 日程確定刷新の E2E テスト追加（最優先 / 重複検知・FullCalendar・Zoomモードを保護）
-2. **R3** — GoogleMeet 以外のカレンダー登録未実装を修正（pre-existing バグ）
-3. **R4** — GAS 上の temp/* スタブを手動削除
-4. **R1/R2** — 管理機能関連の修復スクリプトと担当者チェック追加
-5. **7-1** — CSV エクスポート機能
+1. **G1** — グランドルールの見直し（次引き継ぎ先の最初の作業）
+2. **T1** — 日程確定刷新の E2E テスト追加（重複検知・FullCalendar・Zoomモードを保護）
+3. **R3** — GoogleMeet 以外のカレンダー登録未実装を修正（pre-existing バグ）
+4. **R4** — GAS 上の temp/* スタブを手動削除
+5. **R1/R2** — 管理機能関連の修復スクリプトと担当者チェック追加
+6. **7-1** — CSV エクスポート機能
+
+### 5-1. G1: グランドルール見直しの観点
+
+次担当者は、v1.12.1 の予約送信撤廃を踏まえて以下を見直す。
+
+- **Webapp 設定固定ルール:** `executeAs: USER_ACCESSING` / `access: DOMAIN` は維持するか。本人送信保証・ドメイン制限・運用負荷の観点で再確認する。
+- **デプロイ URL 不変ルール:** 固定 deploymentId への `-i` 付きデプロイは維持するか。新規デプロイ禁止の例外条件を定義するか。
+- **トリガー利用ルール:** Gmail 送信を伴う時間主導トリガーは原則禁止にするか。許可する場合の条件（共通送信アカウント明記、監査ログ、送信元表示）を定義する。
+- **DB/シート保全ルール:** `案件リスト` への直接書き込み禁止、`案件補正` 経由の補正、旧 `予約送信キュー` の扱いを明文化する。
+- **バージョン・ドキュメント同期ルール:** `コード.js` / SDD / HANDOVER / Manual / CHANGELOG / AGENTS / CLAUDE / package の更新範囲を再整理する。
 
 ### 6. 困ったとき
 
