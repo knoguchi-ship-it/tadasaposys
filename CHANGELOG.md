@@ -9,6 +9,7 @@
 - プロジェクト共有の Codex 起動設定 `.codex/config.toml` とランチャー `codex-tadasaposys.ps1` を追加
 - プロジェクト共有の Claude 起動設定 `.claude/settings.json` とランチャー `claude-tadasaposys.ps1` を追加
 - ドライランテスト後は作成・更新したテストデータを必ず削除または復元し、テスト前状態へ戻すルールを追加
+- `HANDOVER.md` を引継ぎ最終準備版に更新し、2026/05/28 の整備内容と次作業優先順位を反映
 
 ---
 
