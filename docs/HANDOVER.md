@@ -110,6 +110,8 @@ tadasaposys/
 
 ### ⚠️ 絶対厳守
 
+詳細な判断基準と作業チェックリストは `AGENTS.md` / `CLAUDE.md` / `docs/RUNBOOK.md` の「グランドルール実行チェック」を参照する。
+
 - **React 18.2.0 固定**: React 19系混在で `Minified React error #31` クラッシュ
 - **clasp push --force**: `--force` なしだとサイレントにスキップされる場合がある
 - **clasp pull 前に git commit**: ローカルファイルが上書きされる
