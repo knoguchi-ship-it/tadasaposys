@@ -116,6 +116,14 @@ tadasaposys/
 - **案件リストシートへの書き込み禁止**: IMPORTRANGE 数式を破壊する
 - **.claspignore の確認**: `node_modules/` 等が除外されていることを確認してから push
 - **temp/ 配下は追跡禁止**: ローカルバックアップ・GAS上の残存スタブ確認用。Git/GAS配布対象から除外し、今後追わない
+- **DRY原則**: 既存ヘルパー・既存パターンを確認し、共通化できる処理を重複実装しない。新設処理も同様
+- **影響範囲確認**: 既存機能を破壊しないことを、関連コード確認・テスト・差分確認で保証する
+- **コード/ドキュメント整合**: コード更新時は毎回、SDD/HANDOVER/Manual/CHANGELOG/AI指示/モック/テスト等の必要箇所を同期する
+- **セキュアコーディング**: 認証認可、入力検証/出力無害化、機密情報管理、データ保護/最小権限、監査性/エラー処理の5視点で実装・レビューする
+- **ハードコーディング原則禁止**: 固定値は事前確認。機密情報は許可があってもコード・ドキュメント・GitHubに置かず、設定シート・PropertiesService・環境変数等で安全に管理する
+- **ER図/テーブル設計書はHTML**: 新規作成・更新時は人間が読みやすいHTMLで `docs/` 配下に保存する
+- **人間向けドキュメント維持**: AI向け指示だけでなく、運用者・開発者・利用者が読める Markdown/HTML も更新する
+- **文字化け修正**: 文字化けを見つけたら放置せず UTF-8 として読める状態へ修正する
 
 ---
 
@@ -350,10 +358,11 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 4. `docs/HANDOVER.md` — 本ドキュメント
 5. `CLAUDE.md` / `AGENTS.md` — AI開発指示書（IDX定数等の変更時）
 6. `CHANGELOG.md` — 変更履歴
+7. `docs/*.html` — ER図・テーブル設計書・人間向け補助資料（該当する設計変更時）
 
 ### バージョン管理ルール
 
-- `コード.js` 先頭コメント・SDD・HANDOVER・Manual・CHANGELOG・CLAUDE.md・AGENTS.md のバージョンは常に一致させること
+- `コード.js` 先頭コメント・`index.html`・SDD・HANDOVER・Manual・CHANGELOG・CLAUDE.md・AGENTS.md・package.json のバージョンは常に一致させること
 - 現行: **v1.12.1**
 
 ### 🔒 デプロイ時の絶対グランドルール（CLAUDE.md / AGENTS.md にも記載）
@@ -535,7 +544,7 @@ getScheduledEmailTriggerStatus(); // { active: false } を確認
 - **デプロイ URL 不変ルール:** 固定 deploymentId への `-i` 付きデプロイは維持するか。新規デプロイ禁止の例外条件を定義するか。
 - **トリガー利用ルール:** Gmail 送信を伴う時間主導トリガーは原則禁止にするか。許可する場合の条件（共通送信アカウント明記、監査ログ、送信元表示）を定義する。
 - **DB/シート保全ルール:** `案件リスト` への直接書き込み禁止、`案件補正` 経由の補正、旧 `予約送信キュー` の扱いを明文化する。
-- **バージョン・ドキュメント同期ルール:** `コード.js` / SDD / HANDOVER / Manual / CHANGELOG / AGENTS / CLAUDE / package の更新範囲を再整理する。
+- **バージョン・ドキュメント同期ルール:** `コード.js` / `index.html` / SDD / HANDOVER / Manual / CHANGELOG / AGENTS / CLAUDE / package / HTML設計資料の更新範囲を再整理する。
 
 ### 6. 困ったとき
 
