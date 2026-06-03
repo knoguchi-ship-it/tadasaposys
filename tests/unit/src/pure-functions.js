@@ -15,6 +15,24 @@ function getFiscalYear(dateObj) {
   return d.getMonth() < 3 ? d.getFullYear() - 1 : d.getFullYear();
 }
 
+// コード.js: caseFiscalYear_()
+// 案件PKから年度を求める。手動追加案件のPK "manual_<エポックミリ秒>" にも対応する。
+function caseFiscalYear(pkRaw) {
+  if (pkRaw && typeof pkRaw.getTime === 'function') return getFiscalYear(pkRaw);
+  var s = String(pkRaw);
+  if (s.indexOf('manual_') === 0) {
+    var epoch = Number(s.replace('manual_', ''));
+    return getFiscalYear(isFinite(epoch) ? new Date(epoch) : new Date(NaN));
+  }
+  return getFiscalYear(s);
+}
+
+// コード.js: annualUsageKey_()
+// 年間利用回数の集計キー。メール正規化 + 案件PKの年度で構成する。
+function annualUsageKey(email, pkRaw) {
+  return normalizeEmail(email) + '_' + caseFiscalYear(pkRaw);
+}
+
 // ── 入力バリデーション ────────────────────────────────────
 // コード.js: parseNullablePositiveInteger_()
 function parseNullablePositiveInteger(value) {
@@ -112,6 +130,8 @@ function parseScheduleBufferMin(raw, defaultValue) {
 
 module.exports = {
   getFiscalYear,
+  caseFiscalYear,
+  annualUsageKey,
   parseNullablePositiveInteger,
   normalizeEmail,
   parseBoolean,

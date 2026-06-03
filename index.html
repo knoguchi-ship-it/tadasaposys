@@ -315,18 +315,34 @@
     // 3. API Adapter
     // ======================================================================
 
+    // 年度・年間集計キーの共通ヘルパー（バックエンド getAllCasesJoined と同一ロジック）
+    // 手動追加案件のPK "manual_<エポックミリ秒>" にも対応し、メールは正規化して
+    // フォーム申込と管理者の手動追加案件を同一メール+年度で合算する（v1.12.3）。
+    var _normEmail = function(e) { return String(e == null ? '' : e).trim().toLowerCase(); };
+    var _caseFY = function(ts) {
+      var d;
+      if (typeof ts === 'string' && ts.indexOf('manual_') === 0) {
+        var epoch = Number(ts.replace('manual_', ''));
+        d = isFinite(epoch) ? new Date(epoch) : new Date(NaN);
+      } else {
+        d = new Date(ts);
+      }
+      if (isNaN(d.getTime())) return 0;
+      return d.getMonth() < 3 ? d.getFullYear() - 1 : d.getFullYear();
+    };
+    var _annualKey = function(email, ts) { return _normEmail(email) + '_' + _caseFY(ts); };
+
     // モック用: mockCases から年度カウント付きのケースリストを構築
     const buildMockCaseList = () => {
-      var getFY = function(ts) { var d = new Date(ts); return d.getMonth() < 3 ? d.getFullYear() - 1 : d.getFullYear(); };
       var fyCounts = {};
       mockCases.forEach(function(c) {
         if (c.status === 'inProgress' || c.status === 'completed') {
-          var key = c.email + '_' + getFY(c.timestamp);
+          var key = _annualKey(c.email, c.timestamp);
           fyCounts[key] = (fyCounts[key] || 0) + (c.supportCount || 1);
         }
       });
       return mockCases.map(function(c) {
-        var key = c.email + '_' + getFY(c.timestamp);
+        var key = _annualKey(c.email, c.timestamp);
         var dateLabel = (() => {
           var ts = c.timestamp || '';
           if (typeof ts === 'string' && ts.indexOf('manual_') === 0) {
@@ -341,20 +357,20 @@
 
     // 年度カウント再計算ヘルパー（楽観的更新時に使用）
     // 変更案件の email+FY に該当する案件のみ再計算（インクリメンタル）
-    var _getFY = function(ts) { var d = new Date(ts); return d.getMonth() < 3 ? d.getFullYear() - 1 : d.getFullYear(); };
+    // キー算出は _annualKey（手動追加案件のmanual_PK対応 + メール正規化）で統一する。
     const recalcFiscalYearCounts = (cases, changedId) => {
       if (changedId) {
         var changed = cases.find(function(c) { return c.id === changedId; });
         if (changed) {
-          var targetKey = changed.email + '_' + _getFY(changed.timestamp);
+          var targetKey = _annualKey(changed.email, changed.timestamp);
           var newCount = 0;
           cases.forEach(function(c) {
-            if ((c.status === 'inProgress' || c.status === 'completed') && c.email + '_' + _getFY(c.timestamp) === targetKey) {
+            if ((c.status === 'inProgress' || c.status === 'completed') && _annualKey(c.email, c.timestamp) === targetKey) {
               newCount += (c.supportCount || 1);
             }
           });
           return cases.map(function(c) {
-            return c.email + '_' + _getFY(c.timestamp) === targetKey ? { ...c, currentFiscalYearCount: newCount } : c;
+            return _annualKey(c.email, c.timestamp) === targetKey ? { ...c, currentFiscalYearCount: newCount } : c;
           });
         }
       }
@@ -362,12 +378,12 @@
       var fyCounts = {};
       cases.forEach(function(c) {
         if (c.status === 'inProgress' || c.status === 'completed') {
-          var key = c.email + '_' + _getFY(c.timestamp);
+          var key = _annualKey(c.email, c.timestamp);
           fyCounts[key] = (fyCounts[key] || 0) + (c.supportCount || 1);
         }
       });
       return cases.map(function(c) {
-        var key = c.email + '_' + _getFY(c.timestamp);
+        var key = _annualKey(c.email, c.timestamp);
         return { ...c, currentFiscalYearCount: fyCounts[key] || 0 };
       });
     };
@@ -4481,7 +4497,16 @@
                   method: null, businessType: null,
                   content: null, remarks: null,
                   eventId: null, meetUrl: null,
-                  dateLabel: pk.slice(0, 10).replace(/-/g, '/'),
+                  // 手動追加案件のPK "manual_<epoch>" は申込日エポックから整形する
+                  // （pk.slice では "manual_176..." と表示される不具合の修正 — v1.12.3）
+                  dateLabel: (function() {
+                    var s = String(pk);
+                    if (s.indexOf('manual_') === 0) {
+                      var ep = Number(s.replace('manual_', ''));
+                      if (isFinite(ep)) { var d = new Date(ep); return d.getFullYear() + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + String(d.getDate()).padStart(2,'0'); }
+                    }
+                    return s.slice(0, 10).replace(/-/g, '/');
+                  })(),
                   currentFiscalYearCount: 0,
                   subStaff: [],
                   supportHistory: [], attachments: [], emails: []

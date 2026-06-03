@@ -1,7 +1,7 @@
 # 開発者向け引継ぎ資料 (HANDOVER.md)
 
 **Project:** タダサポ管理システム
-**Version:** 1.12.2（現行リリース）
+**Version:** 1.12.3（コード実装済み・本番反映待ち）
 **Date:** 2026/06/03
 **Author:** Development Team
 
@@ -13,6 +13,7 @@
 
 - **URL**: `https://script.google.com/a/macros/tadakayo.jp/s/AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ/exec`
 - **本番デプロイバージョン**: @148（v1.12.2、2026/06/03 デプロイ。固定 deploymentId / URL 不変）
+- **リポジトリ最新**: v1.12.3（手動追加案件の年間カウント合流。**まだ本番未デプロイ**）
 - **Webapp 設定**: `executeAs: USER_ACCESSING` / `access: DOMAIN`（tadakayo.jp ドメインのみ）
 - **認証**: タダメンマスタ（B列=氏名, C列=メール, D列=ROLE）で認証
 
@@ -57,6 +58,7 @@
 | **送信メール差出人(From)の文字化け修正** | ✅ | **v1.12.2** |
 | **選択中スロットの「✓ 選択中」緑バー永続表示** | ✅ | **v1.12.2** |
 | **日程カレンダーのバッファ/既存予定への枠重ね防止** | ✅ | **v1.12.2** |
+| **手動追加案件の年間カウント合流（同一メール+年度）** | ✅ | **v1.12.3** |
 
 ---
 
@@ -236,6 +238,8 @@ inProgress/completed → cancelled
 | `buildTransitionResult_()` | API戻り値（楽観的更新用サマリ）を構築 |
 | `sanitizeForSheet_()` | スプレッドシート書き込み前の数式インジェクション防止（v1.11.4） |
 | `getSenderInfo_()` | **差出人情報取得（v1.12.2追加）** — `Session.getActiveUser()` をタダメンマスタで引き、`{email, name}` を返す。`sendInThread_` の From ヘッダ RFC 2047 エンコードに使用 |
+| `caseFiscalYear_()` | **案件PKの年度解決（v1.12.3追加）** — 手動追加案件のPK `manual_<エポックミリ秒>` も申込日年度へ正しく解決する。`getFiscalYear` への委譲ラッパ |
+| `annualUsageKey_()` | **年間集計キー生成（v1.12.3追加）** — `normalizeEmail_(email) + '_' + caseFiscalYear_(pk)`。フォーム申込と手動追加案件を同一メール+年度で合算するための統一キー |
 
 ---
 
@@ -375,7 +379,7 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 ### バージョン管理ルール
 
 - `コード.js` 先頭コメント・`index.html`・SDD・HANDOVER・Manual・CHANGELOG・CLAUDE.md・AGENTS.md・package.json のバージョンは常に一致させること
-- 現行: **v1.12.2**
+- 現行: **v1.12.3**
 
 ### 🔒 デプロイ時の絶対グランドルール（CLAUDE.md / AGENTS.md にも記載）
 
@@ -426,6 +430,7 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 | **v1.12.0** | 2026/05/11 | Phase 4: 「いつものタダスクID」モード追加・ドキュメント完全更新（@142-143） |
 | **v1.12.1** | 2026/05/28 | 予約送信機能を廃止（@147）。旧トリガー互換は未送信キューを `disabled` 化し、即時送信・下書き保存は継続 |
 | **v1.12.2** | 2026/06/03 | backup ブランチ統合: 送信メール From 文字化け修正（実害バグ）+ 選択中スロット緑バー永続表示 + 日程カレンダーのバッファ/既存予定への枠重ね防止。版数衝突を解消し再採番（@148 デプロイ済み） |
+| **v1.12.3** | 2026/06/03 | 手動追加案件の年間カウント合流: フォーム申込と同一メール（正規化）+ 同一年度で利用回数を合算（`caseFiscalYear_`/`annualUsageKey_` 新設）。手動追加直後の受付日「manual_…」表示も修正（**本番未デプロイ**） |
 
 ---
 

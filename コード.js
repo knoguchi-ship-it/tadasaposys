@@ -1,5 +1,5 @@
 /**
- * タダサポ管理システム - Backend Logic (v1.12.2)
+ * タダサポ管理システム - Backend Logic (v1.12.3)
  *
  * 概要:
  * - Google Spreadsheets をデータベースとして利用
@@ -419,6 +419,25 @@ function getFiscalYear(dateObj) {
   return d.getMonth() < 3 ? d.getFullYear() - 1 : d.getFullYear();
 }
 
+// 案件PKから年度を求める。手動追加案件のPK "manual_<エポックミリ秒>" にも対応する。
+// （フォーム案件のPKは日時、手動追加案件は文字列のため new Date() が無効になり
+//   年度が 0 に落ちて年間カウントが合流しない問題を防ぐ — v1.12.3）
+function caseFiscalYear_(pkRaw) {
+  if (pkRaw && typeof pkRaw.getTime === 'function') return getFiscalYear(pkRaw);
+  let s = String(pkRaw);
+  if (s.indexOf('manual_') === 0) {
+    let epoch = Number(s.replace('manual_', ''));
+    return getFiscalYear(isFinite(epoch) ? new Date(epoch) : new Date(NaN));
+  }
+  return getFiscalYear(s);
+}
+
+// 年間利用回数の集計キー。メール正規化（大小文字・前後空白を無視）+ 案件PKの年度で構成する。
+// フォーム申込と管理者の手動追加案件を、同一メールアドレス + 同一年度で合算するために使用する（v1.12.3）。
+function annualUsageKey_(email, pkRaw) {
+  return normalizeEmail_(email) + '_' + caseFiscalYear_(pkRaw);
+}
+
 // ======================================================================
 // データ結合取得
 // ======================================================================
@@ -521,8 +540,8 @@ function getAllCasesJoined() {
     let email = ovr.email !== null && ovr.email !== undefined ? ovr.email : String(c[IDX.CASES.EMAIL]);
     let record = recordMap[ts] || { status: 'unhandled' };
     if (record.status === 'inProgress' || record.status === 'completed') {
-      let fy = getFiscalYear(ts);
-      let key = email + '_' + fy;
+      // 手動追加案件もフォーム案件と同一メール+年度で合算する（manual_PKの年度を正しく解決）
+      let key = annualUsageKey_(email, c[IDX.CASES.PK]);
       fiscalYearCounts[key] = (fiscalYearCounts[key] || 0) + (Number(record.supportCount) || 1);
     }
   }
@@ -544,8 +563,7 @@ function getAllCasesJoined() {
     let details     = ovr.details       !== null && ovr.details       !== undefined ? ovr.details       : c[IDX.CASES.DETAILS];
     let prefecture  = ovr.prefecture    !== null && ovr.prefecture    !== undefined ? ovr.prefecture    : (c[IDX.CASES.PREFECTURE] || null);
     let serviceType = ovr.serviceType   !== null && ovr.serviceType   !== undefined ? ovr.serviceType   : c[IDX.CASES.SERVICE];
-    let fy = getFiscalYear(ts);
-    let count = fiscalYearCounts[email + '_' + fy] || 0;
+    let count = fiscalYearCounts[annualUsageKey_(email, c[IDX.CASES.PK])] || 0;
     // タイムスタンプをJST日付文字列に変換
     // c[IDX.CASES.PK] は GAS が Sheet から読んだ Date オブジェクトのため、
     // String() → new Date() の往復変換を避けて直接 formatDate に渡す

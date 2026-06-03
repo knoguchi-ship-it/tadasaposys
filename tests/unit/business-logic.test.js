@@ -7,6 +7,8 @@
 
 const {
   getFiscalYear,
+  caseFiscalYear,
+  annualUsageKey,
   parseNullablePositiveInteger,
   normalizeEmail,
   parseBoolean,
@@ -58,6 +60,63 @@ describe('getFiscalYear', () => {
   test('null は new Date(null) = エポック(1970/1) として扱われ FY1969 を返す', () => {
     // new Date(null) は epoch(0) = 1970-01-01 → 1月は < 3 → FY = 1969
     expect(getFiscalYear(null)).toBe(1969);
+  });
+});
+
+// ============================================================
+// caseFiscalYear — 案件PKからの年度算出（手動追加案件 manual_ 対応）
+// ============================================================
+describe('caseFiscalYear', () => {
+  test('フォーム案件のPK文字列（日時）から年度を求める', () => {
+    expect(caseFiscalYear('2026-01-15T10:30:00')).toBe(2025); // 1月 → 前年度
+    expect(caseFiscalYear('2025-05-01T09:00:00')).toBe(2025); // 5月 → 同年度
+  });
+
+  test('Date オブジェクトのPKも受け付ける', () => {
+    expect(caseFiscalYear(new Date('2026-04-01T00:00:00'))).toBe(2026);
+  });
+
+  test('手動追加案件 manual_<epoch> を申込日の年度に解決する', () => {
+    // 2025-11-01 JST正午 → FY2025
+    const epoch = new Date('2025-11-01T12:00:00+09:00').getTime();
+    expect(caseFiscalYear('manual_' + epoch)).toBe(2025);
+    // 2026-02-15 → 2月は前年度 → FY2025
+    const epoch2 = new Date('2026-02-15T12:00:00+09:00').getTime();
+    expect(caseFiscalYear('manual_' + epoch2)).toBe(2025);
+    // 2026-04-10 → FY2026
+    const epoch3 = new Date('2026-04-10T12:00:00+09:00').getTime();
+    expect(caseFiscalYear('manual_' + epoch3)).toBe(2026);
+  });
+
+  test('manual_ の旧バグ回帰防止: 0 に落ちない（実年度を返す）', () => {
+    const epoch = new Date('2025-11-01T12:00:00+09:00').getTime();
+    expect(caseFiscalYear('manual_' + epoch)).not.toBe(0);
+  });
+
+  test('不正な manual_ エポックは 0 を返す', () => {
+    expect(caseFiscalYear('manual_notanumber')).toBe(0);
+  });
+});
+
+// ============================================================
+// annualUsageKey — 年間集計キー（メール正規化 + 年度）
+// ============================================================
+describe('annualUsageKey', () => {
+  test('同一メール・同一年度なら、フォーム案件と手動追加案件で同じキーになる', () => {
+    const manualEpoch = new Date('2025-11-01T12:00:00+09:00').getTime();
+    const formKey = annualUsageKey('sato@welfare.jp', '2025-12-01T11:00:00'); // FY2025
+    const manualKey = annualUsageKey('sato@welfare.jp', 'manual_' + manualEpoch); // FY2025
+    expect(manualKey).toBe(formKey);
+  });
+
+  test('メール表記ゆれ（大小文字・前後空白）を正規化して同一キーにする', () => {
+    expect(annualUsageKey('  SATO@Welfare.JP ', '2025-12-01T11:00:00'))
+      .toBe(annualUsageKey('sato@welfare.jp', '2025-12-01T11:00:00'));
+  });
+
+  test('年度が異なれば別キーになる', () => {
+    expect(annualUsageKey('a@b.jp', '2025-05-01T00:00:00'))
+      .not.toBe(annualUsageKey('a@b.jp', '2026-05-01T00:00:00'));
   });
 });
 
