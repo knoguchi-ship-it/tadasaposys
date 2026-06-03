@@ -38,7 +38,10 @@ test.describe('ケース詳細パネル', () => {
   test('対応中のケース詳細に担当者名が表示される', async ({ appPage }) => {
     await appPage.clickTab('対応中');
     await appPage.selectCase('たなかヘルパーセンター');
-    await expect(appPage.page.locator('.max-w-3xl').getByText('テスト太郎')).toBeVisible();
+    // 担当者名はヘッダーの担当者バッジに表示される。
+    // メールスレッド本文にも「テスト太郎 様」が含まれ strict locator が複数一致するため、
+    // DOM 上先頭（担当者バッジ）に .first() で限定する。
+    await expect(appPage.page.locator('.max-w-3xl').getByText('テスト太郎').first()).toBeVisible();
   });
 
   test('完了ケースに「N回目を開始」ボタンが表示される（supportCount < 上限）', async ({ appPage }) => {
