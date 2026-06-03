@@ -9,7 +9,7 @@
 
 介護事業所向け無料 IT サポート管理システム。GAS 上の React SPA で、Google スプレッドシートをデータストアとして使用。
 
-- **現行バージョン:** v1.12.3
+- **現行バージョン:** v1.12.4
 - **詳細設計:** `docs/SDD.md`
 - **引き継ぎ書:** `docs/HANDOVER.md`
 - **運用手順:** `docs/RUNBOOK.md`
@@ -146,6 +146,8 @@ SCHEDULED: { QUEUE_ID:0, CASE_ID:1, STAFF_EMAIL:2, STAFF_NAME:3, MODE:4,
 
 STAFF:     { NAME:1, EMAIL:2, ROLE:3, IS_ACTIVE:4 }
 CASES:     { PK:0, EMAIL:1, OFFICE:2, NAME:3, DETAILS:4, PREFECTURE:5, SERVICE:6 }
+
+ANNUAL_ADJUST: { EMAIL:0, FISCAL_YEAR:1, ADJUSTMENT:2, UPDATED_BY:3, UPDATED_AT:4 }  // v1.12.4 年間利用補正（メール+年度→補正量）
 ```
 
 詳細（各シートの全列定義・制約）: `docs/SDD.md` §1
@@ -257,11 +259,11 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 |---------|------|------|
 | `CLAUDE.md`（本ファイル） | Claude Code 専用指示 | Claude Code |
 | `AGENTS.md` | OpenAI Codex 専用指示 | OpenAI Codex |
-| `docs/SDD.md` | システム詳細設計書 v1.12.3 | AI・開発者 |
-| `docs/HANDOVER.md` | 引き継ぎ書 v1.12.3 | 開発者 |
+| `docs/SDD.md` | システム詳細設計書 v1.12.4 | AI・開発者 |
+| `docs/HANDOVER.md` | 引き継ぎ書 v1.12.4 | 開発者 |
 | `docs/ADR.md` | アーキテクチャ判断記録（ADR-001〜012） | AI・開発者 |
 | `docs/RUNBOOK.md` | 運用手順書（デプロイ・障害対応） | 開発者・運用者 |
-| `docs/Manual.md` | 操作マニュアル v1.12.3 | エンドユーザー |
+| `docs/Manual.md` | 操作マニュアル v1.12.4 | エンドユーザー |
 | `docs/RD.md` | 要件定義 | 参照用 |
 | `CHANGELOG.md` | 変更履歴 v1.8.1〜 | 全員 |
 | `SECURITY.md` | セキュリティ情報・脆弱性報告 | 全員 |

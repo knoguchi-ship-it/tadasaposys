@@ -1,7 +1,7 @@
 # 開発者向け引継ぎ資料 (HANDOVER.md)
 
 **Project:** タダサポ管理システム
-**Version:** 1.12.3（現行リリース）
+**Version:** 1.12.4（コード実装済み・本番反映待ち）
 **Date:** 2026/06/03
 **Author:** Development Team
 
@@ -13,6 +13,7 @@
 
 - **URL**: `https://script.google.com/a/macros/tadakayo.jp/s/AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ/exec`
 - **本番デプロイバージョン**: @149（v1.12.3、2026/06/03 デプロイ。固定 deploymentId / URL 不変）
+- **リポジトリ最新**: v1.12.4（年度利用回数の管理者手動修正。**まだ本番未デプロイ**）
 - **Webapp 設定**: `executeAs: USER_ACCESSING` / `access: DOMAIN`（tadakayo.jp ドメインのみ）
 - **認証**: タダメンマスタ（B列=氏名, C列=メール, D列=ROLE）で認証
 
@@ -58,6 +59,7 @@
 | **選択中スロットの「✓ 選択中」緑バー永続表示** | ✅ | **v1.12.2** |
 | **日程カレンダーのバッファ/既存予定への枠重ね防止** | ✅ | **v1.12.2** |
 | **手動追加案件の年間カウント合流（同一メール+年度）** | ✅ | **v1.12.3** |
+| **年度利用回数の管理者手動修正（実数の補正）** | ✅ | **v1.12.4** |
 
 ---
 
@@ -155,6 +157,7 @@ tadasaposys/
 | 監査ログ | 管理者操作の監査ログ（全管理者操作を記録） |
 | メール下書き | 送信前メール一時保存（v1.11.0、11列） |
 | 予約送信キュー | v1.12.1で予約送信廃止。既存キュー履歴・無効化確認用（16列） |
+| 年間利用補正 | 管理者による年度利用回数の手動補正（メール+年度→補正量。5列）（v1.12.4） |
 
 ### IDX定数（コード.js 約30行目）
 
@@ -239,6 +242,8 @@ inProgress/completed → cancelled
 | `getSenderInfo_()` | **差出人情報取得（v1.12.2追加）** — `Session.getActiveUser()` をタダメンマスタで引き、`{email, name}` を返す。`sendInThread_` の From ヘッダ RFC 2047 エンコードに使用 |
 | `caseFiscalYear_()` | **案件PKの年度解決（v1.12.3追加）** — 手動追加案件のPK `manual_<エポックミリ秒>` も申込日年度へ正しく解決する。`getFiscalYear` への委譲ラッパ |
 | `annualUsageKey_()` | **年間集計キー生成（v1.12.3追加）** — `normalizeEmail_(email) + '_' + caseFiscalYear_(pk)`。フォーム申込と手動追加案件を同一メール+年度で合算するための統一キー |
+| `setAnnualUsageCountAdmin()` | **年度利用回数の手動修正（v1.12.4追加）** — 目的の絶対値を受け、`補正量 = 目的値 − base` を `年間利用補正` シートへ保存。メール+年度単位 |
+| `getAnnualAdjustmentMap_()` / `upsertAnnualAdjustment_()` / `ensureAnnualUsageAdjustmentSheet_()` | **年間利用補正シートのI/O（v1.12.4追加）** — 補正量の読込・upsert・シート初期化 |
 
 ---
 
@@ -378,7 +383,7 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 ### バージョン管理ルール
 
 - `コード.js` 先頭コメント・`index.html`・SDD・HANDOVER・Manual・CHANGELOG・CLAUDE.md・AGENTS.md・package.json のバージョンは常に一致させること
-- 現行: **v1.12.3**
+- 現行: **v1.12.4**
 
 ### 🔒 デプロイ時の絶対グランドルール（CLAUDE.md / AGENTS.md にも記載）
 
@@ -430,6 +435,7 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 | **v1.12.1** | 2026/05/28 | 予約送信機能を廃止（@147）。旧トリガー互換は未送信キューを `disabled` 化し、即時送信・下書き保存は継続 |
 | **v1.12.2** | 2026/06/03 | backup ブランチ統合: 送信メール From 文字化け修正（実害バグ）+ 選択中スロット緑バー永続表示 + 日程カレンダーのバッファ/既存予定への枠重ね防止。版数衝突を解消し再採番（@148 デプロイ済み） |
 | **v1.12.3** | 2026/06/03 | 手動追加案件の年間カウント合流: フォーム申込と同一メール（正規化）+ 同一年度で利用回数を合算（`caseFiscalYear_`/`annualUsageKey_` 新設）。手動追加直後の受付日「manual_…」表示も修正（@149 デプロイ済み） |
+| **v1.12.4** | 2026/06/03 | 年度利用回数の管理者手動修正: 案件詳細「今年度利用数」から実数を直接入力で補正（`年間利用補正` シート + `setAnnualUsageCountAdmin` 新設）。メール+年度単位で反映（**本番未デプロイ**） |
 
 ---
 

@@ -33,6 +33,13 @@ function annualUsageKey(email, pkRaw) {
   return normalizeEmail(email) + '_' + caseFiscalYear(pkRaw);
 }
 
+// コード.js / index.html: 今年度利用数の実効値（v1.12.4）
+// 自動計算値(base) + 管理者補正(adjustment)。0 未満にはしない。
+function effectiveAnnualCount(base, adjustment) {
+  var v = (Number(base) || 0) + (Number(adjustment) || 0);
+  return v < 0 ? 0 : v;
+}
+
 // ── 入力バリデーション ────────────────────────────────────
 // コード.js: parseNullablePositiveInteger_()
 function parseNullablePositiveInteger(value) {
@@ -132,6 +139,7 @@ module.exports = {
   getFiscalYear,
   caseFiscalYear,
   annualUsageKey,
+  effectiveAnnualCount,
   parseNullablePositiveInteger,
   normalizeEmail,
   parseBoolean,

@@ -210,6 +210,8 @@
     };
     // v1.11.0: メール下書きのローカル保管（キー: caseId|mode|threadId）
     let mockDrafts = {};
+    // v1.12.4: 年間利用補正のローカル保管（キー: 正規化メール_年度 → 補正量）
+    let mockAnnualAdjust = {};
 
     let mockCases = [
       // ── パターン1: 未対応（通常） ──
@@ -343,6 +345,7 @@
       });
       return mockCases.map(function(c) {
         var key = _annualKey(c.email, c.timestamp);
+        var adjusted = Math.max(0, (fyCounts[key] || 0) + (mockAnnualAdjust[key] || 0)); // v1.12.4 補正反映
         var dateLabel = (() => {
           var ts = c.timestamp || '';
           if (typeof ts === 'string' && ts.indexOf('manual_') === 0) {
@@ -351,7 +354,7 @@
           }
           return ts.slice(0, 10).replace(/-/g, '/');
         })();
-        return { ...c, dateLabel: dateLabel, currentFiscalYearCount: fyCounts[key] || 0 };
+        return { ...c, dateLabel: dateLabel, currentFiscalYearCount: adjusted };
       });
     };
 
@@ -369,6 +372,7 @@
               newCount += (c.supportCount || 1);
             }
           });
+          newCount = Math.max(0, newCount + (mockAnnualAdjust[targetKey] || 0)); // v1.12.4 補正反映
           return cases.map(function(c) {
             return _annualKey(c.email, c.timestamp) === targetKey ? { ...c, currentFiscalYearCount: newCount } : c;
           });
@@ -384,7 +388,7 @@
       });
       return cases.map(function(c) {
         var key = _annualKey(c.email, c.timestamp);
-        return { ...c, currentFiscalYearCount: fyCounts[key] || 0 };
+        return { ...c, currentFiscalYearCount: Math.max(0, (fyCounts[key] || 0) + (mockAnnualAdjust[key] || 0)) }; // v1.12.4 補正反映
       });
     };
 
@@ -844,6 +848,30 @@
           google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).setCaseStatusAdmin(caseId, status);
         });
       },
+      // v1.12.4: 管理者による「今年度利用数（実数）」の手動修正（メール+年度単位）
+      setAnnualUsageCountAdmin: (caseId, desiredCount) => {
+        if (IS_LOCAL) {
+          return new Promise((resolve, reject) => setTimeout(() => {
+            var n = Math.floor(Number(desiredCount));
+            if (!isFinite(n) || n < 0) { reject(new Error('今年度利用数は0以上の整数で指定してください。')); return; }
+            var target = mockCases.find(c => c.id === caseId);
+            if (!target) { reject(new Error('対象の案件が見つかりません。')); return; }
+            var key = _annualKey(target.email, target.timestamp);
+            // base = 同一メール+年度の対応中/完了の supportCount 合算（補正抜き）
+            var base = 0;
+            mockCases.forEach(function(c) {
+              if ((c.status === 'inProgress' || c.status === 'completed') && _annualKey(c.email, c.timestamp) === key) {
+                base += (c.supportCount || 1);
+              }
+            });
+            mockAnnualAdjust[key] = n - base;
+            resolve({ email: String(target.email || '').trim().toLowerCase(), base: base, adjustment: n - base, effective: n });
+          }, 300));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).setAnnualUsageCountAdmin(caseId, desiredCount);
+        });
+      },
       updateCaseDataAdmin: (caseId, payload) => {
         if (IS_LOCAL) {
           return new Promise(resolve => setTimeout(() => {
@@ -1296,6 +1324,7 @@
       const [filterPrefWord, setFilterPrefWord] = useState('');
       const [filterPrefOpen, setFilterPrefOpen] = useState(false);
       const [inlineLimitDraft, setInlineLimitDraft] = useState('');
+      const [inlineCountDraft, setInlineCountDraft] = useState(''); // v1.12.4: 今年度利用数（実数）編集ドラフト
 
       // ヘルプ
       const [helpOpen, setHelpOpen] = useState(false);
@@ -2539,6 +2568,30 @@
         }
       };
 
+      // v1.12.4: 今年度利用数（実数）の手動修正。目的の絶対値を入力し、メール+年度単位で反映。
+      const handleAdminAnnualCountInline = async () => {
+        if (!selectedCase) return;
+        const raw = inlineCountDraft.trim();
+        const desired = Number(raw);
+        if (raw === '' || !isFinite(desired) || desired < 0 || !Number.isInteger(desired)) {
+          showToast('今年度利用数は0以上の整数で入力してください。', { type: 'error', title: '入力エラー' });
+          return;
+        }
+        setInlineEditField(null);
+        startSubmit('利用回数を修正中...');
+        try {
+          await Api.setAnnualUsageCountAdmin(selectedCase.timestamp, desired);
+          // 同一メール+年度の全案件に楽観反映
+          const targetKey = _annualKey(selectedCase.email, selectedCase.timestamp);
+          setCases(prev => prev.map(c => _annualKey(c.email, c.timestamp) === targetKey ? { ...c, currentFiscalYearCount: desired } : c));
+          showToast(`今年度利用数を ${desired} 回に修正しました（同じメール+年度の案件に反映）。`, { type: 'success', title: '管理者操作' });
+        } catch (e) {
+          showToast(e.message || String(e), { type: 'error', title: '利用回数修正エラー' });
+        } finally {
+          setSubmitting(false);
+        }
+      };
+
       const handleAdminReassignInline = async (staffEmail) => {
         setInlineEditField(null);
         if (!selectedCase || staffEmail === (selectedCase.staffEmail || '')) return;
@@ -3679,10 +3732,11 @@
                             <button
                               onClick={() => {
                                 setInlineLimitDraft(selectedCase.annualLimitOverride == null ? '' : String(selectedCase.annualLimitOverride));
+                                setInlineCountDraft(String(selectedCase.currentFiscalYearCount));
                                 setInlineEditField(inlineEditField === 'annualLimit' ? null : 'annualLimit');
                               }}
                               disabled={submitting}
-                              title="クリックして上限を変更"
+                              title="クリックして利用回数・上限を変更"
                               className={`text-lg sm:text-xl font-black flex items-center justify-end gap-1 hover:opacity-70 transition-opacity ${
                                 selectedCase.currentFiscalYearCount >= effectiveAnnualLimit ? 'text-rose-600' : 'text-slate-800'
                               } ${inlineEditField === 'annualLimit' ? 'opacity-70' : ''}`}>
@@ -3691,11 +3745,32 @@
                               <Edit size={9} className="opacity-30 ml-0.5"/>
                             </button>
                             {inlineEditField === 'annualLimit' && (
-                              <div className="absolute top-full right-0 mt-1 bg-white shadow-xl rounded-2xl border border-slate-200 z-50 p-3 w-52 text-left">
-                                <p className="text-[10px] font-black text-slate-500 mb-1.5">今年度の最大利用回数</p>
+                              <div className="absolute top-full right-0 mt-1 bg-white shadow-xl rounded-2xl border border-slate-200 z-50 p-3 w-60 text-left">
+                                {/* v1.12.4: 今年度利用数（実数）の手動修正 */}
+                                <p className="text-[10px] font-black text-slate-500 mb-1.5">今年度の利用回数（実数）</p>
+                                <p className="text-[9px] text-slate-500 mb-2 leading-relaxed">同じメール＋年度の全案件に反映。システム外の依頼の加算や誤カウントの補正に使えます。</p>
+                                <input
+                                  type="number" min="0" max="999" autoFocus
+                                  value={inlineCountDraft}
+                                  onChange={e => setInlineCountDraft(e.target.value)}
+                                  onKeyDown={e => e.key === 'Enter' && handleAdminAnnualCountInline()}
+                                  className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-sm font-black outline-none focus:border-indigo-400 text-center"
+                                />
+                                <div className="flex gap-1 mt-2">
+                                  <button onClick={() => setInlineEditField(null)}
+                                    className="flex-1 py-1.5 rounded-xl text-xs font-bold border border-slate-200 text-slate-500 hover:bg-slate-50">
+                                    キャンセル
+                                  </button>
+                                  <button onClick={handleAdminAnnualCountInline}
+                                    className="flex-1 py-1.5 rounded-xl text-xs font-bold bg-indigo-500 text-white hover:bg-indigo-600">
+                                    利用回数を保存
+                                  </button>
+                                </div>
+                                <div className="border-t border-slate-100 my-3"></div>
+                                <p className="text-[10px] font-black text-slate-500 mb-1.5">今年度の最大利用回数（上限）</p>
                                 <p className="text-[9px] text-slate-500 mb-2">デフォルト: {masters?.limits?.annual || 10}回　空欄でリセット</p>
                                 <input
-                                  type="number" min="1" max="100" autoFocus
+                                  type="number" min="1" max="100"
                                   value={inlineLimitDraft}
                                   onChange={e => setInlineLimitDraft(e.target.value)}
                                   placeholder={String(masters?.limits?.annual || 10)}

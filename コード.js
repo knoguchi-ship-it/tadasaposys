@@ -1,5 +1,5 @@
 /**
- * タダサポ管理システム - Backend Logic (v1.12.3)
+ * タダサポ管理システム - Backend Logic (v1.12.4)
  *
  * 概要:
  * - Google Spreadsheets をデータベースとして利用
@@ -27,7 +27,8 @@ var SHEET_NAMES = {
   EMAIL_HISTORY: 'メール履歴',
   EMAIL_DRAFTS: 'メール下書き',  // v1.11.0: 送信前メール一時保存（担当者ごと）
   EMAIL_SCHEDULED: '予約送信キュー',  // v1.12.1: 予約送信は廃止。既存キューの無効化確認用に参照のみ残す
-  AUDIT_LOG: '監査ログ'
+  AUDIT_LOG: '監査ログ',
+  ANNUAL_ADJUST: '年間利用補正'  // v1.12.4: 管理者による年度利用回数の手動補正（メール+年度ごとの補正量）
 };
 
 var IDX = {
@@ -40,7 +41,9 @@ var IDX = {
   // v1.11.0: メール下書きシート（複合キー: CASE_ID + STAFF_EMAIL + MODE + THREAD_ID）
   DRAFT: { DRAFT_ID: 0, CASE_ID: 1, STAFF_EMAIL: 2, MODE: 3, THREAD_ID: 4, SUBJECT: 5, BODY: 6, CC: 7, BCC: 8, TOOLS: 9, UPDATED_AT: 10 },
   // v1.12.1: 予約送信キューは廃止済み。既存行を disabled に更新する後方互換用
-  SCHEDULED: { QUEUE_ID: 0, CASE_ID: 1, STAFF_EMAIL: 2, STAFF_NAME: 3, MODE: 4, THREAD_ID: 5, SUBJECT: 6, BODY: 7, CC: 8, BCC: 9, TOOLS: 10, SEND_AT: 11, STATUS: 12, ERROR: 13, CREATED_AT: 14, SENT_AT: 15 }
+  SCHEDULED: { QUEUE_ID: 0, CASE_ID: 1, STAFF_EMAIL: 2, STAFF_NAME: 3, MODE: 4, THREAD_ID: 5, SUBJECT: 6, BODY: 7, CC: 8, BCC: 9, TOOLS: 10, SEND_AT: 11, STATUS: 12, ERROR: 13, CREATED_AT: 14, SENT_AT: 15 },
+  // v1.12.4: 年間利用補正シート（メール+年度ごとの利用回数補正量。EMAILは正規化して保存）
+  ANNUAL_ADJUST: { EMAIL: 0, FISCAL_YEAR: 1, ADJUSTMENT: 2, UPDATED_BY: 3, UPDATED_AT: 4 }
 };
 
 // ======================================================================
@@ -469,6 +472,9 @@ function getAllCasesJoined() {
   // 案件補正マップを読み込む（管理者が修正した値を案件リストに上書き表示するため）
   let overrideMap = getCasesOverrideMap_(ss);
 
+  // 年間利用補正マップ（管理者が手動修正した利用回数の補正量。キー=正規化メール+'_'+年度）— v1.12.4
+  let annualAdjustMap = getAnnualAdjustmentMap_(ss);
+
   // メール履歴を読み込み
   let emailMap = {};
   let emailSheet = ss.getSheetByName(SHEET_NAMES.EMAIL_HISTORY);
@@ -563,7 +569,10 @@ function getAllCasesJoined() {
     let details     = ovr.details       !== null && ovr.details       !== undefined ? ovr.details       : c[IDX.CASES.DETAILS];
     let prefecture  = ovr.prefecture    !== null && ovr.prefecture    !== undefined ? ovr.prefecture    : (c[IDX.CASES.PREFECTURE] || null);
     let serviceType = ovr.serviceType   !== null && ovr.serviceType   !== undefined ? ovr.serviceType   : c[IDX.CASES.SERVICE];
-    let count = fiscalYearCounts[annualUsageKey_(email, c[IDX.CASES.PK])] || 0;
+    // 自動計算（base）+ 管理者補正（v1.12.4）。負値にはしない。
+    let usageKey = annualUsageKey_(email, c[IDX.CASES.PK]);
+    let count = (fiscalYearCounts[usageKey] || 0) + (annualAdjustMap[usageKey] || 0);
+    if (count < 0) count = 0;
     // タイムスタンプをJST日付文字列に変換
     // c[IDX.CASES.PK] は GAS が Sheet から読んだ Date オブジェクトのため、
     // String() → new Date() の往復変換を避けて直接 formatDate に渡す
@@ -2722,6 +2731,115 @@ function getCasesOverrideMap_(ss) {
     };
   }
   return map;
+}
+
+// ======================================================================
+// 年間利用補正シート ヘルパー（v1.12.4）
+// 管理者が「今年度利用数」を手動修正した際の補正量（メール+年度ごと）を保持する。
+// 実際に表示される利用回数 = 自動計算値（同一メール+年度の対応回数合算）+ 補正量。
+// ======================================================================
+
+/**
+ * 「年間利用補正」シートを取得する。存在しなければ作成してヘッダを設定する。
+ */
+function ensureAnnualUsageAdjustmentSheet_(ss) {
+  let sheet = ss.getSheetByName(SHEET_NAMES.ANNUAL_ADJUST);
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_NAMES.ANNUAL_ADJUST);
+    sheet.getRange(1, 1, 1, 5).setValues([[
+      'メールアドレス', '年度', '補正値', '更新者', '更新日時'
+    ]]);
+  }
+  return sheet;
+}
+
+/**
+ * 年間利用補正マップを返す。キー = 正規化メール + '_' + 年度、値 = 補正量(整数, 負値可)。
+ */
+function getAnnualAdjustmentMap_(ss) {
+  let sheet = ss.getSheetByName(SHEET_NAMES.ANNUAL_ADJUST);
+  if (!sheet || sheet.getLastRow() < 2) return {};
+  let data = sheet.getDataRange().getValues();
+  let map = {};
+  for (let i = 1; i < data.length; i++) {
+    let email = normalizeEmail_(data[i][IDX.ANNUAL_ADJUST.EMAIL]);
+    let fy = parseInt(data[i][IDX.ANNUAL_ADJUST.FISCAL_YEAR], 10);
+    if (!email || !isFinite(fy)) continue;
+    let adj = Number(data[i][IDX.ANNUAL_ADJUST.ADJUSTMENT]);
+    if (!isFinite(adj)) adj = 0;
+    map[email + '_' + fy] = Math.trunc(adj);
+  }
+  return map;
+}
+
+/**
+ * 年間利用補正を upsert する。email は正規化して保存。adjustment は整数(負値可)。
+ */
+function upsertAnnualAdjustment_(ss, email, fiscalYear, adjustment, actorEmail) {
+  let sheet = ensureAnnualUsageAdjustmentSheet_(ss);
+  let normEmail = normalizeEmail_(email);
+  let fy = parseInt(fiscalYear, 10);
+  let adj = Math.trunc(Number(adjustment) || 0);
+  let now = new Date();
+  let data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (normalizeEmail_(data[i][IDX.ANNUAL_ADJUST.EMAIL]) === normEmail &&
+        parseInt(data[i][IDX.ANNUAL_ADJUST.FISCAL_YEAR], 10) === fy) {
+      let row = i + 1;
+      sheet.getRange(row, IDX.ANNUAL_ADJUST.ADJUSTMENT + 1).setValue(adj);
+      sheet.getRange(row, IDX.ANNUAL_ADJUST.UPDATED_BY + 1).setValue(actorEmail || '');
+      sheet.getRange(row, IDX.ANNUAL_ADJUST.UPDATED_AT + 1).setValue(now);
+      return;
+    }
+  }
+  sheet.appendRow([normEmail, fy, adj, actorEmail || '', now]);
+}
+
+/**
+ * 管理者が「今年度利用数（実数）」を手動修正する（v1.12.4）。
+ * desiredCount は目的の絶対値。内部では「目的値 − 自動計算値(base)」を補正量として
+ * メール+年度ごとに保存するため、その後に実案件が増えても加算が継続する。
+ * 利用回数は同一メール+年度で合算されるため、補正は同一メール+年度の全案件に反映される。
+ *
+ * @param {string} caseId 対象案件のPK（メール+年度の解決に使用）
+ * @param {number} desiredCount 目的の今年度利用数（0以上の整数）
+ * @returns {{ email:string, fiscalYear:number, base:number, adjustment:number, effective:number }}
+ */
+function setAnnualUsageCountAdmin(caseId, desiredCount) {
+  let actor = requireAdmin_();
+  let n = Number(desiredCount);
+  if (!isFinite(n) || n < 0) throw new Error('今年度利用数は0以上の整数で指定してください。');
+  n = Math.floor(n);
+
+  let ss = getSpreadsheet_();
+  // 対象案件の email + 年度 を、表示と同じ結合ロジックから解決する
+  let joined = getAllCasesJoined();
+  let target = null;
+  for (let i = 0; i < joined.length; i++) {
+    if (String(joined[i].id) === String(caseId)) { target = joined[i]; break; }
+  }
+  if (!target) throw new Error('対象の案件が見つかりません。');
+
+  let email = normalizeEmail_(target.email);
+  if (!email) throw new Error('対象案件にメールアドレスが設定されていません。');
+  let fy = caseFiscalYear_(caseId);
+
+  // base（自動計算値） = 現在の表示値（effective） − 既存補正量
+  let adjMap = getAnnualAdjustmentMap_(ss);
+  let key = email + '_' + fy;
+  let existingAdj = adjMap[key] || 0;
+  let base = (Number(target.currentFiscalYearCount) || 0) - existingAdj;
+  if (base < 0) base = 0;
+  let newAdj = n - base;
+
+  upsertAnnualAdjustment_(ss, email, fy, newAdj, actor.email);
+
+  appendAuditLog_(actor, 'set_annual_usage_count', 'annual_usage', key,
+    { previousEffective: target.currentFiscalYearCount, previousAdjustment: existingAdj },
+    { desiredCount: n, base: base, newAdjustment: newAdj }
+  );
+
+  return { email: email, fiscalYear: fy, base: base, adjustment: newAdj, effective: n };
 }
 
 /**

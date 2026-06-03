@@ -9,6 +9,7 @@ const {
   getFiscalYear,
   caseFiscalYear,
   annualUsageKey,
+  effectiveAnnualCount,
   parseNullablePositiveInteger,
   normalizeEmail,
   parseBoolean,
@@ -117,6 +118,32 @@ describe('annualUsageKey', () => {
   test('年度が異なれば別キーになる', () => {
     expect(annualUsageKey('a@b.jp', '2025-05-01T00:00:00'))
       .not.toBe(annualUsageKey('a@b.jp', '2026-05-01T00:00:00'));
+  });
+});
+
+// ============================================================
+// effectiveAnnualCount — 今年度利用数の実効値（base + 補正・0クランプ）
+// ============================================================
+describe('effectiveAnnualCount', () => {
+  test('補正なしは base のまま', () => {
+    expect(effectiveAnnualCount(3, 0)).toBe(3);
+  });
+  test('正の補正（システム外依頼の加算）', () => {
+    expect(effectiveAnnualCount(2, 3)).toBe(5);
+  });
+  test('負の補正（誤カウントの削減）', () => {
+    expect(effectiveAnnualCount(5, -2)).toBe(3);
+  });
+  test('実効値は 0 未満にならない', () => {
+    expect(effectiveAnnualCount(1, -5)).toBe(0);
+    expect(effectiveAnnualCount(0, -3)).toBe(0);
+  });
+  test('絶対値指定の補正計算: 目的値=base+adj が成り立つ', () => {
+    const base = 4, desired = 7;
+    const adj = desired - base; // 設定時に保存される補正量
+    expect(effectiveAnnualCount(base, adj)).toBe(desired);
+    // 後で base が増えても補正は加算され続ける
+    expect(effectiveAnnualCount(base + 2, adj)).toBe(desired + 2);
   });
 });
 

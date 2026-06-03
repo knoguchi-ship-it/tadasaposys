@@ -56,6 +56,21 @@ test.describe('管理モード', () => {
     await expect(countBtn).toBeVisible();
   });
 
+  test('管理モードで今年度利用数（実数）を手動修正できる（v1.12.4）', async ({ appPage }) => {
+    await appPage.clickTab('対応中');
+    await appPage.selectCase('さとう福祉用具');
+    // 今年度利用数バッジ（title で一意）を開く。初期は base のみ（"2 / 10"）。
+    const annualBtn = appPage.page.locator('button[title="クリックして利用回数・上限を変更"]');
+    await expect(annualBtn).toContainText('2 / 10');
+    await annualBtn.click();
+    // 実数入力（min=0 が今年度利用数の入力。上限入力は min=1）
+    const countInput = appPage.page.locator('input[type="number"][min="0"]');
+    await countInput.fill('4');
+    await appPage.page.getByRole('button', { name: '利用回数を保存' }).click();
+    // 補正 +2 が反映され "4 / 10" になる
+    await expect(annualBtn).toContainText('4 / 10');
+  });
+
 });
 
 test.describe('管理者専用ボタン', () => {
