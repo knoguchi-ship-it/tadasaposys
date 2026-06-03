@@ -1,7 +1,7 @@
 # 開発者向け引継ぎ資料 (HANDOVER.md)
 
 **Project:** タダサポ管理システム
-**Version:** 1.12.4（コード実装済み・本番反映待ち）
+**Version:** 1.12.4（現行リリース）
 **Date:** 2026/06/03
 **Author:** Development Team
 
@@ -12,8 +12,7 @@
 ### 本番稼働中
 
 - **URL**: `https://script.google.com/a/macros/tadakayo.jp/s/AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ/exec`
-- **本番デプロイバージョン**: @149（v1.12.3、2026/06/03 デプロイ。固定 deploymentId / URL 不変）
-- **リポジトリ最新**: v1.12.4（年度利用回数の管理者手動修正。**まだ本番未デプロイ**）
+- **本番デプロイバージョン**: @150（v1.12.4、2026/06/03 デプロイ。固定 deploymentId / URL 不変）
 - **Webapp 設定**: `executeAs: USER_ACCESSING` / `access: DOMAIN`（tadakayo.jp ドメインのみ）
 - **認証**: タダメンマスタ（B列=氏名, C列=メール, D列=ROLE）で認証
 
@@ -435,7 +434,7 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 | **v1.12.1** | 2026/05/28 | 予約送信機能を廃止（@147）。旧トリガー互換は未送信キューを `disabled` 化し、即時送信・下書き保存は継続 |
 | **v1.12.2** | 2026/06/03 | backup ブランチ統合: 送信メール From 文字化け修正（実害バグ）+ 選択中スロット緑バー永続表示 + 日程カレンダーのバッファ/既存予定への枠重ね防止。版数衝突を解消し再採番（@148 デプロイ済み） |
 | **v1.12.3** | 2026/06/03 | 手動追加案件の年間カウント合流: フォーム申込と同一メール（正規化）+ 同一年度で利用回数を合算（`caseFiscalYear_`/`annualUsageKey_` 新設）。手動追加直後の受付日「manual_…」表示も修正（@149 デプロイ済み） |
-| **v1.12.4** | 2026/06/03 | 年度利用回数の管理者手動修正: 案件詳細「今年度利用数」から実数を直接入力で補正（`年間利用補正` シート + `setAnnualUsageCountAdmin` 新設）。メール+年度単位で反映（**本番未デプロイ**） |
+| **v1.12.4** | 2026/06/03 | 年度利用回数の管理者手動修正: 案件詳細「今年度利用数」から実数を直接入力で補正（`年間利用補正` シート + `setAnnualUsageCountAdmin` 新設）。メール+年度単位で反映（@150 デプロイ済み） |
 
 ---
 
