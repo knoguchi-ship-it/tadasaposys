@@ -1,8 +1,8 @@
 # 開発者向け引継ぎ資料 (HANDOVER.md)
 
 **Project:** タダサポ管理システム
-**Version:** 1.12.1（現行リリース）
-**Date:** 2026/05/28
+**Version:** 1.12.2（コード統合済み・本番反映待ち）
+**Date:** 2026/06/03
 **Author:** Development Team
 
 ---
@@ -12,7 +12,8 @@
 ### 本番稼働中
 
 - **URL**: `https://script.google.com/a/macros/tadakayo.jp/s/AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ/exec`
-- **デプロイバージョン**: @147（v1.12.1）
+- **本番デプロイバージョン**: @147（v1.12.1）
+- **リポジトリ最新**: v1.12.2（backup 統合・From 文字化け修正済み。**まだ本番未デプロイ** — §4-1 参照）
 - **Webapp 設定**: `executeAs: USER_ACCESSING` / `access: DOMAIN`（tadakayo.jp ドメインのみ）
 - **認証**: タダメンマスタ（B列=氏名, C列=メール, D列=ROLE）で認証
 
@@ -54,6 +55,9 @@
 | **Zoom時のチームカレンダー強制登録（重複防止）** | ✅ | **v1.11.8** |
 | **FullCalendar 埋込み（週/月ビュー・ドラッグ選択）** | ✅ | **v1.11.9** |
 | **「いつものタダスクID」（固定Zoom）モード** | ✅ | **v1.12.0** |
+| **送信メール差出人(From)の文字化け修正** | ✅ | **v1.12.2** |
+| **選択中スロットの「✓ 選択中」緑バー永続表示** | ✅ | **v1.12.2** |
+| **日程カレンダーのバッファ/既存予定への枠重ね防止** | ✅ | **v1.12.2** |
 
 ---
 
@@ -232,6 +236,7 @@ inProgress/completed → cancelled
 | `applyWriteUpdates_()` | updatesオブジェクトを一括でDBに書き込む |
 | `buildTransitionResult_()` | API戻り値（楽観的更新用サマリ）を構築 |
 | `sanitizeForSheet_()` | スプレッドシート書き込み前の数式インジェクション防止（v1.11.4） |
+| `getSenderInfo_()` | **差出人情報取得（v1.12.2追加）** — `Session.getActiveUser()` をタダメンマスタで引き、`{email, name}` を返す。`sendInThread_` の From ヘッダ RFC 2047 エンコードに使用 |
 
 ---
 
@@ -371,7 +376,7 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 ### バージョン管理ルール
 
 - `コード.js` 先頭コメント・`index.html`・SDD・HANDOVER・Manual・CHANGELOG・CLAUDE.md・AGENTS.md・package.json のバージョンは常に一致させること
-- 現行: **v1.12.1**
+- 現行: **v1.12.2**
 
 ### 🔒 デプロイ時の絶対グランドルール（CLAUDE.md / AGENTS.md にも記載）
 
@@ -421,6 +426,7 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 | **v1.11.9** | 2026/05/11 | Phase 3: FullCalendar 埋込み（ドラッグ選択 + バッファ可視化） |
 | **v1.12.0** | 2026/05/11 | Phase 4: 「いつものタダスクID」モード追加・ドキュメント完全更新（@142-143） |
 | **v1.12.1** | 2026/05/28 | 予約送信機能を廃止（@147）。旧トリガー互換は未送信キューを `disabled` 化し、即時送信・下書き保存は継続 |
+| **v1.12.2** | 2026/06/03 | backup ブランチ統合: 送信メール From 文字化け修正（実害バグ）+ 選択中スロット緑バー永続表示 + 日程カレンダーのバッファ/既存予定への枠重ね防止。版数衝突を解消し再採番（**本番未デプロイ**） |
 
 ---
 
@@ -506,6 +512,24 @@ v1.12.1 デプロイ後、次担当者が安全に作業へ入れるよう、開
 - `408c549 docs: グランドルールを二層構造に整理`
 - `0a0b2ee docs: temp除外ルールを明文化`
 
+### 13-7. 2026/06/03 backup ブランチ統合（v1.12.2）
+
+開発再開時に、`backup/local-v1.12.1-to-1.12.3` ブランチが master と分岐し、未マージのコード修正3件が取り残されていることを検出。版数も衝突していた（master=予約送信廃止の v1.12.1／backup=緑バーの v1.12.1）。
+
+**経緯と判断:**
+- 本番（master @147 v1.12.1）をベースに据え、backup の3コミットを `git cherry-pick -x` で取り込み（コード本体はクリーンに自動マージ、衝突はドキュメント版数のみ）。
+- 版数衝突を解消するため、3変更を単一の **v1.12.2** に再採番して束ね、全ドキュメントの版数を統一。
+- ベストプラクティス（自己完結 hotfix は cherry-pick）に準拠。分岐元の `backup/local-v1.12.1-to-1.12.3` は保全のため残置。
+
+**取り込んだ修正:**
+| 旧版（backup） | 内容 | 統合先 |
+|------|------|------|
+| 2e086bd (v1.12.1) | 選択中スロット「✓ 選択中」緑バー永続表示 | v1.12.2 |
+| 0cb7ff3 (v1.12.2) | 送信メール From 文字化け修正（実害バグ）| v1.12.2 |
+| 3e5903c (v1.12.3) | 日程カレンダーの枠重ね防止 (`selectOverlap`) | v1.12.2 |
+
+**残課題:** v1.12.2 は**本番未デプロイ**。From 文字化けは本番で発生中のため、§4-2 の手順で速やかにデプロイすること。
+
 ---
 
 ## 14. 次の担当者へのクイックスタート
@@ -560,6 +584,20 @@ npm test           # Playwright E2E 49件
 disablePendingScheduledEmails();  // pending/sending の旧予約を disabled 化
 setupScheduledEmailTrigger();     // 旧 processScheduledEmails_ トリガーを削除
 getScheduledEmailTriggerStatus(); // { active: false } を確認
+```
+
+### 4-2. v1.12.2 のデプロイ（未実施・最優先）
+
+2026/06/03 に backup ブランチの3修正を本番ラインへ統合し、リポジトリを **v1.12.2** に再採番済み。**本番（@147 / v1.12.1）にはまだ反映されていない。**
+
+特に **From 文字化けは本番で発生中の実害バグ**のため、§10 のグランドルールに従い速やかにデプロイすること。
+
+```bash
+# 0. appsscript.json の webapp 設定が USER_ACCESSING / DOMAIN か確認
+# 1. git commit 済みであることを確認（本セッションでコミット済み）
+clasp push --force
+clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ -d "v1.12.2"
+# 4. GAS デプロイ管理画面で「実行=アクセスしているユーザー / アクセス=NPO法人タダカヨ 内の全員」を目視確認
 ```
 
 ### 5. 推奨される次の作業（優先度順）

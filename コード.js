@@ -1,5 +1,5 @@
 /**
- * タダサポ管理システム - Backend Logic (v1.12.1)
+ * タダサポ管理システム - Backend Logic (v1.12.2)
  *
  * 概要:
  * - Google Spreadsheets をデータベースとして利用
@@ -1035,6 +1035,31 @@ function getRecipientEmail_(caseId) {
 // ======================================================================
 
 /**
+ * 認証ユーザー（=Gmail送信元の "me"）の表示名と email を返す。
+ * Staff シートに登録されていれば NAME 列を表示名として利用し、
+ * 未登録 / 名前空 の場合は表示名なしで email のみを返す。
+ * v1.12.2 で追加：差出人 From ヘッダの RFC 2047 エンコードに用いる。
+ */
+function getSenderInfo_() {
+  let actorEmail = normalizeEmail_(Session.getActiveUser().getEmail());
+  if (!actorEmail) return null;
+  try {
+    let ss = getSpreadsheet_();
+    let sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
+    if (sheet && sheet.getLastRow() > 1) {
+      let data = sheet.getDataRange().getValues();
+      for (let i = 1; i < data.length; i++) {
+        let em = normalizeEmail_(data[i][IDX.STAFF.EMAIL]);
+        if (em === actorEmail) {
+          return { email: actorEmail, name: String(data[i][IDX.STAFF.NAME] || '') };
+        }
+      }
+    }
+  } catch (e) { /* スプレッドシート未取得など — name 無しで返す */ }
+  return { email: actorEmail, name: '' };
+}
+
+/**
  * Gmail API でメールを送信する（スレッド対応）
  * @param {string} to - 宛先メールアドレス
  * @param {string} subject - 件名
@@ -1053,12 +1078,27 @@ function sendInThread_(to, subject, body, threadId, inReplyTo, optionalCc, optio
   if (optionalCc) ccParts.push(optionalCc);
   let mergedCc = ccParts.length > 0 ? ccParts.join(', ') : null;
 
+  // v1.12.2: From ヘッダを RFC 2047 で明示。
+  // 未設定だと Gmail API が表示名を非エンコードのまま From に詰めるケースがあり、
+  // 受信側で UTF-8 → Latin-1 解釈の文字化け（例: "NPO法人タダカヨ" → "NPOæ³•äººã‚¿ãƒ€ã‚«ãƒ¨"）が発生する。
+  let sender = getSenderInfo_();
+  let fromHeader = null;
+  if (sender && sender.email) {
+    if (sender.name) {
+      let encodedFromName = '=?UTF-8?B?' + Utilities.base64Encode(sender.name, Utilities.Charset.UTF_8) + '?=';
+      fromHeader = 'From: ' + encodedFromName + ' <' + sender.email + '>';
+    } else {
+      fromHeader = 'From: <' + sender.email + '>';
+    }
+  }
+
   let headers = [
-    'MIME-Version: 1.0',
-    'To: ' + to,
-    'Subject: ' + encodedSubject,
-    'Content-Type: text/plain; charset=UTF-8'
+    'MIME-Version: 1.0'
   ];
+  if (fromHeader) headers.push(fromHeader);
+  headers.push('To: ' + to);
+  headers.push('Subject: ' + encodedSubject);
+  headers.push('Content-Type: text/plain; charset=UTF-8');
   if (mergedCc) headers.push('Cc: ' + mergedCc);
   if (optionalBcc) headers.push('Bcc: ' + optionalBcc);
 

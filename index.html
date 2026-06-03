@@ -82,6 +82,14 @@
     .schedule-cal .buffer-bg { background: repeating-linear-gradient(45deg, #fee2e2, #fee2e2 6px, #fff 6px, #fff 12px) !important; opacity: 0.7 !important; }
     .schedule-cal .draft-bg { background-color: #6366f1 !important; opacity: 0.25 !important; }
     .schedule-cal .fc-highlight { background-color: rgba(99, 102, 241, 0.15) !important; }
+    .schedule-cal .fc-event.selected-slot {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
+      border-color: #047857 !important;
+      box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.35), 0 4px 10px rgba(16, 185, 129, 0.4) !important;
+      font-weight: 900 !important;
+      z-index: 5 !important;
+    }
+    .schedule-cal .fc-event.selected-slot .fc-event-title { font-weight: 900 !important; }
   </style>
 </head>
 <body class="antialiased text-slate-900">
@@ -1084,6 +1092,9 @@
           nowIndicator: true,
           selectable: true,
           selectMirror: true,
+          // v1.12.2: バッファ（赤斜線）や既存予定の上に選択枠を被せられないようにする。
+          // 自分の「✓ 選択中」（id='__selected__'）の上には再ドラッグで上書きできるよう例外扱い。
+          selectOverlap: (event) => event.id === '__selected__',
           select: (info) => {
             const dur = Math.max(15, Math.round((info.end - info.start) / 60000));
             const dt = info.start;
@@ -1144,6 +1155,31 @@
           try { calRef.current.gotoDate(d); } catch (e) {}
         }
       }, [scheduledDateTime]);
+
+      // 選択中スロットを「選択中」イベントとしてカレンダー上に永続描画
+      useEffect(() => {
+        if (!calRef.current) return;
+        const cal = calRef.current;
+        try {
+          const existing = cal.getEventById('__selected__');
+          if (existing) existing.remove();
+        } catch (e) {}
+        if (!scheduledDateTime) return;
+        const start = new Date(scheduledDateTime);
+        if (isNaN(start.getTime())) return;
+        const dur = Number(duration) || 60;
+        const end = new Date(start.getTime() + dur * 60000);
+        try {
+          cal.addEvent({
+            id: '__selected__',
+            title: '✓ 選択中',
+            start,
+            end,
+            editable: false,
+            classNames: ['selected-slot']
+          });
+        } catch (e) {}
+      }, [scheduledDateTime, duration]);
 
       return (
         <div className="schedule-cal space-y-1">
@@ -4905,7 +4941,7 @@
                         </div>
                         <div className="space-y-1">
                           <label className="text-[10px] font-black text-indigo-400 uppercase flex items-center gap-1"><Video size={10}/> 方法</label>
-                          <select value={editFormData.method || ''} onChange={e => setEditFormData({...editFormData, method: e.target.value})} className="w-full border-2 border-white bg-white rounded-xl p-3 text-xs font-bold outline-none focus:border-indigo-500 shadow-sm">
+                          <select value={editFormData.method || 'GoogleMeet'} onChange={e => setEditFormData({...editFormData, method: e.target.value})} className="w-full border-2 border-white bg-white rounded-xl p-3 text-xs font-bold outline-none focus:border-indigo-500 shadow-sm">
                             {masters?.methods.map(m => <option key={m} value={m}>{m}</option>)}
                           </select>
                         </div>
