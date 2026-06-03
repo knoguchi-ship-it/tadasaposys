@@ -1,7 +1,7 @@
 # 開発者向け引継ぎ資料 (HANDOVER.md)
 
 **Project:** タダサポ管理システム
-**Version:** 1.12.2（コード統合済み・本番反映待ち）
+**Version:** 1.12.2（現行リリース）
 **Date:** 2026/06/03
 **Author:** Development Team
 
@@ -12,8 +12,7 @@
 ### 本番稼働中
 
 - **URL**: `https://script.google.com/a/macros/tadakayo.jp/s/AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ/exec`
-- **本番デプロイバージョン**: @147（v1.12.1）
-- **リポジトリ最新**: v1.12.2（backup 統合・From 文字化け修正済み。**まだ本番未デプロイ** — §4-1 参照）
+- **本番デプロイバージョン**: @148（v1.12.2、2026/06/03 デプロイ。固定 deploymentId / URL 不変）
 - **Webapp 設定**: `executeAs: USER_ACCESSING` / `access: DOMAIN`（tadakayo.jp ドメインのみ）
 - **認証**: タダメンマスタ（B列=氏名, C列=メール, D列=ROLE）で認証
 
@@ -426,7 +425,7 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 | **v1.11.9** | 2026/05/11 | Phase 3: FullCalendar 埋込み（ドラッグ選択 + バッファ可視化） |
 | **v1.12.0** | 2026/05/11 | Phase 4: 「いつものタダスクID」モード追加・ドキュメント完全更新（@142-143） |
 | **v1.12.1** | 2026/05/28 | 予約送信機能を廃止（@147）。旧トリガー互換は未送信キューを `disabled` 化し、即時送信・下書き保存は継続 |
-| **v1.12.2** | 2026/06/03 | backup ブランチ統合: 送信メール From 文字化け修正（実害バグ）+ 選択中スロット緑バー永続表示 + 日程カレンダーのバッファ/既存予定への枠重ね防止。版数衝突を解消し再採番（**本番未デプロイ**） |
+| **v1.12.2** | 2026/06/03 | backup ブランチ統合: 送信メール From 文字化け修正（実害バグ）+ 選択中スロット緑バー永続表示 + 日程カレンダーのバッファ/既存予定への枠重ね防止。版数衝突を解消し再採番（@148 デプロイ済み） |
 
 ---
 
@@ -528,7 +527,7 @@ v1.12.1 デプロイ後、次担当者が安全に作業へ入れるよう、開
 | 0cb7ff3 (v1.12.2) | 送信メール From 文字化け修正（実害バグ）| v1.12.2 |
 | 3e5903c (v1.12.3) | 日程カレンダーの枠重ね防止 (`selectOverlap`) | v1.12.2 |
 
-**残課題:** v1.12.2 は**本番未デプロイ**。From 文字化けは本番で発生中のため、§4-2 の手順で速やかにデプロイすること。
+**結果:** v1.12.2 を固定 deploymentId へ **@148** デプロイ済み（From 文字化けの実害バグは本番で解消）。`clasp deployments` で新規デプロイ未作成・URL 不変を確認。
 
 ---
 
@@ -586,19 +585,18 @@ setupScheduledEmailTrigger();     // 旧 processScheduledEmails_ トリガーを
 getScheduledEmailTriggerStatus(); // { active: false } を確認
 ```
 
-### 4-2. v1.12.2 のデプロイ（未実施・最優先）
+### 4-2. v1.12.2 のデプロイ（2026/06/03 実施済み）
 
-2026/06/03 に backup ブランチの3修正を本番ラインへ統合し、リポジトリを **v1.12.2** に再採番済み。**本番（@147 / v1.12.1）にはまだ反映されていない。**
+backup ブランチの3修正を本番ラインへ統合し、リポジトリを **v1.12.2** に再採番後、固定 deploymentId へ **@148** としてデプロイ済み（From 文字化けの実害バグは本番で解消）。新規デプロイは作成せず URL 不変。
 
-特に **From 文字化けは本番で発生中の実害バグ**のため、§10 のグランドルールに従い速やかにデプロイすること。
-
+実施コマンド:
 ```bash
-# 0. appsscript.json の webapp 設定が USER_ACCESSING / DOMAIN か確認
-# 1. git commit 済みであることを確認（本セッションでコミット済み）
-clasp push --force
+clasp push --force   # appsscript.json / index.html / コード.js の3ファイル
 clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ -d "v1.12.2"
-# 4. GAS デプロイ管理画面で「実行=アクセスしているユーザー / アクセス=NPO法人タダカヨ 内の全員」を目視確認
+# → @148。clasp deployments で固定IDのみ(新規なし)を確認済み
 ```
+
+> ⚠️ デプロイ直後の**目視確認**（GAS デプロイ管理画面で「実行=アクセスしているユーザー / アクセス=NPO法人タダカヨ 内の全員」）は、ブラウザの GAS 管理画面で都度実施すること。appsscript.json は正値でプッシュ済み。
 
 ### 5. 推奨される次の作業（優先度順）
 
