@@ -13,6 +13,7 @@ test-results/**
 tests/**
 .github/**
 temp/**
+tools/**
 AGENTS.md
 CHANGELOG.md
 SECURITY.md

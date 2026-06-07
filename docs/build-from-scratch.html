@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ゼロから構築ガイド — タダサポ管理システム</title>
+  <style>
+    :root {
+      --c-bg:        #f8fafc;
+      --c-surface:   #ffffff;
+      --c-border:    #e2e8f0;
+      --c-text:      #1e293b;
+      --c-muted:     #64748b;
+      --c-brand:     #0d9488;
+      --c-brand-lt:  #f0fdfa;
+      --c-accent:    #6366f1;
+      --c-accent-lt: #eef2ff;
+      --c-warn:      #d97706;
+      --c-warn-lt:   #fffbeb;
+      --c-danger:    #dc2626;
+      --c-danger-lt: #fef2f2;
+      --c-success:   #16a34a;
+      --c-success-lt:#f0fdf4;
+      --c-code-bg:   #1e293b;
+      --radius:      0.75rem;
+      --shadow:      0 1px 3px rgba(0,0,0,.08);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Segoe UI', 'Noto Sans JP', system-ui, sans-serif;
+      background: var(--c-bg); color: var(--c-text); line-height: 1.7;
+    }
+    a { color: var(--c-brand); }
+
+    /* ── Layout ──────────────── */
+    .layout { display: grid; grid-template-columns: 290px 1fr; min-height: 100vh; }
+    .sidebar {
+      position: sticky; top: 0; height: 100vh; overflow-y: auto;
+      background: var(--c-surface); border-right: 1px solid var(--c-border);
+      padding: 1.5rem 1rem;
+    }
+    .main { padding: 3rem 4rem 6rem; max-width: 1000px; }
+
+    /* ── Sidebar ─────────────── */
+    .sidebar-logo { display: flex; align-items: center; gap: .6rem; margin-bottom: 1.5rem; }
+    .logo-icon {
+      width: 2rem; height: 2rem; border-radius: .5rem;
+      background: var(--c-brand); color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: .85rem;
+    }
+    .logo-title { font-weight: 800; font-size: .88rem; line-height: 1.3; }
+    .logo-sub { font-size: .68rem; color: var(--c-muted); }
+    .nav-section { font-size: .63rem; font-weight: 800; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--c-muted); margin: 1.2rem 0 .4rem .5rem; }
+    .nav-link {
+      display: flex; align-items: center; gap: .5rem; padding: .35rem .75rem;
+      border-radius: .5rem; font-size: .8rem; font-weight: 600; color: var(--c-muted);
+      text-decoration: none; transition: all .15s;
+    }
+    .nav-link:hover { background: var(--c-brand-lt); color: var(--c-brand); }
+    .nav-num { font-size: .68rem; font-weight: 800; color: var(--c-brand);
+      width: 1.2rem; flex-shrink: 0; }
+
+    /* ── Typography ──────────── */
+    h1 { font-size: 1.8rem; font-weight: 900; line-height: 1.25; }
+    h2 { font-size: 1.3rem; font-weight: 800; margin: 3.2rem 0 1rem;
+      padding-bottom: .5rem; border-bottom: 2px solid var(--c-border);
+      display: flex; align-items: center; gap: .5rem; scroll-margin-top: 1rem; }
+    h3 { font-size: 1.05rem; font-weight: 700; margin: 2rem 0 .75rem; }
+    h4 { font-size: .92rem; font-weight: 700; margin: 1.25rem 0 .5rem; color: var(--c-brand); }
+    p  { margin-bottom: .75rem; font-size: .9rem; }
+    ul, ol { margin: .5rem 0 1rem 1.4rem; font-size: .88rem; }
+    li { margin-bottom: .3rem; }
+    code {
+      font-family: 'Cascadia Code', Consolas, monospace; font-size: .82em;
+      background: #f1f5f9; color: #0f766e;
+      padding: .1em .35em; border-radius: .3em;
+    }
+    pre {
+      background: var(--c-code-bg); color: #e2e8f0; border-radius: var(--radius);
+      padding: 1rem 1.25rem; overflow-x: auto; margin: .75rem 0; font-size: .8rem;
+      line-height: 1.6;
+    }
+    pre code { background: none; color: inherit; padding: 0; font-size: 1em; }
+    .cmt { color: #94a3b8; }
+    .ok  { color: #4ade80; }
+    .ng  { color: #f87171; }
+
+    /* ── Hero ────────────────── */
+    .hero {
+      border-radius: var(--radius); padding: 2rem 2.5rem; color: #fff;
+      background: linear-gradient(135deg, #0f766e 0%, var(--c-accent) 100%);
+      margin-bottom: 2rem;
+    }
+    .hero h1 { color: #fff; font-size: 1.55rem; }
+    .hero-sub { opacity: .85; font-size: .85rem; margin-top: .5rem; }
+    .hero-tags { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: 1.1rem; }
+    .tag {
+      background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.25);
+      border-radius: 9999px; padding: .2rem .7rem; font-size: .72rem;
+      font-weight: 700; color: #fff;
+    }
+
+    /* ── Tables ──────────────── */
+    table { width: 100%; border-collapse: collapse; font-size: .82rem; margin: 1rem 0;
+      background: var(--c-surface); border-radius: var(--radius); overflow: hidden;
+      box-shadow: var(--shadow); }
+    th { text-align: left; padding: .55rem .85rem; font-size: .7rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .04em; background: #f1f5f9;
+      color: var(--c-muted); border-bottom: 2px solid var(--c-border); }
+    td { padding: .55rem .85rem; border-bottom: 1px solid var(--c-border); vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+    .yes { color: var(--c-success); font-weight: 700; }
+    .no  { color: var(--c-danger);  font-weight: 700; }
+    .partial { color: var(--c-warn); font-weight: 700; }
+
+    /* ── Callout ─────────────── */
+    .callout {
+      border-radius: var(--radius); padding: 1rem 1.25rem;
+      margin: 1rem 0; display: flex; gap: .75rem;
+    }
+    .callout.info    { background: var(--c-accent-lt); border-left: 3px solid var(--c-accent); }
+    .callout.warn    { background: var(--c-warn-lt);   border-left: 3px solid var(--c-warn); }
+    .callout.danger  { background: var(--c-danger-lt); border-left: 3px solid var(--c-danger); }
+    .callout.success { background: var(--c-success-lt);border-left: 3px solid var(--c-success); }
+    .callout-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: .1rem; }
+    .callout-body { font-size: .84rem; }
+    .callout-body strong { display: block; margin-bottom: .3rem; }
+
+    /* ── Phase block ─────────── */
+    .phase {
+      background: var(--c-surface); border: 1px solid var(--c-border);
+      border-radius: var(--radius); overflow: hidden;
+      box-shadow: var(--shadow); margin: 1.25rem 0;
+    }
+    .phase-head {
+      display: flex; align-items: center; gap: .85rem;
+      padding: .9rem 1.25rem; border-bottom: 1px solid var(--c-border);
+      background: #f8fafc;
+    }
+    .phase-badge {
+      width: 2.4rem; height: 2.4rem; border-radius: .6rem; flex-shrink: 0;
+      background: var(--c-brand); color: #fff; font-weight: 900; font-size: .8rem;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .phase-title { font-weight: 800; font-size: 1rem; }
+    .phase-meta  { font-size: .72rem; color: var(--c-muted); margin-top: .1rem; }
+    .phase-body  { padding: 1rem 1.5rem 1.25rem; }
+
+    /* ── C4 / diagram boxes ──── */
+    .diagram {
+      background: #f8fafc; border: 1px solid var(--c-border);
+      border-radius: var(--radius); padding: 1.5rem; margin: 1rem 0;
+    }
+    .node {
+      border-radius: .55rem; padding: .7rem .9rem; margin: .4rem 0;
+      font-size: .8rem; box-shadow: var(--shadow);
+    }
+    .node-title { font-weight: 800; font-size: .85rem; }
+    .node-sub   { font-size: .72rem; opacity: .8; margin-top: .15rem; }
+    .node.person { background: #1e293b; color: #fff; }
+    .node.system { background: var(--c-brand); color: #fff; }
+    .node.ext    { background: #fff; border: 1.5px dashed var(--c-muted); }
+    .node.cont   { background: var(--c-accent-lt); border: 1.5px solid var(--c-accent); }
+    .node.store  { background: var(--c-success-lt); border: 1.5px solid var(--c-success); }
+    .flowrow { display: flex; flex-wrap: wrap; gap: .75rem; align-items: stretch; }
+    .flowrow > .node { flex: 1; min-width: 180px; }
+    .arrow { text-align: center; color: var(--c-muted); font-size: 1.1rem; margin: .2rem 0; }
+
+    /* ── ER table boxes ──────── */
+    .er-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 1rem; margin: 1rem 0; }
+    .er-table { border: 1.5px solid var(--c-border); border-radius: .6rem; overflow: hidden; background: #fff; box-shadow: var(--shadow); }
+    .er-name { background: var(--c-brand); color: #fff; font-weight: 800; font-size: .82rem; padding: .5rem .75rem; }
+    .er-name.imp { background: var(--c-warn); }
+    .er-name.aux { background: var(--c-accent); }
+    .er-col { font-size: .74rem; padding: .3rem .75rem; border-bottom: 1px solid var(--c-border); display: flex; justify-content: space-between; }
+    .er-col:last-child { border-bottom: none; }
+    .er-col .pk { color: var(--c-danger); font-weight: 700; }
+    .er-col .fk { color: var(--c-accent); font-weight: 700; }
+    .er-col .ty { color: var(--c-muted); font-size: .92em; }
+
+    .lead { font-size: .95rem; color: var(--c-text); }
+    .small { font-size: .78rem; color: var(--c-muted); }
+    hr { border: none; border-top: 1px solid var(--c-border); margin: 2rem 0; }
+
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+      .main { padding: 1.5rem 1.25rem 4rem; }
+    }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">構築</div>
+      <div>
+        <div class="logo-title">ゼロから構築ガイド</div>
+        <div class="logo-sub">タダサポ管理システム</div>
+      </div>
+    </div>
+    <div class="nav-section">はじめに</div>
+    <a class="nav-link" href="#about"><span class="nav-num">0</span>このガイドについて</a>
+    <a class="nav-link" href="#docset"><span class="nav-num">1</span>必要ドキュメント体系</a>
+    <div class="nav-section">設計の理解</div>
+    <a class="nav-link" href="#c4"><span class="nav-num">2</span>システム全体像 (C4)</a>
+    <a class="nav-link" href="#decisions"><span class="nav-num">3</span>技術選定の根拠</a>
+    <a class="nav-link" href="#data"><span class="nav-num">4</span>データモデル (ER)</a>
+    <div class="nav-section">構築手順</div>
+    <a class="nav-link" href="#build"><span class="nav-num">5</span>ゼロからの構築手順</a>
+    <a class="nav-link" href="#security"><span class="nav-num">6</span>セキュリティ要件</a>
+    <a class="nav-link" href="#checklist"><span class="nav-num">7</span>構築完了チェックリスト</a>
+    <div class="nav-section">付録</div>
+    <a class="nav-link" href="#sources"><span class="nav-num">8</span>参考資料・出典</a>
+  </nav>
+
+  <!-- Main -->
+  <main class="main">
+    <div class="hero">
+      <h1>ゼロから構築ガイド (Build-from-Scratch Guide)</h1>
+      <div class="hero-sub">
+        本システムを「何もない状態」から再構築するために、開発者が手元に置くべき情報を 1 本に集約した起点ドキュメント。<br>
+        2026 年時点のドキュメント・ベストプラクティス（greenfield ワークフロー / arc42＋C4 / ADR / Documentation-as-Code）に基づいて構成。
+      </div>
+      <div class="hero-tags">
+        <span class="tag">対象: v1.12.4</span>
+        <span class="tag">GAS + React SPA</span>
+        <span class="tag">作成日: 2026/06/07</span>
+        <span class="tag">読了目安: 30分 / 構築: 半日〜1日</span>
+      </div>
+    </div>
+
+    <!-- ───────────────────────── 0 ───────────────────────── -->
+    <h2 id="about">0. このガイドについて</h2>
+    <p class="lead">
+      本ガイドは「既に動いているシステムを保守する」ためではなく、<strong>同じシステムをゼロから組み立て直す</strong>ことを想定した
+      <em>構築起点ドキュメント</em>です。greenfield プロジェクトの標準ワークフロー
+      <code>要件 (PRD/RD) → アーキテクチャ → 実装 → デプロイ → 検証</code> に沿って、
+      「何を・どの順番で・なぜ」用意するかを 1 本にまとめています。
+    </p>
+
+    <div class="callout info">
+      <span class="callout-icon">🎯</span>
+      <div class="callout-body">
+        <strong>このガイドのスコープ</strong>
+        既存の詳細ドキュメント（SDD / ADR / RD / Manual など）を<strong>置き換えるものではありません</strong>。
+        それらは「完成系の仕様」を記述しており、本ガイドは「ゼロから到達するための順路」と「全体像」を提供します。
+        各所から既存ドキュメントへリンクし、重複記述（DRY 違反）を避けています。
+      </div>
+    </div>
+
+    <div class="callout warn">
+      <span class="callout-icon">🔑</span>
+      <div class="callout-body">
+        <strong>本番固有 ID はプレースホルダ表記</strong>
+        本ガイドではスプレッドシート ID・スクリプト ID・デプロイ ID を
+        <code>&lt;SPREADSHEET_ID&gt;</code> のようなプレースホルダで記載します。
+        現行本番の実値は <code>docs/RUNBOOK.md §6</code> / <code>docs/HANDOVER.md §7</code> を参照してください。
+        Zoom OAuth などの<strong>機密情報はコード・ドキュメント・GitHub に置かず</strong>、設定シート・PropertiesService で扱います（グランドルール 3）。
+      </div>
+    </div>
+
+    <h4>対象読者</h4>
+    <ul>
+      <li>本システムを別組織・別ドメインへ移植／再構築する開発者</li>
+      <li>災害復旧（DR）で環境を再作成する運用者</li>
+      <li>アーキテクチャ全体像を短時間で把握したい新規参画者（C4 / ER を参照）</li>
+    </ul>
+
+    <!-- ───────────────────────── 1 ───────────────────────── -->
+    <h2 id="docset">1. 必要ドキュメント体系（ベストプラクティス）</h2>
+    <p>
+      2026 年時点の指針（<a href="#sources">出典参照</a>）では、開発ドキュメントは
+      <strong>読者（audience）ごとに分け</strong>、<strong>リリースに紐づけてバージョン管理</strong>し、
+      <strong>ADR は不変の意思決定ログ</strong>として残すのが定石です。
+      本プロジェクトは既にこの体系をほぼ満たしています。下表が「ゼロから構築する開発者が手元に揃えるべきドキュメント一式」と、本リポジトリでの対応です。
+    </p>
+
+    <table>
+      <thead>
+        <tr><th style="width:22%">ベストプラクティス上の文書</th><th style="width:13%">役割の層</th><th style="width:12%">本リポジトリ</th><th>ゼロ構築での使い方</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>README / 起点ガイド</strong></td><td>オンボーディング</td><td class="partial">本ガイド</td><td>最初に開く。全体像と構築順路。各文書へのハブ</td></tr>
+        <tr><td><strong>要件定義 (PRD / RD)</strong></td><td>What & Why</td><td class="yes">docs/RD.md</td><td>業務フロー・ビジネスルール（年間10回/案件3回等）の確定仕様</td></tr>
+        <tr><td><strong>アーキテクチャ概要 (C4)</strong></td><td>構造の全体像</td><td class="partial">本ガイド §2</td><td>Context/Container/Component で「何が何と通信するか」を把握</td></tr>
+        <tr><td><strong>意思決定記録 (ADR)</strong></td><td>How & Why（不変）</td><td class="yes">docs/ADR.md</td><td>「なぜ GAS+React か」「なぜ React 18 固定か」等 12 件の判断根拠</td></tr>
+        <tr><td><strong>詳細設計 (SDD)</strong></td><td>仕様の詳細</td><td class="yes">docs/SDD.md</td><td>全シート列定義・関数仕様・上限優先順位の正典</td></tr>
+        <tr><td><strong>データモデル文書</strong></td><td>データ構造</td><td class="yes">SDD §1 / 本ガイド §4</td><td>IDX 定数・ER・IMPORTRANGE 制約</td></tr>
+        <tr><td><strong>セットアップ / 構築手順</strong></td><td>環境構築</td><td class="partial">本ガイド §5</td><td>Google 基盤→GAS→コード→デプロイの順序立てた手順</td></tr>
+        <tr><td><strong>運用手順書 (RUNBOOK)</strong></td><td>運用・障害対応</td><td class="yes">docs/RUNBOOK.md</td><td>デプロイ・ロールバック・インシデント対応</td></tr>
+        <tr><td><strong>テスト / QA 文書</strong></td><td>品質保証</td><td class="yes">playwright-guide.html / test-criteria.html</td><td>Jest 単体・Playwright E2E の導入と品質基準</td></tr>
+        <tr><td><strong>変更履歴 (CHANGELOG)</strong></td><td>履歴</td><td class="yes">CHANGELOG.md</td><td>バージョンごとの差分（keepachangelog 形式）</td></tr>
+        <tr><td><strong>セキュリティ文書</strong></td><td>セキュリティ</td><td class="yes">SECURITY.md</td><td>脆弱性報告・セキュア方針</td></tr>
+        <tr><td><strong>操作マニュアル</strong></td><td>エンドユーザー</td><td class="yes">docs/Manual.md</td><td>タダメン向け操作手順（構築後の受け入れ確認に活用）</td></tr>
+        <tr><td><strong>引き継ぎ書 (HANDOVER)</strong></td><td>開発者引継ぎ</td><td class="yes">docs/HANDOVER.md</td><td>現状・既知課題・次フェーズ候補・本番 ID の所在</td></tr>
+        <tr><td><strong>AI 開発指示書</strong></td><td>AI 協働</td><td class="yes">CLAUDE.md / AGENTS.md</td><td>AI ツールに渡すグランドルールと制約</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout success">
+      <span class="callout-icon">✅</span>
+      <div class="callout-body">
+        <strong>結論：不足していたのは「全体像（C4）」と「順序立った構築起点」の 2 点</strong>
+        既存ドキュメントは完成系の仕様としては網羅的です。ゼロ構築で手薄だった
+        「俯瞰図」と「ゼロからの順路」を本ガイドが補完し、残りは既存文書へリンクします。
+      </div>
+    </div>
+
+    <!-- ───────────────────────── 2 ───────────────────────── -->
+    <h2 id="c4">2. システム全体像（C4 モデル）</h2>
+    <p>
+      C4 モデルは <strong>Context（誰が使い、外部と何が繋がるか）→ Container（実行単位）→ Component（内部構造）</strong>
+      の順で詳細化する手法です。まず俯瞰し、必要に応じて掘り下げます。
+    </p>
+
+    <h3>Level 1 — System Context（誰が・何と繋がるか）</h3>
+    <div class="diagram">
+      <div class="flowrow">
+        <div class="node person"><div class="node-title">👤 依頼者（介護事業所）</div><div class="node-sub">Google フォームで IT サポートを申込</div></div>
+        <div class="node person"><div class="node-title">👤 タダメン（運営スタッフ / 管理者）</div><div class="node-sub">案件をアサイン・対応・記録・メール送信</div></div>
+      </div>
+      <div class="arrow">│ ▼ ブラウザ（tadakayo.jp ドメイン認証）</div>
+      <div class="node system"><div class="node-title">🟢 タダサポ管理システム</div><div class="node-sub">GAS 上の React SPA。案件管理・メール・日程・記録・権限を一元化</div></div>
+      <div class="arrow">▲ ▼ 連携</div>
+      <div class="flowrow">
+        <div class="node ext"><div class="node-title">📄 Google フォーム + スプレッドシート</div><div class="node-sub">申込の一次受付 / データストア</div></div>
+        <div class="node ext"><div class="node-title">✉️ Gmail</div><div class="node-sub">本人アカウントからの送信・スレッド管理</div></div>
+        <div class="node ext"><div class="node-title">📅 Google Calendar / Meet</div><div class="node-sub">日程登録・Meet URL 発行</div></div>
+        <div class="node ext"><div class="node-title">🎥 Zoom API</div><div class="node-sub">Server-to-Server OAuth で会議作成（任意）</div></div>
+        <div class="node ext"><div class="node-title">🗂️ Google Drive</div><div class="node-sub">添付ファイル保存</div></div>
+      </div>
+    </div>
+
+    <h3>Level 2 — Container（実行単位）</h3>
+    <div class="diagram">
+      <div class="flowrow">
+        <div class="node cont"><div class="node-title">フロントエンド SPA</div><div class="node-sub"><code>index.html</code> — React 18.2.0 + Babel in-browser + Tailwind（CDN）。モックデータ内蔵で単体動作可</div></div>
+        <div class="node cont"><div class="node-title">バックエンド GAS</div><div class="node-sub"><code>コード.js</code> — Web App エントリ <code>doGet()</code> と <code>google.script.run</code> 公開関数群（V8）</div></div>
+      </div>
+      <div class="arrow">▼ Apps Script Advanced Services / SpreadsheetApp</div>
+      <div class="flowrow">
+        <div class="node store"><div class="node-title">Google スプレッドシート（唯一の真実の源）</div><div class="node-sub">設定 / 案件リスト / サポート記録 / タダメンマスタ / メール履歴 / 監査ログ ほか（§4 参照）</div></div>
+      </div>
+      <div class="arrow">▼ マニフェスト</div>
+      <div class="node cont"><div class="node-title">appsscript.json</div><div class="node-sub">OAuth スコープ / Advanced Services（Gmail v1・Calendar v3）/ Webapp 設定（USER_ACCESSING・DOMAIN）/ TZ=Etc/GMT-9</div></div>
+    </div>
+    <p class="small">
+      ※ ビルドステップは存在しません（ADR-002）。Babel standalone がブラウザ内で JSX をトランスパイルし、
+      ESM は importmap 経由で解決します。デプロイは <code>clasp push</code> のみで完結します。
+    </p>
+
+    <h3>Level 3 — Component（バックエンドの内部構造）</h3>
+    <div class="diagram">
+      <div class="flowrow">
+        <div class="node cont"><div class="node-title">エントリ / 初期化</div><div class="node-sub"><code>doGet</code> / <code>getInitialData</code> / <code>ensureAttachmentSchema_</code>（スキーマ自動移行 SCHEMA_VERSION_=6）</div></div>
+        <div class="node cont"><div class="node-title">案件結合・集計</div><div class="node-sub"><code>getAllCasesJoined</code> / <code>caseFiscalYear_</code> / <code>annualUsageKey_</code>（年度利用合算）</div></div>
+        <div class="node cont"><div class="node-title">案件操作</div><div class="node-sub"><code>assignCase</code> / <code>updateSupportRecord</code> / <code>reopenCase</code> / <code>cancelCase</code> / <code>declineCase</code></div></div>
+      </div>
+      <div class="flowrow">
+        <div class="node cont"><div class="node-title">メール</div><div class="node-sub"><code>assignAndSendEmail</code> / <code>sendCaseEmail</code> / <code>getThreadMessages</code> / <code>sendInThread_</code>（From を RFC2047 エンコード）/ 下書き <code>saveDraft</code> 系</div></div>
+        <div class="node cont"><div class="node-title">日程・会議</div><div class="node-sub"><code>getScheduleAvailability</code> / <code>checkScheduleConflict</code> / <code>createGoogleMeetEvent</code> / <code>createZoomMeeting</code></div></div>
+        <div class="node cont"><div class="node-title">管理機能（要 admin）</div><div class="node-sub"><code>adminTransitionStatus_</code>（統一ゲートキーパー）/ <code>setCaseStatusAdmin</code> / <code>reassignCaseAdmin</code> / <code>updateCaseDataAdmin</code> / <code>setAnnualUsageCountAdmin</code></div></div>
+      </div>
+      <div class="flowrow">
+        <div class="node store"><div class="node-title">横断ヘルパー</div><div class="node-sub"><code>requireAdmin_</code> / <code>ensureCaseEditableByActor_</code> / <code>sanitizeForSheet_</code>（数式インジェクション防止）/ <code>normalizeEmail_</code> / <code>getFiscalYear</code></div></div>
+      </div>
+    </div>
+    <div class="callout info">
+      <span class="callout-icon">📚</span>
+      <div class="callout-body">
+        <strong>関数の完全な仕様は SDD §3（F-01〜F-40）</strong>
+        本図は俯瞰用です。各関数の引数・戻り値・副作用は <code>docs/SDD.md §3</code>、内部ヘルパーは <code>docs/HANDOVER.md §5</code> を正典としてください。
+      </div>
+    </div>
+
+    <!-- ───────────────────────── 3 ───────────────────────── -->
+    <h2 id="decisions">3. 技術選定の根拠（ADR ダイジェスト）</h2>
+    <p>
+      ゼロから作り直す際、「なぜこの構成なのか」を理解せずに変更すると過去の事故を再発させます。
+      意思決定は不変ログとして <code>docs/ADR.md</code> に残っています。構築前に必読の判断を抜粋します。
+    </p>
+    <table>
+      <thead><tr><th style="width:8%">ADR</th><th style="width:30%">決定</th><th>ゼロ構築で外してはいけない理由</th></tr></thead>
+      <tbody>
+        <tr><td>001</td><td>認証・認可の二重ガード</td><td>フロントの表示制御だけでなく <strong>バックエンドで権限を強制</strong>。UI を迂回した不正操作を防ぐ</td></tr>
+        <tr><td>002</td><td>React on GAS（ビルドレス）</td><td>Babel standalone でブラウザ内トランスパイル。<strong>CI/CD ビルド不要</strong>、clasp push のみで完結</td></tr>
+        <tr><td>003</td><td>タイムスタンプ主キー</td><td>フォーム回答のタイムスタンプを PK に。手動追加は <code>manual_&lt;epoch&gt;</code> で衝突回避</td></tr>
+        <tr><td>004</td><td><strong>React 18.2.0 完全固定</strong></td><td>19 系混在で <code>Minified React error #31</code> クラッシュ。全 CDN URL に <code>?deps=react@18.2.0</code> 必須</td></tr>
+        <tr><td>007</td><td><strong>Webapp = USER_ACCESSING / DOMAIN</strong></td><td>本人メールを確実に取得し、ドメイン外を遮断。過去に誤設定でセキュリティ事故。<strong>逸脱厳禁</strong></td></tr>
+        <tr><td>008</td><td>下書きはスプレッドシート保存</td><td>PropertiesService の容量制限を回避。管理者が直接確認可能</td></tr>
+        <tr><td>009</td><td>予約送信を<strong>廃止</strong></td><td>時間主導トリガはトリガ作成者として送信され「本人送信」を保証できない。新規構築では実装しない</td></tr>
+        <tr><td>010</td><td>管理遷移の統一ゲートキーパー</td><td><code>adminTransitionStatus_()</code> に全 STATUS 変更を集約。直接 STATUS 書換は整合性バグの温床</td></tr>
+        <tr><td>011</td><td>FullCalendar をグローバルバンドル</td><td>React 18 固定と独立させるため UMD 版を <code>&lt;script&gt;</code> 読込（importmap に混ぜない）</td></tr>
+        <tr><td>012</td><td>Zoom 時のみ重複検知＋チームカレンダー強制登録</td><td>Zoom はタダスクとアカウント共有でダブルブッキング事故あり。Zoom 利用時のみ重複ブロック</td></tr>
+      </tbody>
+    </table>
+
+    <!-- ───────────────────────── 4 ───────────────────────── -->
+    <h2 id="data">4. データモデル（ER 概要）</h2>
+    <p>
+      データストアは単一の Google スプレッドシート。<strong>全シート左詰め・ギャップなし</strong>で、列番号は
+      <code>コード.js</code> 約 30 行目の <code>IDX</code> 定数が唯一の参照元です。完全な列定義は <code>docs/SDD.md §1</code>。
+    </p>
+
+    <div class="er-grid">
+      <div class="er-table">
+        <div class="er-name imp">案件リスト（IMPORTRANGE / 書込禁止）</div>
+        <div class="er-col"><span><span class="pk">PK</span> 申込タイムスタンプ</span><span class="ty">A</span></div>
+        <div class="er-col"><span>EMAIL</span><span class="ty">B</span></div>
+        <div class="er-col"><span>OFFICE 事業所名</span><span class="ty">C</span></div>
+        <div class="er-col"><span>NAME 氏名</span><span class="ty">D</span></div>
+        <div class="er-col"><span>DETAILS 相談内容</span><span class="ty">E</span></div>
+        <div class="er-col"><span>PREFECTURE / SERVICE</span><span class="ty">F-G</span></div>
+      </div>
+      <div class="er-table">
+        <div class="er-name">サポート記録（19列・メイン）</div>
+        <div class="er-col"><span><span class="fk">FK</span> → 案件リスト.PK</span><span class="ty">A</span></div>
+        <div class="er-col"><span>STATUS / STAFF / DATE</span><span class="ty">B-E</span></div>
+        <div class="er-col"><span>COUNT 対応回数</span><span class="ty">F</span></div>
+        <div class="er-col"><span>METHOD / CONTENT / HISTORY</span><span class="ty">G-K</span></div>
+        <div class="er-col"><span>EVENT_ID / MEET_URL / THREAD_ID</span><span class="ty">L-N</span></div>
+        <div class="er-col"><span>ATTACHMENTS / 上限特例 ×2</span><span class="ty">O-Q</span></div>
+        <div class="er-col"><span>TOOLS / SUB_STAFF</span><span class="ty">R-S</span></div>
+      </div>
+      <div class="er-table">
+        <div class="er-name aux">案件補正 / 案件手動追加</div>
+        <div class="er-col"><span><span class="fk">PK</span> → 案件リスト.PK</span><span class="ty">A</span></div>
+        <div class="er-col"><span>EMAIL〜SERVICE（空欄=補正なし）</span><span class="ty">B-G</span></div>
+        <div class="er-col"><span class="small">IMPORTRANGE を壊さず補正/追加するための分離シート</span><span></span></div>
+      </div>
+      <div class="er-table">
+        <div class="er-name aux">タダメンマスタ（認証・権限）</div>
+        <div class="er-col"><span>STAFF_ID</span><span class="ty">A</span></div>
+        <div class="er-col"><span>NAME</span><span class="ty">B</span></div>
+        <div class="er-col"><span><span class="pk">EMAIL</span>（認証キー）</span><span class="ty">C</span></div>
+        <div class="er-col"><span>ROLE（admin/staff）</span><span class="ty">D</span></div>
+        <div class="er-col"><span>IS_ACTIVE</span><span class="ty">E</span></div>
+      </div>
+      <div class="er-table">
+        <div class="er-name aux">メール履歴 / 監査ログ / メール下書き</div>
+        <div class="er-col"><span>メール履歴: CASE_ID〜BODY</span><span class="ty">7列</span></div>
+        <div class="er-col"><span>監査ログ: TIMESTAMP〜AFTER_JSON</span><span class="ty">8列</span></div>
+        <div class="er-col"><span>メール下書き: 複合キー上書き</span><span class="ty">11列</span></div>
+      </div>
+      <div class="er-table">
+        <div class="er-name aux">設定 / 年間利用補正</div>
+        <div class="er-col"><span>設定: A=キー / C=値（KVS）</span><span class="ty">A-E</span></div>
+        <div class="er-col"><span>年間利用補正: EMAIL+年度→補正量</span><span class="ty">5列</span></div>
+        <div class="er-col"><span class="small">予約送信キュー(16列)は v1.12.1 で廃止・履歴保持のみ</span><span></span></div>
+      </div>
+    </div>
+
+    <div class="callout danger">
+      <span class="callout-icon">🚫</span>
+      <div class="callout-body">
+        <strong>案件リストへの書き込みは絶対禁止</strong>
+        <code>setValue</code> 等は IMPORTRANGE 数式を破壊します。管理者補正は必ず <code>案件補正</code> シート経由で行い、
+        <code>getAllCasesJoined()</code> がマージして返します。
+      </div>
+    </div>
+
+    <h4>上限値の優先順位（ビジネスルール）</h4>
+    <pre><code>案件回数上限:  caseLimitOverride（案件特例） &gt; masters.limits.caseSupport（全体設定） &gt; 3（既定）
+年間利用上限: annualLimitOverride（案件特例） &gt; masters.limits.annual（全体設定） &gt; 10（既定）
+年度計算: 4月1日始まり。同一 EMAIL(正規化) × 同一年度の inProgress/completed の supportCount を合算</code></pre>
+
+    <!-- ───────────────────────── 5 ───────────────────────── -->
+    <h2 id="build">5. ゼロからの構築手順</h2>
+    <p>
+      greenfield ワークフローに沿い、<strong>外側（Google 基盤）から内側（コード）へ、最後にデプロイ・検証</strong>の順で構築します。
+      各 Phase は前 Phase の完了を前提とします。
+    </p>
+
+    <div class="phase">
+      <div class="phase-head"><div class="phase-badge">0</div><div><div class="phase-title">前提アカウント・ツール</div><div class="phase-meta">必要な権限と開発ツールを揃える</div></div></div>
+      <div class="phase-body">
+        <ul>
+          <li><strong>Google Workspace ドメイン</strong>（本番は <code>tadakayo.jp</code>）— Webapp の <code>access: DOMAIN</code> はこのドメイン内に限定される</li>
+          <li>ドメイン内の <strong>管理者用 Google アカウント</strong>（スプレッドシート・GAS の所有者になる）</li>
+          <li>開発ツール: <strong>Node.js 18+</strong>、<code>npm</code>、<code>@google/clasp</code>（<code>npm i -g @google/clasp</code>）、<code>git</code></li>
+          <li>（任意）Zoom 連携を使う場合: Zoom Server-to-Server OAuth アプリの Account ID / Client ID / Client Secret</li>
+        </ul>
+        <div class="callout warn"><span class="callout-icon">⚠️</span><div class="callout-body">機密情報（Zoom シークレット等）は<strong>コード・GitHub に置かない</strong>。後続 Phase で設定シート／PropertiesService に格納します。</div></div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head"><div class="phase-badge">1</div><div><div class="phase-title">Google 基盤（フォーム → スプレッドシート → IMPORTRANGE）</div><div class="phase-meta">申込の一次受付とデータストアを用意</div></div></div>
+      <div class="phase-body">
+        <ol>
+          <li><strong>申込フォーム</strong>を作成（氏名・メール・事業所名・相談内容・都道府県・サービス種別）。回答は専用の「フォーム回答」スプレッドシートに保存される（ID: <code>&lt;FORM_RESPONSES_ID&gt;</code>）</li>
+          <li><strong>アプリ用スプレッドシート</strong>を新規作成（ID: <code>&lt;SPREADSHEET_ID&gt;</code>）。これがアプリの唯一の真実の源</li>
+          <li>アプリ用シートに <code>案件リスト</code> シートを作り、A1 に IMPORTRANGE を設定（フォーム回答から必要列のみ左詰め取得）:
+            <pre><code>={IMPORTRANGE("&lt;FORM_RESPONSES_ID&gt;","フォームの回答 1!A:E"),
+  IMPORTRANGE("&lt;FORM_RESPONSES_ID&gt;","フォームの回答 1!H:I")}</code></pre>
+            初回はセルの「アクセスを許可」を一度クリックする
+          </li>
+          <li><strong>Drive フォルダ</strong>を作成（添付保存先、ID: <code>&lt;ATTACHMENT_FOLDER_ID&gt;</code>）</li>
+          <li>必要なら<strong>共有カレンダー</strong>／<strong>チームカレンダー</strong>を作成（ID を後で設定シートへ）</li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head"><div class="phase-badge">2</div><div><div class="phase-title">データモデル（シート作成）</div><div class="phase-meta">§4 / SDD §1 に従い左詰め・ギャップなしで作る</div></div></div>
+      <div class="phase-body">
+        <p>最低限、起動に必要なのは次の 3 シート。残りは Phase 5 の初期化関数／スキーマ自動移行で生成されます。</p>
+        <ul>
+          <li><code>案件リスト</code>（Phase 1 で作成済み・書込禁止）</li>
+          <li><code>サポート記録</code>（19 列。<code>IDX.RECORDS</code> 準拠）</li>
+          <li><code>タダメンマスタ</code> … 管理者を 1 名登録（B=氏名 / C=メール / D=<code>admin</code> / E=<code>true</code>）</li>
+        </ul>
+        <div class="callout info"><span class="callout-icon">🔁</span><div class="callout-body"><strong>スキーマ自動移行</strong> 初回アクセス時に <code>ensureAttachmentSchema_()</code> が走り、不足列・新シート（年間利用補正、メール下書き等）を <code>SCHEMA_VERSION_='6'</code> まで追補します。手作業で全列を作る必要はありません。</div></div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head"><div class="phase-badge">3</div><div><div class="phase-title">GAS プロジェクト初期化</div><div class="phase-meta">clasp・Advanced Services・スコープ</div></div></div>
+      <div class="phase-body">
+        <pre><code><span class="cmt"># clasp ログイン</span>
+clasp login
+
+<span class="cmt"># 既存リポジトリ直下に .clasp.json を作成（.gitignore 対象・手動作成）</span>
+<span class="cmt"># scriptId は GAS プロジェクト作成後に判明する値を入れる</span></code></pre>
+        <pre><code><span class="cmt">// .clasp.json</span>
+{
+  "scriptId": "&lt;SCRIPT_ID&gt;",
+  "rootDir": "."
+}</code></pre>
+        <p>GAS エディタ側で:</p>
+        <ol>
+          <li>「サービス」＋ から <strong>Gmail API v1</strong>（userSymbol <code>Gmail</code>）と <strong>Google Calendar API v3</strong>（<code>Calendar</code>）を追加</li>
+          <li><code>コード.js</code> 冒頭の <code>SPREADSHEET_ID</code> を <code>&lt;SPREADSHEET_ID&gt;</code> に書き換え</li>
+          <li><code>appsscript.json</code> が下記であることを確認（OAuth スコープ・Webapp 設定・TZ）</li>
+        </ol>
+        <pre><code>{
+  "timeZone": "Etc/GMT-9",
+  "dependencies": { "enabledAdvancedServices": [
+    { "userSymbol": "Gmail",    "version": "v1", "serviceId": "gmail" },
+    { "userSymbol": "Calendar", "version": "v3", "serviceId": "calendar" }
+  ]},
+  "oauthScopes": [
+    "https://mail.google.com/",
+    "https://www.googleapis.com/auth/calendar",
+    "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/script.external_request",
+    "https://www.googleapis.com/auth/script.scriptapp",
+    "openid"
+  ],
+  "runtimeVersion": "V8",
+  "webapp": { <span class="ok">"executeAs": "USER_ACCESSING"</span>, <span class="ok">"access": "DOMAIN"</span> }
+}</code></pre>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head"><div class="phase-badge">4</div><div><div class="phase-title">コード配置とプッシュ</div><div class="phase-meta">2 ファイル + マニフェストのみ</div></div></div>
+      <div class="phase-body">
+        <ul>
+          <li><code>index.html</code> … フロントエンド（React SPA・モックデータ内蔵の単一ファイル）</li>
+          <li><code>コード.js</code> … バックエンド（GAS）</li>
+          <li><code>appsscript.json</code> … マニフェスト</li>
+          <li><code>.claspignore</code> … <code>node_modules/</code> 等を除外（含めると GAS がエラー）</li>
+        </ul>
+        <pre><code><span class="cmt"># .claspignore に node_modules が含まれることを確認してから</span>
+clasp push --force   <span class="cmt"># --force 必須（なしだとサイレントスキップの恐れ）</span></code></pre>
+        <div class="callout danger"><span class="callout-icon">🚫</span><div class="callout-body"><strong>src/ フォルダは作らない / temp/ は配布しない</strong>。ファイル構成は上記 3 ファイルに固定（CLAUDE.md「ファイル構成」）。</div></div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head"><div class="phase-badge">5</div><div><div class="phase-title">初期セットアップ関数の実行</div><div class="phase-meta">設定シートとテンプレートを生成</div></div></div>
+      <div class="phase-body">
+        <p>GAS エディタの実行ボタンから順に実行（RUNBOOK §1-4）:</p>
+        <pre><code>setupSettingsSheet()         <span class="cmt">// 「設定」シート作成</span>
+addEmailTemplates()          <span class="cmt">// メールテンプレート</span>
+addForcedCcSetting()         <span class="cmt">// MAIL_FORCE_CC</span>
+addMailDryRunSetting()       <span class="cmt">// MAIL_DRY_RUN（初期は true 推奨：誤送信防止）</span>
+addUsageLimitSettings()      <span class="cmt">// 年間10 / 案件3 の上限</span>
+addAttachmentFolderSetting() <span class="cmt">// ATTACHMENT_FOLDER_ID</span></code></pre>
+        <p>設定シートで埋める主要キー（A列キーは固定・C列の値のみ編集。詳細は SDD §S-00）:</p>
+        <ul>
+          <li><code>ATTACHMENT_FOLDER_ID</code> = <code>&lt;ATTACHMENT_FOLDER_ID&gt;</code></li>
+          <li><code>SHARED_CALENDAR_ID</code> / <code>TEAM_CALENDAR_ID</code> / <code>DISPLAY_CALENDARS_JSON</code>（日程・重複検知）</li>
+          <li><code>ZOOM_ACCOUNT_ID</code> / <code>ZOOM_CLIENT_ID</code> / <code>ZOOM_CLIENT_SECRET</code>（Zoom 連携時のみ・機密は設定シートで保持）</li>
+          <li>動作確認が済むまで <code>MAIL_DRY_RUN = true</code> のまま（外部送信されない）</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head"><div class="phase-badge">6</div><div><div class="phase-title">ローカル開発環境</div><div class="phase-meta">GAS なしで UI を確認</div></div></div>
+      <div class="phase-body">
+        <pre><code>git clone &lt;repo&gt; &amp;&amp; cd tadasaposys
+npm install
+npx serve -s . -l 3000   <span class="cmt"># → http://localhost:3000</span>
+<span class="cmt"># 代替: python -m http.server 3000 --directory .</span></code></pre>
+        <p><code>typeof google === 'undefined'</code> でローカル判定され、内蔵モックデータ（14 パターン）で全 UI を確認できます。</p>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head"><div class="phase-badge">7</div><div><div class="phase-title">テスト走行</div><div class="phase-meta">純粋関数の単体 + ブラウザ E2E</div></div></div>
+      <div class="phase-body">
+        <pre><code>npm run test:unit   <span class="cmt"># Jest 単体（getFiscalYear / sanitizeForSheet_ 等の純粋関数）</span>
+npm test            <span class="cmt"># Playwright E2E（01-app-load 〜 07-a11y）</span></code></pre>
+        <p>導入・実行の詳細は <code>docs/playwright-guide.html</code>、品質基準は <code>docs/test-criteria.html</code>。アクセシビリティは axe-core で WCAG 2.1 AA を確認。</p>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head"><div class="phase-badge">8</div><div><div class="phase-title">デプロイ（URL 不変原則）</div><div class="phase-meta">固定 deploymentId へバージョンアップのみ</div></div></div>
+      <div class="phase-body">
+        <p><strong>初回のみ</strong>は新規デプロイで Webapp URL と deploymentId を発番します。以降は<strong>その固定 ID へ <code>-i</code> 付きで更新</strong>し、URL を変えません。</p>
+        <pre><code><span class="cmt"># 0. appsscript.json の webapp が USER_ACCESSING / DOMAIN か確認</span>
+<span class="cmt"># 1. 先に git commit（clasp pull の上書き対策）</span>
+git add index.html コード.js appsscript.json
+git commit -m "feat: vX.X.X - 説明"
+
+<span class="cmt"># 2. プッシュ</span>
+clasp push --force
+
+<span class="cmt"># 3-A. 初回だけ：新規デプロイで deploymentId を発番（この値を以後固定）</span>
+clasp deploy -d "v1.0.0"   <span class="cmt"># → &lt;DEPLOYMENT_ID&gt; を控える</span>
+
+<span class="cmt"># 3-B. 2回目以降：固定 deploymentId へバージョンアップ（URL 不変）</span>
+clasp deploy <span class="ok">-i &lt;DEPLOYMENT_ID&gt;</span> -d "vX.X.X"
+
+<span class="cmt"># 4. GAS デプロイ管理画面で「実行=アクセスしているユーザー / アクセス=ドメイン内全員」を目視確認</span></code></pre>
+        <div class="callout danger">
+          <span class="callout-icon">🔒</span>
+          <div class="callout-body">
+            <strong>運用開始後は新規デプロイ禁止</strong>
+            案内済みのブックマーク・QR・メールリンクが全失効します。必ず <code>-i &lt;固定ID&gt;</code> でバージョンアップしてください（RUNBOOK §1 / ADR-007）。
+            <span class="ng">禁止</span>: <code>USER_DEPLOYING</code> / <code>ANYONE_WITH_GOOGLE_ACCOUNT</code>。
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="phase">
+      <div class="phase-head"><div class="phase-badge">9</div><div><div class="phase-title">受け入れ検証</div><div class="phase-meta">本番相当での動作確認</div></div></div>
+      <div class="phase-body">
+        <ul>
+          <li>Webapp URL にアクセス → ログインできる（タダメンマスタ登録アカウント）</li>
+          <li>案件一覧（6 タブ）が表示される／フォーム申込が未対応に流れてくる</li>
+          <li>アサイン → 日程確定（Meet 発行）→ 記録 → 完了報告の一連が通る</li>
+          <li>年間 10 回 / 案件 3 回の上限ガードが効く</li>
+          <li>管理モードでステータス変更・再アサイン・上限特例が反映される</li>
+          <li>動作確認後に <code>MAIL_DRY_RUN</code> を <code>false</code> にして実送信を有効化</li>
+        </ul>
+        <p class="small">エンドユーザー観点の確認は <code>docs/Manual.md</code> の操作手順をなぞるのが確実です。</p>
+      </div>
+    </div>
+
+    <!-- ───────────────────────── 6 ───────────────────────── -->
+    <h2 id="security">6. セキュリティ要件（5 視点）</h2>
+    <p>セキュアコーディングは次の 5 視点で実装・レビューします（グランドルール 3 / SDD §4）。介護事業所の個人情報を扱うため必須です。</p>
+    <table>
+      <thead><tr><th style="width:24%">視点</th><th>本システムでの担保</th></tr></thead>
+      <tbody>
+        <tr><td>認証・認可</td><td>タダメンマスタで本人認証（SEC-01）。管理権限はバックエンドで強制（<code>requireAdmin_</code>）。UI 制御だけに頼らない（ADR-001）</td></tr>
+        <tr><td>入力検証 / 出力無害化</td><td>シート書込前に <code>sanitizeForSheet_</code> で数式インジェクション防止。設定更新はホワイトリストキーのみ（<code>updateSettingsAdmin</code>）</td></tr>
+        <tr><td>機密情報管理</td><td>Zoom OAuth 等はコード・GitHub に置かず設定シート / PropertiesService で保持。ハードコーディング原則禁止</td></tr>
+        <tr><td>データ保護 / 最小権限</td><td>Webapp は <code>DOMAIN</code> 限定。案件リストは書込禁止で IMPORTRANGE を保護。担当・サブ担当・管理者以外の編集を <code>ensureCaseEditableByActor_</code> で拒否</td></tr>
+        <tr><td>監査性 / エラー処理</td><td>管理操作は監査ログへ <code>BEFORE/AFTER_JSON</code> 付きで記録。失敗時は安全側に停止</td></tr>
+      </tbody>
+    </table>
+
+    <!-- ───────────────────────── 7 ───────────────────────── -->
+    <h2 id="checklist">7. 構築完了チェックリスト</h2>
+    <table>
+      <thead><tr><th style="width:18%">Phase</th><th>確認項目</th></tr></thead>
+      <tbody>
+        <tr><td>基盤</td><td>フォーム回答 → 案件リスト(IMPORTRANGE) が流れる／Drive・カレンダー作成済み</td></tr>
+        <tr><td>データ</td><td>サポート記録 19 列／タダメンマスタに管理者登録／自動移行で SCHEMA_VERSION_='6'</td></tr>
+        <tr><td>GAS</td><td>Gmail v1・Calendar v3 有効化／<code>SPREADSHEET_ID</code> 設定／スコープ一致</td></tr>
+        <tr><td>コード</td><td><code>clasp push --force</code> 成功／React 18.2.0 固定・<code>?deps=react@18.2.0</code> 維持／src 未作成・temp 未配布</td></tr>
+        <tr><td>設定</td><td>初期化関数 6 本実行済み／添付フォルダ・カレンダー ID 設定／初期 <code>MAIL_DRY_RUN=true</code></td></tr>
+        <tr><td>テスト</td><td>Jest 単体 PASS／Playwright E2E PASS</td></tr>
+        <tr><td>デプロイ</td><td>Webapp = <code>USER_ACCESSING</code>/<code>DOMAIN</code>（diff＋管理画面で目視）／固定 deploymentId 確立</td></tr>
+        <tr><td>検証</td><td>ログイン・一覧・アサイン〜完了の一連通過／上限ガード動作／確認後に <code>MAIL_DRY_RUN=false</code></td></tr>
+        <tr><td>文書</td><td>本番 ID を RUNBOOK §6 / HANDOVER §7 に記録／CHANGELOG・SDD・HANDOVER のバージョン一致</td></tr>
+      </tbody>
+    </table>
+
+    <!-- ───────────────────────── 8 ───────────────────────── -->
+    <h2 id="sources">8. 参考資料・出典</h2>
+    <h4>本リポジトリ内（正典）</h4>
+    <ul>
+      <li><code>docs/RD.md</code> — 要件定義（業務フロー・ビジネスルール）</li>
+      <li><code>docs/SDD.md</code> — 詳細設計（全シート列・関数 F-01〜F-40・セキュリティ仕様）</li>
+      <li><code>docs/ADR.md</code> — 意思決定記録 ADR-001〜012</li>
+      <li><code>docs/RUNBOOK.md</code> — 運用・デプロイ・ロールバック・インシデント／本番 ID（§6）</li>
+      <li><code>docs/HANDOVER.md</code> — 現状・既知課題・次フェーズ・関連リソース ID（§7）</li>
+      <li><code>docs/Manual.md</code> — エンドユーザー操作マニュアル</li>
+      <li><code>docs/playwright-guide.html</code> / <code>docs/test-criteria.html</code> — テスト導入と品質基準</li>
+      <li><code>CLAUDE.md</code> / <code>AGENTS.md</code> — AI 開発指示書（グランドルール）</li>
+      <li><code>CHANGELOG.md</code> / <code>SECURITY.md</code></li>
+    </ul>
+    <h4>外部ベストプラクティス（2026 年取得）</h4>
+    <ul>
+      <li>arc42 + C4 によるアーキテクチャ文書 — <a href="https://www.workingsoftware.dev/software-architecture-documentation-the-ultimate-guide/">The Ultimate Guide To Software Architecture Documentation</a></li>
+      <li>arc42 公式 技術文書の原則 — <a href="https://arc42.org/principles-of-technical-documentation">arc42.org</a></li>
+      <li>C4 モデル — <a href="https://dev.to/adityasatrio/comparing-software-architecture-documentation-models-and-when-to-use-them-495n">Comparing Software Architecture Documentation Models</a></li>
+      <li>ADR の原則（不変の意思決定ログ）— <a href="https://adr.github.io/">adr.github.io</a></li>
+      <li>greenfield ワークフロー（project brief → PRD → architecture → development）— <a href="https://medium.com/@visrow/greenfield-vs-brownfield-in-bmad-method-step-by-step-guide-89521351d81b">Greenfield vs Brownfield Step-by-Step Guide</a></li>
+      <li>開発ドキュメントの種類と best practices — <a href="https://www.altexsoft.com/blog/technical-documentation-in-software-development-types-best-practices-and-tools/">AltexSoft: Technical Documentation</a> / <a href="https://www.atlassian.com/blog/loom/software-documentation-best-practices">Atlassian: Software Documentation Best Practices</a></li>
+    </ul>
+
+    <hr>
+    <p class="small">
+      タダサポ管理システム v1.12.4 — ゼロから構築ガイド（2026/06/07 作成）。
+      本ガイドは俯瞰と順路を提供する起点文書です。各仕様の最終正典は上記リポジトリ内ドキュメントを参照してください。
+    </p>
+  </main>
+</div>
+</body>
+</html>

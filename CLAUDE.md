@@ -265,5 +265,7 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 | `docs/RUNBOOK.md` | 運用手順書（デプロイ・障害対応） | 開発者・運用者 |
 | `docs/Manual.md` | 操作マニュアル v1.12.4 | エンドユーザー |
 | `docs/RD.md` | 要件定義 | 参照用 |
+| `docs/BUILD_SPEC.md` | 総合仕様書 BSD-001（単独完結・人間可読。概要〜データモデル〜機能〜構築〜運用〜セキュリティを内包） | 開発者・運用者・検収担当 |
+| `docs/build-from-scratch.html` | ゼロから構築ガイド（C4全体像・構築手順・必要ドキュメント体系） | 開発者・運用者 |
 | `CHANGELOG.md` | 変更履歴 v1.8.1〜 | 全員 |
 | `SECURITY.md` | セキュリティ情報・脆弱性報告 | 全員 |
