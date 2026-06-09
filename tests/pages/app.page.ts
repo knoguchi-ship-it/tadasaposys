@@ -146,6 +146,16 @@ export class AppPage {
     return this.page.locator('.absolute.z-50');
   }
 
+  /** 担当者バッジ（管理モードでクリックして担当者を変更）。title 属性で一意に特定する。 */
+  getStaffBadge(): Locator {
+    return this.page.locator('button[title="クリックして担当者を変更"]');
+  }
+
+  /** トースト通知（メッセージ部分一致）を取得する。fixed top-4 right-4 の通知領域に限定。 */
+  getToast(message: string | RegExp): Locator {
+    return this.page.locator('.fixed.top-4.right-4').getByText(message);
+  }
+
   getEmptyStateMessage(): Locator {
     return this.page.locator('#case-list-panel [role="status"]');
   }

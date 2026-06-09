@@ -56,6 +56,28 @@ test.describe('管理モード', () => {
     await expect(countBtn).toBeVisible();
   });
 
+  test('管理モードで担当者バッジから担当者を変更できる（v1.12.5 回帰）', async ({ appPage }) => {
+    // 回帰対象: v1.11.6〜v1.12.4 では handleAdminReassignInline が
+    // Api.reassignCaseAdmin() の戻り値を捕捉せず ...result を参照していたため
+    // ReferenceError が発生し、エラートースト＋画面未反映になっていた。
+    await appPage.clickTab('対応中');
+    await appPage.selectCase('たなかヘルパーセンター');
+    const badge = appPage.getStaffBadge();
+    await expect(badge).toContainText('テスト太郎'); // 初期担当者
+
+    // バッジを開いて別担当者（田中花子）を選択
+    await badge.click();
+    const dropdown = appPage.getInlineEditDropdown();
+    await expect(dropdown).toBeVisible();
+    await dropdown.getByRole('button', { name: '田中花子' }).click();
+
+    // 成功トーストが出て、バッジがリロードなしで新担当者に即時反映される
+    await expect(appPage.getToast('担当者を変更しました。')).toBeVisible();
+    await expect(badge).toContainText('田中花子');
+    // 旧実装ではここでエラートーストになっていた（回帰ガード）
+    await expect(appPage.getToast('担当者変更エラー')).toHaveCount(0);
+  });
+
   test('管理モードで今年度利用数（実数）を手動修正できる（v1.12.4）', async ({ appPage }) => {
     await appPage.clickTab('対応中');
     await appPage.selectCase('さとう福祉用具');
