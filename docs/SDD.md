@@ -1,8 +1,11 @@
-# システム詳細設計書 (SDD) — タダサポ管理システム v1.12.4
+# システム詳細設計書 (SDD) — タダサポ管理システム v1.12.5
 
-**Version:** 1.12.4
-**Date:** 2026/06/03
+**Version:** 1.12.5
+**Date:** 2026/06/09
 **Status:** Released
+
+> **v1.12.5 追補（管理担当者インライン変更の不具合修正）**
+> - 設計変更なし（バグ修正のみ）。管理モードの担当者インライン変更 `handleAdminReassignInline` が API 戻り値を捕捉せず `result is not defined`（ReferenceError）で失敗していた問題を、共通ヘルパー `applyCaseTransitionResult` への集約（DRY）で修正。デッドコード（未使用 `inlineStaff`・重複 `recalcFiscalYearCounts`）削除。回帰 E2E（`tests/e2e/06-admin-features.spec.ts`）を追加。
 
 > **v1.12.4 追補（年度利用回数の管理者手動修正）**
 > - 管理者が案件詳細の「今年度利用数」から、年度の利用回数（実数）を手動修正できるようにした。
