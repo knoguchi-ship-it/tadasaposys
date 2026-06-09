@@ -4,6 +4,15 @@
 
 ---
 
+## [1.12.5] - 2026-06-09
+
+### Fixed
+- **管理モードの担当者インライン変更が `result is not defined` で失敗する不具合を修正**: 案件詳細の担当者バッジをクリックして担当者を変更する経路（`handleAdminReassignInline`）で、`Api.reassignCaseAdmin()` の戻り値を捕捉せずに参照していたため ReferenceError が発生し、エラーtoast表示・画面未反映となっていた（サーバー側の変更自体は成功）。
+  - ダイアログ版 `handleAdminReassign` と同じ共通ヘルパー `applyCaseTransitionResult()` に集約（DRY）。戻り値を正しく捕捉し、楽観更新・年度回数再計算を一元化。
+  - デッドコード（未使用の `inlineStaff`・重複した `recalcFiscalYearCounts` 呼び出し）を削除。
+
+---
+
 ## [1.12.4] - 2026-06-03
 
 ### Added

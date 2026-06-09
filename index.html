@@ -2597,16 +2597,10 @@
         if (!selectedCase || staffEmail === (selectedCase.staffEmail || '')) return;
         startSubmit('担当者変更中...');
         try {
-          await Api.reassignCaseAdmin(selectedCase.timestamp, staffEmail);
-          var inlineReassignId = selectedCase.id;
-          var inlineStaff = activeStaffMembers.find(s => s.email === staffEmail);
-          setCases(prev => {
-            var updated = prev.map(c => {
-              if (c.id !== inlineReassignId) return c;
-              return { ...c, ...result };
-            });
-            return recalcFiscalYearCounts(updated, inlineReassignId);
-          });
+          // v1.12.5: ダイアログ版 handleAdminReassign と同じく共通ヘルパーで楽観反映（DRY）。
+          // 旧実装は戻り値 result を捕捉せず参照し ReferenceError になっていた。
+          var result = await Api.reassignCaseAdmin(selectedCase.timestamp, staffEmail);
+          applyCaseTransitionResult(selectedCase.id, result);
           showToast('担当者を変更しました。', { type: 'success', title: '管理者操作' });
         } catch (e) {
           showToast(e.message || String(e), { type: 'error', title: '担当者変更エラー' });
