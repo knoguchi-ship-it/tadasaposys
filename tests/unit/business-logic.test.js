@@ -25,6 +25,7 @@ const {
   buildCaseId,
   makeReentrantLock,
   planCaseKeyBackfill,
+  joinKeyForRead,
 } = require('./src/pure-functions');
 
 // ============================================================
@@ -651,5 +652,34 @@ describe('S1 Stage3 planCaseKeyBackfill', () => {
     const plan = planCaseKeyBackfill(collide, {}, { case_1778340600000: true });
     expect(plan.toCreate[0].caseId).toBe('case_1778340600000_1');
     expect(plan.collisions).toBe(1);
+  });
+});
+
+// ============================================================
+// S1 Stage4: 読み取り結合キー（フラグ切替）
+// ============================================================
+describe('S1 Stage4 joinKeyForRead', () => {
+  test('viaMap=false は従来どおり String(raw)（後方互換）', () => {
+    const d = new Date('2026-05-10T00:30:00+09:00');
+    expect(joinKeyForRead(d, false)).toBe(String(d));
+    expect(joinKeyForRead('manual_123', false)).toBe('manual_123');
+  });
+
+  test('★viaMap=true: Date と「同時刻の別表記文字列」が同一結合キーに収束', () => {
+    const d = new Date('2026-05-10T00:30:00+09:00');
+    const keyFromDate = joinKeyForRead(d, true);          // 案件PK（Date）側
+    const keyFromIso = joinKeyForRead(d.toISOString(), true); // 記録FK（ISO文字列）側
+    expect(keyFromDate).toBe(keyFromIso); // 表記ブレを吸収＝同一案件として結合
+    expect(keyFromDate).toBe('case_' + d.getTime());
+    // viaMap=false なら表記差で割れる（＝結合ズレが起きうる）
+    expect(joinKeyForRead(d, false)).not.toBe(joinKeyForRead(d.toISOString(), false));
+  });
+
+  test('viaMap=true: manual_<epoch> は case_<epoch>', () => {
+    expect(joinKeyForRead('manual_1715300000000', true)).toBe('case_1715300000000');
+  });
+
+  test('viaMap=true: パース不能は String(raw) にフォールバック', () => {
+    expect(joinKeyForRead('not-a-date', true)).toBe('not-a-date');
   });
 });

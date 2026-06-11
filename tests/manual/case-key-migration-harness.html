@@ -72,6 +72,8 @@
     };
   };
 
+  window.MockSheet = MockSheet; // Stage4 検証ブロックから参照するためグローバル公開
+
   function MockSpreadsheet() { this.sheets = {}; }
   MockSpreadsheet.prototype.getSheetByName = function (n) { return this.sheets[n] || null; };
   MockSpreadsheet.prototype.insertSheet = function (n) {
@@ -194,6 +196,37 @@
     // 全案件が登録され未登録ゼロになったことを再診断で確認
     var report2 = diagnoseCaseKeyMigration_();
     assert('Backfill後 診断 unmappedCount=0 / mappedCount=3', report2.unmappedCount === 0 && report2.mappedCount === 3, 'mapped=' + report2.mappedCount + ' unmapped=' + report2.unmappedCount);
+
+    // 6) Stage4: 読み取り結合キー切替（getAllCasesJoined フラグ ON/OFF）
+    var ss = window.__ss;
+    // getAllCasesJoined が依存するシートを用意（設定/案件補正/年間利用補正）
+    ss._add(new MockSheet('設定', [['キー', '項目', '値'], ['CASE_KEY_READ_VIA_MAP', '読取をcase_id経由に', 'false']]));
+    ss._add(new MockSheet('案件補正', [['PK', 'メール', '事業所', '氏名', '詳細', '都道府県', 'サービス']]));
+    ss._add(new MockSheet('年間利用補正', [['メール', '年度', '補正', '更新者', '更新日時']]));
+    // 表記ブレを持つ案件: 案件PKはDateオブジェクト、記録FKは「同時刻のISO文字列」
+    var formC = new Date('2026-07-01T05:00:00+09:00');
+    ss.getSheetByName('案件リスト').appendRow([formC, 'variant@example.com', 'バリアント事業所', '変', '相談', '東京都', '訪問介護']);
+    var rec19 = function (fk, status, staff) {
+      return [fk, status, staff, staff ? '担当者' : '', null, 1, null, null, null, null, '[]', null, null, null, '[]', '', '', '[]', '[]'];
+    };
+    ss.getSheetByName('サポート記録').appendRow(rec19(formC.toISOString(), 'completed', 'staff@tadakayo.jp'));
+    var setFlag = function (v) { ss.getSheetByName('設定').data[1][2] = v; window._settingsCache = null; };
+    var findById = function (list, id) { return list.filter(function (x) { return x.id === id; })[0]; };
+
+    setFlag('false');
+    var joinedOff = getAllCasesJoined();
+    var cOff = findById(joinedOff, String(formC));
+    assert('Stage4 OFF: 表記ブレFKは結合されず unhandled（現行挙動）', cOff && cOff.status === 'unhandled', cOff ? cOff.status : 'なし');
+
+    setFlag('true');
+    var joinedOn = getAllCasesJoined();
+    var cOn = findById(joinedOn, String(formC));
+    assert('★Stage4 ON: 表記ブレFKが case_id 経由で結合し completed', cOn && cOn.status === 'completed', cOn ? cOn.status : 'なし');
+
+    // 回帰: 既に一致しているFK(formA)は ON/OFF 両方で completed のまま
+    var aOn = findById(joinedOn, String(window.__formA));
+    assert('Stage4 回帰: 一致FK(formA)は ON でも completed のまま', aOn && aOn.status === 'completed', aOn ? aOn.status : 'なし');
+    setFlag('false');
 
     mapRows = window.__ss.getSheetByName('案件キーマップ').getDataRange().getValues();
     document.getElementById('mapdump').textContent = JSON.stringify(mapRows, null, 2);
