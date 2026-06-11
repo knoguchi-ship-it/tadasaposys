@@ -1,8 +1,13 @@
 # Node
 node_modules/
 
-# clasp credentials (sensitive)
+# clasp credentials (sensitive — 絶対にコミット/push しない)
 .clasp.json
+.clasprc.json
+creds.json
+client_secret*.json
+*credential*.json
+*-oauth*.json
 
 # OS
 .DS_Store
