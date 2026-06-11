@@ -12,7 +12,7 @@
 ### 本番稼働中
 
 - **URL**: `https://script.google.com/a/macros/tadakayo.jp/s/AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ/exec`
-- **本番デプロイバージョン**: @154（v1.12.8、2026/06/11 デプロイ。固定 deploymentId / URL 不変。S1 Stage4＝Read切替を設定トグル `CASE_KEY_READ_VIA_MAP` で有効化可能に。Backfill は実行済＝既存136案件に case_id 付与・診断クリア）
+- **本番デプロイバージョン**: @155（v1.12.9、2026/06/11 デプロイ。固定 deploymentId / URL 不変。R3 虚偽UI文言の修正が本番反映。本番コード差分は R3 文言のみ＝const/let化は無挙動・MOCKはローカル専用）。前版 @154（v1.12.8）で S1 Stage4＝Read切替トグル `CASE_KEY_READ_VIA_MAP` 公開・Backfill 実行済（既存136案件に case_id 付与・診断クリア）
 - **Webapp 設定**: `executeAs: USER_ACCESSING` / `access: DOMAIN`（tadakayo.jp ドメインのみ）
 - **認証**: タダメンマスタ（B列=氏名, C列=メール, D列=ROLE）で認証
 
