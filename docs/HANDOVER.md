@@ -1,8 +1,8 @@
 # 開発者向け引継ぎ資料 (HANDOVER.md)
 
 **Project:** タダサポ管理システム
-**Version:** 1.12.6（現行リリース）
-**Date:** 2026/06/09
+**Version:** 1.12.7（現行リリース）
+**Date:** 2026/06/11
 **Author:** Development Team
 
 ---
@@ -382,7 +382,7 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 ### バージョン管理ルール
 
 - `コード.js` 先頭コメント・`index.html`・SDD・HANDOVER・Manual・CHANGELOG・CLAUDE.md・AGENTS.md・package.json のバージョンは常に一致させること
-- 現行: **v1.12.6**
+- 現行: **v1.12.7**
 
 ### 🔒 デプロイ時の絶対グランドルール（CLAUDE.md / AGENTS.md にも記載）
 

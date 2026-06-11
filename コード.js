@@ -1,5 +1,5 @@
 /**
- * タダサポ管理システム - Backend Logic (v1.12.5)
+ * タダサポ管理システム - Backend Logic (v1.12.7)
  *
  * 概要:
  * - Google Spreadsheets をデータベースとして利用

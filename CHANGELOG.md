@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+---
+
+## [1.12.7] - 2026-06-11
+
 ### Added (S1 Stage1 — 案件キーのサロゲート化 / Expand 基盤)
 - 「管理アサイン後に完了しても未対応に戻る」バグの**根治**に向けた expand-contract 移行の第1段。不安定な日付PK（`String(Date)` のTZ/型ブレ）を、エポックms基盤の決定的サロゲート `case_id`（`case_<epoch>`）へ収束させる土台を導入。
   - 新シート `案件キーマップ`（`getOrCreateCaseKeyMapSheet_`）: 案件ID ↔ 自然キーの対応表。`(種別, 自然キー_正準化)` を一意キーとしコードで強制。

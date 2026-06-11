@@ -1,8 +1,11 @@
-# システム詳細設計書 (SDD) — タダサポ管理システム v1.12.6
+# システム詳細設計書 (SDD) — タダサポ管理システム v1.12.7
 
-**Version:** 1.12.6
+**Version:** 1.12.7
 **Date:** 2026/06/11
 **Status:** Released
+
+> **v1.12.7 追補（S1: 案件キーのサロゲート化 Stage1〜3）**
+> - エポックms基盤の決定的サロゲート `case_id`（`case_<epoch>`）と `案件キーマップ` シート（§S-09）を導入。Stage1=Expand 基盤、Stage2=Dual-write（7チョークポイントで `ensureCaseKeyMapping_`・読取/FK列不変）、Stage3=冪等 Backfill（`backfillCaseKeyMap_`・既定 dryRun／管理画面から実行可能）。`withScriptLock_` に再入ガードを追加。Stage4 Read 切替・Stage5 Contract は後続。
 
 > **v1.12.6 追補（重複サポート記録による表示不整合の止血 / Stage 0）**
 > - 事象: 管理アサイン後に完了しても画面が「未対応・担当者未設定」に戻る。根因はサポート記録に同一案件PKの**重複行**が生じた際、書き込み（`assignCase`/`reassignCaseAdmin`/`updateSupportRecord` の `for…break`＝**最初の一致行**）と表示（`getAllCasesJoined` の `recordMap`＝**最後の一致行**で上書き）が別行を指すこと。
