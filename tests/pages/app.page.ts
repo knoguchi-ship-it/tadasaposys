@@ -159,4 +159,83 @@ export class AppPage {
   getEmptyStateMessage(): Locator {
     return this.page.locator('#case-list-panel [role="status"]');
   }
+
+  // ── 日程確定モーダル（T1 / v1.11.7〜v1.12.0） ──────
+  // schedule モーダルは max-w-4xl（report/edit/cancel は max-w-lg）で区別できる。
+
+  /** 日程確定モーダル本体（max-w-4xl のダイアログ） */
+  getScheduleModal(): Locator {
+    return this.page.locator('[class*="max-w-4xl"]');
+  }
+
+  /**
+   * 対応中/未対応(管理) の案件詳細から日程確定モーダルを開く。
+   * ボタンラベルは scheduledDateTime の有無で「日時変更/日時決定」と変わるため
+   * 正規表現で吸収する。
+   */
+  async openScheduleModal(officeName: string): Promise<void> {
+    await this.selectCase(officeName);
+    await this.getActionButton(/日時(変更|決定|設定)/).click();
+    await this.getScheduleModal().getByText('日程の確定・変更').waitFor({ state: 'visible', timeout: 5_000 });
+  }
+
+  /** 日時入力（datetime-local）。値は `YYYY-MM-DDTHH:mm`。 */
+  getScheduleDateTimeInput(): Locator {
+    return this.getScheduleModal().locator('input[type="datetime-local"]');
+  }
+
+  /** 対応方法 select（GoogleMeet / Zoom / 対面 / 電話等）。Zoom option を持つ select で一意特定。 */
+  getMethodSelect(): Locator {
+    return this.getScheduleModal()
+      .locator('select')
+      .filter({ has: this.page.getByRole('option', { name: 'Zoom' }) });
+  }
+
+  /** 日程確定の送信ボタン（重複/チェック中は disabled） */
+  getScheduleSubmitButton(): Locator {
+    return this.getScheduleModal().getByRole('button', { name: '日時を確定してカレンダー作成' });
+  }
+
+  /** 重複検知バナーの状態を文言で取得する */
+  getConflictBanner(): Locator {
+    return this.getScheduleModal().getByText('重複する予定があります');
+  }
+
+  getAvailableBanner(): Locator {
+    return this.getScheduleModal().getByText('この時間帯は空いています');
+  }
+
+  /** Zoom 強制カレンダー登録の警告（method=Zoom 時のみ表示） */
+  getZoomForcedCalendarWarning(): Locator {
+    return this.getScheduleModal().getByText('Zoom時はチームタダカヨカレンダーへ自動登録');
+  }
+
+  /** Zoom URL 発行モードのラジオ（'new' = 新規発行 / 'fixed' = いつものタダスクID） */
+  getZoomModeRadio(mode: 'new' | 'fixed'): Locator {
+    return this.getScheduleModal().locator(`input[type="radio"][name="zoomMode"][value="${mode}"]`);
+  }
+
+  /** FullCalendar 埋込みのルート要素（.fc）が描画されているか */
+  getFullCalendar(): Locator {
+    return this.getScheduleModal().locator('.fc');
+  }
+
+  // ── 管理モード ステータスインライン編集（T2 / v1.11.6） ──
+
+  /** 詳細パネルのステータスバッジ（管理モードでクリックして遷移） */
+  getStatusBadge(): Locator {
+    return this.page.locator('button[title="クリックしてステータスを変更"]');
+  }
+
+  /** ステータス変更ドロップダウンから対象ステータスを選ぶ */
+  async changeStatusInline(label: TabKey): Promise<void> {
+    await this.getStatusBadge().click();
+    const dropdown = this.page.locator('.absolute.z-50');
+    await dropdown.getByRole('button', { name: label, exact: true }).click();
+  }
+
+  /** 案件回数バッジ（"n / 上限"）。status!==unhandled のときのみ表示。 */
+  getCaseCountBadge(): Locator {
+    return this.page.locator('button[title="クリックして上限を変更"]');
+  }
 }

@@ -4,6 +4,28 @@
 
 ---
 
+## [1.12.9] - 2026-06-11
+
+### Tests (T1/T2 — E2E 回帰スイート拡充 / 本番挙動ゼロ変化)
+- **T1**: 日程確定刷新（v1.11.7-v1.12.0）の E2E を追加 — `tests/e2e/08-scheduling.spec.ts`（5件）。FullCalendar 埋込描画・method=Zoom 時のチームカレンダー強制登録警告・Zoom URL 発行モード（新規発行/いつものタダスクID）・重複検知バナーと送信ブロック（Zoom 時のみ）・GoogleMeet では重複チェック無効、を検証。
+- **T2**: 管理機能ステータス遷移（v1.11.6 `adminTransitionStatus_()`）の回帰ガードを追加 — `tests/e2e/09-admin-status-transition.spec.ts`（3件）。完了→対応中（再開で supportCount+1・実施情報クリア）・完了→未対応（リセットで回数バッジ消失）・対応中→キャンセル（単純遷移で回数維持）を UI で検証。
+- E2E 計 **51→61 件**（T1+5 / T2+3 / R3ガード+2、全 PASS）。単体 92 件・回帰なし。`tests/pages/app.page.ts`（POM）に日程モーダル／ステータスインライン編集の操作ヘルパーを追加。
+
+### Changed (モック整備・リファクタ / 本番挙動ゼロ変化)
+- **モック整備（T1 前提）**: `index.html` の `MOCK_MASTERS.methods` に `Zoom` を追加（`['GoogleMeet','Zoom','メール等','電話等','対面']`）。本番 `getMasters` の `zoomEnabled` 時と同形状（index1 へ挿入）。ローカル/E2E で日程確定の Zoom 機能を再現するためで、`MOCK_MASTERS` は `IS_LOCAL` 専用のため**本番挙動に影響なし**。
+- **T3（限定範囲）**: `コード.js` 最上位の不変定数7件（`SPREADSHEET_ID` / `SHEET_NAMES` / `CASE_KEY_MAP_COL` / `IDX` / `SCHEMA_VERSION_` / `SETTINGS_LABEL_MAP_` / `SCHEDULED_DISABLED_NOTE`）を `const`、可変キャッシュ3件（`_settingsCache` / `_spreadsheetCache` / `_scriptLockHeld`）を `let` に変換。無挙動変更（`node --check` 済）。`index.html` の関数ローカル `var`（175件）は Babel in-browser コンパイル＋同一スコープ `var` 再宣言の存在＋CI lint 不在によりリスク>便益と判断し見送り。
+
+### Fixed (R3 — 虚偽UI文言の修正 / ⚠️本番フロント文言の変更)
+- 日程確定モーダルで、**Zoom/GoogleMeet 以外**の方法（対面/電話等/メール等）に対し `useCalendar=ON` 時に「カレンダーに予定を登録します。」と表示していたが、バックエンド（`updateSupportRecord`）は Zoom/GoogleMeet のみイベントを作成するため**虚偽の案内**だった。表示を「この方法ではカレンダーへの予定登録は行われません（対応記録のみ保存されます）。」の注記（警告色）へ修正。**カレンダー作成ロジックは未実装のまま据え置き**（実装可否は次の引継ぎ者が判断＝HANDOVER §11 R3）。
+- ⚠️ 本変更は**本番フロントに表示される文言の変更**を含む（本リリース v1.12.9 で採番・デプロイ）。本番コードの実差分は本 R3 文言のみ（`コード.js` の const/let 化は無挙動、`MOCK_MASTERS` は `IS_LOCAL` 専用）。
+
+### Docs (R1/R2/R4 — 実態への整合)
+- **R2（誤記訂正）**: HANDOVER §9/§11 の「`updateSupportHistory` 担当者チェックなし（中リスク残存）」は事実誤認。当該関数は **v1.9.72 から** `ensureCaseEditableByActor_` で担当者本人・サブ担当・管理者以外を `throw` で拒否済み（`コード.js:3314`）。実装済みである旨へ訂正。
+- **R1（縮退/クローズ候補）**: R1 が主眼とした不整合（完了→未対応に戻る）は S1 で根治済み（本番 `duplicateRecordFk=0`）。残存点検は読み取り専用 `diagnoseCaseKeyMigration_()` で可能。汎用の一括修復スクリプトは未作成で現状必要性は低い旨を明記（具体的報告が出た時点で要否再判断）。
+- **R4（手順明記）**: GAS リモートの `temp/` スタブ（無害）は `clasp push` では削除されないため、GAS エディタでの手動削除手順を RUNBOOK §2-4 に追記。ローカルは `.gitignore`/`​.claspignore` で非追跡・push 除外済み（衛生は完了）。
+
+---
+
 ## [1.12.8] - 2026-06-11
 
 ### Changed (S1 Stage4 — 本番有効化手段)

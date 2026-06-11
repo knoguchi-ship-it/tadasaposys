@@ -1,7 +1,7 @@
 # 開発者向け引継ぎ資料 (HANDOVER.md)
 
 **Project:** タダサポ管理システム
-**Version:** 1.12.8（現行リリース）
+**Version:** 1.12.9（現行リリース）
 **Date:** 2026/06/11
 **Author:** Development Team
 
@@ -47,7 +47,7 @@
 | アプリ内ヘルプ | ✅ | v1.9.83 |
 | 楽観的更新・初期データHTML埋め込みによる高速化 | ✅ | v1.9.67 |
 | **管理機能ステータス遷移の完全修正** | ✅ | **v1.11.6** |
-| **Playwright E2E テストスイート（51テスト）** | ✅ | **v1.11.5** |
+| **Playwright E2E テストスイート（61テスト）** | ✅ | **v1.11.5〜（T1/T2 で +8）** |
 | **Jest 単体テスト（92テスト）** | ✅ | **v1.12.0〜** |
 | **S1 案件キーのサロゲート化（Stage1-4＋Backfill・根治）** | ✅ | **v1.12.6〜v1.12.8** |
 | **WCAG 2.1 AA color-contrast 全違反修正** | ✅ | **v1.11.5** |
@@ -84,13 +84,13 @@ tadasaposys/
 ├── .codex/config.toml      ← Codex 起動方針（GitHub共有用）
 ├── codex-tadasaposys.ps1   ← Codex プロジェクト起動ランチャー
 ├── tests/
-│   ├── e2e/                ← Playwright E2E テスト（7スペック、51テスト）
+│   ├── e2e/                ← Playwright E2E テスト（9スペック、61テスト）
 │   ├── pages/app.page.ts   ← Page Object Model
 │   ├── fixtures/           ← カスタム Fixture
 │   ├── unit/               ← Jest 単体テスト（92テスト）
 │   └── manual/             ← 検証ハーネス（case-key-migration-harness.html・Playwright MCP用）
 └── docs/
-    ├── SDD.md              ← 設計書 v1.12.8
+    ├── SDD.md              ← 設計書 v1.12.9
     ├── HANDOVER.md         ← 本ドキュメント
     ├── ADR.md              ← アーキテクチャ判断記録（ADR-001〜010）
     ├── RUNBOOK.md          ← 運用手順書
@@ -293,7 +293,7 @@ v1.11.6 以降は全ての管理者 STATUS 変更が `adminTransitionStatus_()` 
 ### E2E テスト（Playwright）
 
 ```bash
-# 全テスト実行（51テスト / 約1.6分）
+# 全テスト実行（61テスト / 約3分）
 npm test
 
 # UIモード（デバッグ用）
@@ -311,6 +311,10 @@ npm run test:report
 - `05-case-detail`: ケース詳細パネル（7件）
 - `06-admin-features`: 管理者機能（6件）
 - `07-a11y`: WCAG 2.1 AA アクセシビリティ（8件）
+- `08-scheduling`: 日程確定モーダル（重複検知・Zoom強制登録警告・URL発行モード・FullCalendar・非Meet/Zoom時のカレンダー文言）（7件 / **T1** + **R3ガード**）
+- `09-admin-status-transition`: 管理者ステータス遷移（再開で回数+1・リセット・単純遷移）（3件 / **T2**、v1.11.6 回帰ガード）
+
+> **モック整備（T1）**: ローカル/E2E で Zoom 機能を再現するため、`index.html` の `MOCK_MASTERS.methods` に `Zoom` を追加（本番 `getMasters` の `zoomEnabled` 時と同形状＝index1 に挿入）。モックは `IS_LOCAL` 専用で本番挙動に影響なし。
 
 詳細: `docs/playwright-guide.html`
 
@@ -334,11 +338,11 @@ npm run test:unit  # 92テスト / 約0.2秒
 | 新着バッジ | localStorage依存 | ブラウザをまたいだ既読状態は同期されない |
 | 予約送信トリガ | 廃止 | `setupScheduledEmailTrigger()` は既存トリガー削除のみ。未送信予約は `disablePendingScheduledEmails()` で無効化。`clasp run` は権限エラーのため、GAS エディタから手動実行が必要 |
 | color-contrast（旧バージョンデータ） | 修正済み | v1.11.5 で全違反を解消。既存 DB 内のデータは未修正 |
-| `updateSupportHistory` 担当者チェックなし | 中リスク残存 | 担当者以外が過去履歴を編集可能（別 Issue で管理） |
-| 管理機能で作成された不整合データ（v1.11.5 以前） | 残存可能性あり | v1.11.6 で今後の操作は整合性保証済み。旧データは修復スクリプトを別途検討 |
-| SDD.md / Manual.md ドキュメント | v1.12.8 対応済み | 2026/06/11 更新 |
+| `updateSupportHistory` 担当者チェック | ✅ 実装済み（誤記訂正） | **v1.9.72 から** `ensureCaseEditableByActor_(caseId, actor, false)` で担当者本人・サブ担当・管理者以外を `throw` で拒否済み（`コード.js:3314`）。旧版 HANDOVER の「チェックなし・中リスク残存」は事実誤認のため R2 で訂正。※サーバ権限を保証する自動テストは未整備（harness が GAS Session 依存のため）|
+| 管理機能で作成された不整合データ（v1.11.5 以前） | 主動機は解消／汎用修復スクリプトは未作成 | R1 が主眼とした「完了→未対応に戻る」不整合は **S1（Stage0-4）で根治済み**（本番 `duplicateRecordFk=0`）。残存の有無は読み取り専用 `diagnoseCaseKeyMigration_()` で点検可能。汎用の一括修復スクリプトは未作成で、現時点で必要性は低い（R1 参照） |
+| SDD.md / Manual.md ドキュメント | v1.12.9 対応済み | 2026/06/11 更新 |
 | GitHub Actions CI | ワークフローファイル設定済み | `.github/workflows/playwright.yml` |
-| **GAS 上の `temp/index.html` `temp/コード.js`** | 残存（無害化済み） | clasp push 事故で残存したスタブファイル。doGet 等の関数定義は除去済みで動作影響なし。GAS エディタから手動削除推奨 |
+| **GAS 上の `temp/index.html` `temp/コード.js`** | 残存（無害化済み）・要手動削除 | clasp push 事故で残存したスタブファイル。doGet 等の関数定義は除去済みで動作影響なし。**ローカルは `.gitignore`(`temp/`) で非追跡＋`.claspignore`(`temp/**`) で push 除外済み**だが、`clasp push` は**既存リモートファイルを削除しない**ため GAS 側スタブは消えない。削除は GAS エディタで手動（手順は RUNBOOK §2-4 参照）。R4 で手順を明記 |
 | **`appsscript.json` の `exceptionLogging`** | 監視継続 | 過去に GAS 側で `STACKDRIVER`→`NONE` に変更された痕跡あり。v1.11.8 デプロイ時に復元済み。デプロイ前は git diff で要確認 |
 | **GoogleMeet 以外（電話/対面/メール等）でのカレンダー登録** | 既存仕様の歪み | UI は「カレンダーに登録します」と表示するが、バックエンドで実装されていない（pre-existing）。Phase 5 候補 |
 | **chiTeam カレンダーへの個人スタッフの書込権限** | 運用前提 | 全タダメンが TEAM_CALENDAR_ID にイベント作成権限を持つ前提。新メンバー追加時は要確認 |
@@ -384,7 +388,7 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 ### バージョン管理ルール
 
 - `コード.js` 先頭コメント・`index.html`・SDD・HANDOVER・Manual・CHANGELOG・CLAUDE.md・AGENTS.md・package.json のバージョンは常に一致させること
-- 現行: **v1.12.8**
+- 現行: **v1.12.9**
 
 ### 🔒 デプロイ時の絶対グランドルール（CLAUDE.md / AGENTS.md にも記載）
 
@@ -403,15 +407,15 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 | ID | 内容 | 優先度 | メモ |
 |----|------|--------|------|
 | **S1** | **案件キーのサロゲート化（根治・expand-contract移行）** | **✅ 完了（Stage1-4＋Backfill）** | v1.12.6 は止血(Stage0)のみ。根因＝不安定な日付PKを `String()` 突合し Sheets が UNIQUE を強制できないこと。エポックms基盤の決定的 `case_id`（`case_<epoch>`）を導入し `案件キーマップ` シートで一元解決。**Expand→Dual-write→Backfill→Read切替→Contract** で段階移行。設計: `docs/er-after.dbml` / `docs/SDD.md` §S-09。各段E2E回帰＋ロールバック、Backfill以降（本番データ変更）の前で必ず停止。詳細・根因はメモリ `project_case_key_duplicate_bug.md`。<br>**✅ Stage1（Expand 基盤）完了**: `案件キーマップ` シート（`getOrCreateCaseKeyMapSheet_`）＋採番ヘルパー `getOrCreateCaseId_`（`withScriptLock_` で排他・冪等）＋正準化 `canonicalNaturalKey_`/`buildCaseId_`＋読み取り専用診断 `diagnoseCaseKeyMigration_`。<br>**✅ Stage2（Dual-write）完了**: 7チョークポイント（`assignCase`/`reassignCaseAdmin`/`ensureRecordRowForCase_`/`recordEmail_`/`saveDraft`/`getOrCreateOverrideRowIndex_`/`addManualCase`）から `ensureCaseKeyMapping_`（非致死・生PKを権威解決しBackfillと同一 case_id に収束）を呼び案件キーマップへ登録。`withScriptLock_` に再入ガード追加（GAS ScriptLock 非再入のデッドロック防止）。単体テスト計83件・E2E 51件パス。**本番挙動ゼロ変化（マップ追記のみ）。v1.12.7 で本番反映済**。<br>**✅ Stage3（Backfill）本番実行済**: `backfillCaseKeyMap_(options)`（既定 `dryRun:true`／`dryRun:false`で一括追記）＋`planBackfill_`（既登録スキップ・重複自然キー dedup・衝突連番）。冪等（再実行で重複ゼロ）。**本番で既存136案件すべてに case_id 付与済み**（診断: unmappedCount=0 / unparseable=0 / duplicateRecordFk=0）。単体5件追加（計88）＋ハーネス Playwright MCP 16/16。<br>**✅ Stage3 アプリ実行手段**: 管理者がアプリ上で実行できる公開エントリ `runCaseKeyMigrationDiagnosis()` / `runCaseKeyBackfill(dryRun)`（`requireAdmin_`・監査ログ記録）と、設定管理ダイアログの「メンテナンス：案件キーマップ Backfill」UI（①診断 ②ドライラン ③本実行）を追加。手動GASエディタ操作は不要。<br>**✅ Stage4（Read切替）実装完了・フラグ既定OFF**: `getAllCasesJoined` の内部結合キーを `joinKeyForRead_(raw, viaMap)` 経由にし、設定 `CASE_KEY_READ_VIA_MAP`（既定false）で `String(PK)`→正準 `case_id` へ切替可能に。表示id は `String(PK)` 維持（書込互換）。表記ブレFKの結合ズレを解消。単体4件追加（計92）＋ハーネスに Stage4 追加し Playwright MCP 19/19（OFF=unhandled／ON=completed／一致FK回帰なし）。**デプロイ済みコードだが既定OFFで挙動ゼロ変化**。<br>**✅ Stage4 有効化手段（v1.12.8 @154 デプロイ済）**: 設定 `CASE_KEY_READ_VIA_MAP` を**設定管理ダイアログの boolean トグル**として公開（「その他」タブ）。ON で読取結合が case_id 経由、OFF（既定）で従来挙動。Backfill 済み・診断クリアのため ON/OFF とも表示同一（堅牢化）。**ロールバックはトグルOFFのみ（無デプロイ）**。<br>**🟡 Stage5（Contract）は見送り**: バグ直接原因は消失済（duplicateRecordFk=0）で根治は実質完了。識別子の case_id 置換（フロント~15＋バック~30箇所改修＋破壊的データ移行）は便益<リスクのため未実施。Stage4 コードと case_id 基盤は将来の選択肢として温存（master 保持）。 |
-| R1 | 管理機能不整合データの修復スクリプト | 中 | v1.11.5 以前のデータが対象。過去の不整合を一括検出・補正 |
-| R2 | `updateSupportHistory` 担当者チェック追加 | 中 | 担当者以外の過去履歴編集をブロック |
-| **R3** | **GoogleMeet 以外でのカレンダー登録未実装の修正** | **中** | 電話/対面/メール等で useCalendar=ON にしてもイベント未作成（pre-existing バグ） |
-| **R4** | **GAS 上の temp/index.html・temp/コード.js を削除** | **低** | スタブ化済みで無害だがクリーンアップ。GASエディタから手動削除 |
+| ~~R1~~ | ~~管理機能不整合データの修復スクリプト~~ | — | **🟢 縮退/クローズ候補**: 主動機（完了→未対応に戻る不整合）は **S1 で根治済み**（本番 `duplicateRecordFk=0`）。残存点検は読み取り専用 `diagnoseCaseKeyMigration_()` で可能。汎用の一括修復スクリプトは未作成だが、現状必要性は低い。**新たな不整合の具体的報告が出た時点で要否を再判断**（想像で先回り実装しない方針） |
+| ~~R2~~ | ~~`updateSupportHistory` 担当者チェック追加~~ | — | **✅ 実装済み（誤記訂正）**: v1.9.72 から `ensureCaseEditableByActor_` で担当者本人・サブ担当・管理者以外を拒否（`コード.js:3314`）。HANDOVER §9 の誤記を訂正。残課題はサーバ権限の自動テスト（harness が GAS Session 依存で未整備）→ 別途 T 系で検討余地 |
+| **R3** | **GoogleMeet 以外でのカレンダー登録未実装の判断** | **要引継ぎ判断** | **本体実装は次の引継ぎ者が方針決定**（A:全方法で登録実装／B:非Meet/Zoomは登録UIを出さない／C:現状維持で仕様明文化）。**今回は虚偽UI文言のみ修正**: 非Meet/Zoom方法で useCalendar=ON 時に「カレンダーに予定を登録します」と表示していた偽の案内を、「カレンダー登録は行われません（記録のみ）」の注記へ変更（`index.html` 日程モーダル）。バックエンドのカレンダー作成は未実装据え置き（`updateSupportRecord` は Zoom/GoogleMeet のみ作成） |
+| ~~**R4**~~ | ~~GAS 上の temp/index.html・temp/コード.js を削除~~ | 低（運用） | ローカル衛生は完了（`temp/` は git 非追跡・clasp push 除外）。**GAS リモートのスタブ削除手順を RUNBOOK §2-4 に明記**。`clasp push` では削除されないため GAS エディタで手動削除（運用作業のため当方からの削除は不可） |
 | 7-1 | CSV/スプレッドシートエクスポート機能 | 中 | 案件・サポート記録のCSV出力 |
 | 7-3 | 検索のスマート化（条件保存等） | 低 | 検索条件のお気に入り機能 |
-| **T1** | **日程確定刷新（v1.11.7-v1.12.0）の E2E テスト追加** | **高** | 重複検知・Zoom強制登録・FullCalendarドラッグ・固定Zoomラジオ。本番カレンダー依存のためモック整備が必要 |
-| T2 | 管理機能ステータス遷移の E2E テスト追加 | 高 | v1.11.6 の修正を保護 |
-| T3 | `var→let/const` の残り最適化（`const` 候補の特定） | 低 | |
+| ~~**T1**~~ | ~~日程確定刷新（v1.11.7-v1.12.0）の E2E テスト追加~~ | — | **✅ 完了**: `tests/e2e/08-scheduling.spec.ts`（5件）。重複検知・Zoom強制登録警告・URL発行モード(新規/固定ID)・FullCalendar埋込を検証。モック整備として `MOCK_MASTERS.methods` に Zoom 追加（本番 zoomEnabled 同形状・IS_LOCAL専用） |
+| ~~T2~~ | ~~管理機能ステータス遷移の E2E テスト追加~~ | — | **✅ 完了**: `tests/e2e/09-admin-status-transition.spec.ts`（3件）。完了→対応中(再開で回数+1)・→未対応(リセット)・→キャンセル(単純遷移)で v1.11.6 `adminTransitionStatus_()` を保護 |
+| ~~T3~~ | ~~`var→let/const` の残り最適化~~ | — | **✅ 完了（限定範囲）**: `コード.js` 最上位の不変定数7件を `const`、可変キャッシュ3件を `let` に変換（無挙動変更・`node --check` 済）。`index.html` の関数ローカル175件は Babel in-browser コンパイル＋同一スコープ `var` 再宣言が存在し、CI lint 不在のためリスク>便益と判断し見送り |
 
 ---
 
@@ -442,6 +446,7 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 | **v1.12.6** | 2026/06/11 | 重複サポート記録による「完了しても未対応に戻る」事象の止血（Stage 0）: 表示の `recordMap` を「最初の一致」採用に統一し書込経路と一致＋`withRecordWriteLock_`（LockService）で検索→追記を排他化し重複行生成を防止。単体テスト4件追加（計72件）。根治（案件キーのサロゲート化）は後続 expand-contract 予定（@152 デプロイ済み） |
 | **v1.12.7** | 2026/06/11 | S1 案件キーのサロゲート化 Stage1-3（根治の段階移行）: 決定的サロゲート `case_id`（`case_<epoch>`）＋`案件キーマップ`シート（Expand）／7チョークポイントの Dual-write（additive・読取/FK列不変）／冪等 Backfill `backfillCaseKeyMap_`（既定dryRun・管理画面から実行可能）。`withScriptLock_` 再入ガード追加。単体72→88件・E2E51件パス＋Playwright MCP harness 16/16（@153 デプロイ済み） |
 | **v1.12.8** | 2026/06/11 | S1 Stage4（Read切替）有効化: 設定 `CASE_KEY_READ_VIA_MAP` を設定管理のトグルとして公開（ONで結合を case_id 経由・既定OFF・OFFで即ロールバック）。本番Backfill完了（136案件・診断クリア duplicateRecordFk=0）で根治完了。単体92件・E2E51件・harness19/19。Stage5(Contract)は便益<リスクで見送り（@154 デプロイ済み） |
+| **v1.12.9** | 2026/06/11 | R/T タスク対応: **R3** 日程確定モーダルの虚偽UI文言を修正（非Meet/Zoom方法で useCalendar=ON 時「カレンダーに登録します」→「登録は行われません(記録のみ)」。バックエンドのカレンダー作成は未実装据え置き＝引継ぎ判断）。**R2** `updateSupportHistory` 担当者チェックは実装済みのため誤記訂正。**R1** S1 根治で動機消失につき縮退。**R4** GAS残存スタブの手動削除手順を RUNBOOK §2-4 に明記。**T1/T2** 日程確定・管理ステータス遷移の E2E 追加＋**R3ガード**（E2E 51→61件）。**T3** `コード.js` 最上位定数の const/let 化（無挙動）。本番差分は R3 文言のみ |
 
 ---
 
@@ -616,7 +621,7 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 
 ### 5. 推奨される次の作業（優先度順）
 
-1. **T1** — 日程確定刷新の E2E テスト追加（重複検知・FullCalendar・Zoomモードを保護）
+1. ~~**T1/T2** — 日程確定・管理ステータス遷移の E2E テスト追加~~ ✅ 完了（08/09 spec・計8件追加、E2E 59件）
 2. **R3** — GoogleMeet 以外のカレンダー登録未実装を修正（pre-existing バグ）
 3. **R4** — GAS 上の temp/* スタブを手動削除
 4. **R1/R2** — 管理機能関連の修復スクリプトと担当者チェック追加

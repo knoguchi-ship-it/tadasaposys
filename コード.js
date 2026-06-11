@@ -1,5 +1,5 @@
 /**
- * タダサポ管理システム - Backend Logic (v1.12.8)
+ * タダサポ管理システム - Backend Logic (v1.12.9)
  *
  * 概要:
  * - Google Spreadsheets をデータベースとして利用
@@ -12,12 +12,12 @@
 // スプレッドシートURLの /d/ と /edit の間の文字列がIDです
 // 例: https://docs.google.com/spreadsheets/d/【ここがID】/edit
 // ======================================================================
-var SPREADSHEET_ID = '1hllLdETiK0sk0xW_y0V6vOmnlK7kIkHBjntYiCTom4w';
+const SPREADSHEET_ID = '1hllLdETiK0sk0xW_y0V6vOmnlK7kIkHBjntYiCTom4w';
 
 // ======================================================================
 // シート名・列定義
 // ======================================================================
-var SHEET_NAMES = {
+const SHEET_NAMES = {
   SETTINGS: '設定',
   CASES: '案件リスト',
   CASES_OVERRIDE: '案件補正',  // 管理者による案件情報手動補正（案件リストのIMPORTRANGEを保護するため分離）
@@ -33,9 +33,9 @@ var SHEET_NAMES = {
 };
 
 // S1 Stage1: 案件キーマップシートの列定義（A:案件ID, B:種別, C:自然キー_正準化, D:正規化メール, E:作成日時）
-var CASE_KEY_MAP_COL = { CASE_ID: 0, SOURCE_TYPE: 1, NATURAL_KEY: 2, EMAIL_NORM: 3, CREATED_AT: 4 };
+const CASE_KEY_MAP_COL = { CASE_ID: 0, SOURCE_TYPE: 1, NATURAL_KEY: 2, EMAIL_NORM: 3, CREATED_AT: 4 };
 
-var IDX = {
+const IDX = {
   CASES: { PK: 0, EMAIL: 1, OFFICE: 2, NAME: 3, DETAILS: 4, PREFECTURE: 5, SERVICE: 6 },
   // 案件補正シートは案件リストと同じ列構造（PK=A列、値が空の列は「補正なし」を意味する）
   CASES_OVERRIDE: { PK: 0, EMAIL: 1, OFFICE: 2, NAME: 3, DETAILS: 4, PREFECTURE: 5, SERVICE: 6 },
@@ -53,8 +53,8 @@ var IDX = {
 // ======================================================================
 // 設定読み込み（「設定」シートから全設定値を取得しキャッシュ）
 // ======================================================================
-var _settingsCache = null;
-var _spreadsheetCache = null;
+let _settingsCache = null;
+let _spreadsheetCache = null;
 
 /**
  * スプレッドシートを取得（実行コンテキスト内キャッシュ）
@@ -326,7 +326,7 @@ function getCaseRecordRowIndex_(caseId) {
 //   waitLock するとデッドロック→30秒でタイムアウト）。GAS実行は単一スレッドの
 //   ため、実行内フラグで「既に保持中なら再取得せず fn を実行」とすることで、
 //   ロック内チョークポイントから getOrCreateCaseId_ 等を安全にネスト呼び出しできる。
-var _scriptLockHeld = false;
+let _scriptLockHeld = false;
 function withScriptLock_(fn) {
   if (_scriptLockHeld) return fn(); // 既に同一実行でロック保持中 → 再取得しない
   var lock = LockService.getScriptLock();
@@ -1042,7 +1042,7 @@ function cancelCase(caseId) {
 
 // スキーマバージョン: マイグレーション追加時にインクリメントする
 // v1.11.7 で 6 に更新（addScheduleZoomSettings を自動実行）
-var SCHEMA_VERSION_ = '6';
+const SCHEMA_VERSION_ = '6';
 
 function ensureAttachmentSchema_() {
   // CacheService でスキーマ確認済みなら全スキップ（6時間有効）
@@ -2671,7 +2671,7 @@ function deactivateStaffMember(email) {
 }
 
 // 設定キーの日本語項目名マップ（appendRow フォールバック時に使用）
-var SETTINGS_LABEL_MAP_ = {
+const SETTINGS_LABEL_MAP_ = {
   CASE_KEY_READ_VIA_MAP:       '案件キーをcase_id経由で結合（S1 Stage4）',
   ANNUAL_USAGE_LIMIT:          '年度利用回数上限',
   CASE_USAGE_LIMIT:            '案件ごとの対応上限',
@@ -4675,7 +4675,7 @@ function listDraftCaseIdsForUser_(userEmail) {
 // 残っていても誤送信しないよう、送信処理は行わず未送信行を無効化する。
 // ======================================================================
 
-var SCHEDULED_DISABLED_NOTE = '予約送信機能廃止により未送信のまま無効化しました';
+const SCHEDULED_DISABLED_NOTE = '予約送信機能廃止により未送信のまま無効化しました';
 
 function scheduleEmail(payload) {
   throw new Error('予約送信機能は廃止されました。下書き保存または即時送信を利用してください。');

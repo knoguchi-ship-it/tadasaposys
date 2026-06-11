@@ -9,7 +9,7 @@
 
 介護事業所向け無料 IT サポート管理システム。GAS 上の React SPA で、Google スプレッドシートをデータストアとして使用。
 
-- **現行バージョン:** v1.12.8
+- **現行バージョン:** v1.12.9
 - **詳細設計:** `docs/SDD.md`
 - **引き継ぎ書:** `docs/HANDOVER.md`
 - **運用手順:** `docs/RUNBOOK.md`
@@ -308,10 +308,10 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 |---------|------|
 | `CLAUDE.md` | Claude Code 専用指示 |
 | `AGENTS.md`（本ファイル） | OpenAI Codex 専用指示 |
-| `docs/SDD.md` | システム詳細設計書 v1.12.8 |
-| `docs/HANDOVER.md` | 引き継ぎ書 v1.12.8 |
+| `docs/SDD.md` | システム詳細設計書 v1.12.9 |
+| `docs/HANDOVER.md` | 引き継ぎ書 v1.12.9 |
 | `docs/ADR.md` | アーキテクチャ判断記録（ADR-001〜012） |
 | `docs/RUNBOOK.md` | 運用手順書 |
-| `docs/Manual.md` | 操作マニュアル v1.12.8 |
+| `docs/Manual.md` | 操作マニュアル v1.12.9 |
 | `CHANGELOG.md` | 変更履歴 |
 | `SECURITY.md` | セキュリティ情報 |

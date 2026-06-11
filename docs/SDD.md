@@ -1,8 +1,13 @@
-# システム詳細設計書 (SDD) — タダサポ管理システム v1.12.8
+# システム詳細設計書 (SDD) — タダサポ管理システム v1.12.9
 
-**Version:** 1.12.8
+**Version:** 1.12.9
 **Date:** 2026/06/11
 **Status:** Released
+
+> **v1.12.9 追補（R タスク／テスト拡充・設計影響なし）**
+> - **R3（虚偽UI文言の修正）**: 日程確定モーダルで、`updateSupportRecord` のカレンダーイベント作成が **Zoom / GoogleMeet のみ実装**である仕様を明文化。非Meet/Zoom方法（対面/電話等/メール等）では `useCalendar=ON` でもイベントは作成されないため、フロントの案内文言を「カレンダー登録は行われません（記録のみ）」へ修正（虚偽表示の解消）。**バックエンド挙動は不変**。全方法でのカレンダー登録実装は引継ぎ判断事項（HANDOVER §11 R3）。
+> - **R2（誤記訂正）**: `updateSupportHistory` は v1.9.72 から `ensureCaseEditableByActor_` で担当者本人・サブ担当・管理者以外を拒否済み（設計どおり）。
+> - **テスト拡充（T1/T2/R3）**: E2E を 51→61 件へ（日程確定モーダル / 管理ステータス遷移 / R3文言ガード）。**T3**: `コード.js` 最上位の不変定数を `const`／可変キャッシュを `let` に変換（無挙動）。データモデル・関数仕様の変更なし。
 
 > **v1.12.8 追補（S1 Stage4 有効化）**
 > - Stage4（Read 切替）を本番有効化。設定 `CASE_KEY_READ_VIA_MAP` を設定管理ダイアログの boolean トグルとして公開（ON で `getAllCasesJoined` の結合を case_id 経由に。既定OFF・OFFで即ロールバック）。Backfill 済み（136案件）・診断クリア（duplicateRecordFk=0）。Stage5（Contract）は便益<リスクのため**見送り**、コードは温存。

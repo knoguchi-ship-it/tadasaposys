@@ -169,7 +169,7 @@
     const IS_LOCAL = typeof google === 'undefined';
     const MOCK_USER = { name: 'テスト太郎', email: 'test@tadakayo.jp', isAdmin: true };
     const MOCK_MASTERS = {
-      methods: ['GoogleMeet', 'メール等', '電話等', '対面'],
+      methods: ['GoogleMeet', 'Zoom', 'メール等', '電話等', '対面'], // 本番 getMasters の zoomEnabled 時と同形状（index1にZoom）。日程確定のZoom機能をローカル/E2Eで再現するためのモック整備
       businessTypes: ['訪問介護', '通所介護', '居宅介護支援', '福祉用具貸与', '小規模多機能', '有料老人ホーム', 'その他'],
       prefectures: [
         '北海道', '青森県', '岩手県', '宮城県', '秋田県', '山形県', '福島県',
@@ -5186,12 +5186,18 @@
                               {editFormData.method === 'Zoom' ? '個人/共有カレンダーにも登録する' : 'Googleカレンダーに登録する'}
                             </span>
                           </label>
-                          {useCalendar && editFormData.method !== 'Zoom' && (
+                          {useCalendar && editFormData.method === 'GoogleMeet' && (
                             <p className="text-[10px] text-indigo-500 font-bold flex items-start gap-1 pl-6">
                               <Video size={12} className="shrink-0 mt-0.5"/>
-                              {editFormData.method === 'GoogleMeet'
-                                ? 'Meet URLが自動発行されカレンダーに登録されます。'
-                                : 'カレンダーに予定を登録します。'}
+                              Meet URLが自動発行されカレンダーに登録されます。
+                            </p>
+                          )}
+                          {/* R3: 非Meet/Zoom方法ではバックエンドがカレンダーイベントを作成しない（pre-existing・未実装）。
+                              実装するまでは虚偽表示を避け、登録されない旨を正しく注記する（カレンダー作成の実装可否は引継ぎ判断事項）。 */}
+                          {useCalendar && editFormData.method !== 'Zoom' && editFormData.method !== 'GoogleMeet' && (
+                            <p className="text-[10px] text-amber-600 font-bold flex items-start gap-1 pl-6">
+                              <AlertTriangle size={12} className="shrink-0 mt-0.5"/>
+                              この方法ではカレンダーへの予定登録は行われません（対応記録のみ保存されます）。
                             </p>
                           )}
                         </div>
