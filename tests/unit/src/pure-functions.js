@@ -162,9 +162,71 @@ function buildRecordMapFirstWins(records) {
   return map;
 }
 
+// ============================================================
+// S1 Stage1: 案件キーのサロゲート化（Expand 基盤）
+// 不安定な日付PK（String(Date) の TZ/型ブレ）を、エポックms基盤の
+// 正準自然キーへ収束させ、決定的サロゲート case_id を生成する。
+// 「Date オブジェクト」「同時刻の日時文字列」「取りこぼし経路」が
+// すべて同一 case_id に収束することがバグ根治の不変条件。
+// ============================================================
+
+// コード.js: canonicalNaturalKey_()
+// 案件PK（Date | "manual_<epoch>" | 日時文字列）を正準形へ。
+// 返り値: { sourceType:'form'|'manual', epoch:number, canonical:string } | null
+// 不正値（パース不能）は null を返し、呼び出し側でスキップ＝安全停止する。
+function canonicalNaturalKey(pkRaw) {
+  // フォーム案件: Sheet から読んだ Date オブジェクト → getTime() で安定化
+  if (pkRaw && typeof pkRaw.getTime === 'function') {
+    var t = pkRaw.getTime();
+    if (isNaN(t)) return null;
+    return { sourceType: 'form', epoch: t, canonical: String(t) };
+  }
+  var s = String(pkRaw == null ? '' : pkRaw).trim();
+  if (!s) return null;
+  // 手動追加案件: "manual_<エポックミリ秒>"
+  if (s.indexOf('manual_') === 0) {
+    var e = Number(s.slice('manual_'.length));
+    if (!isFinite(e)) return null;
+    return { sourceType: 'manual', epoch: e, canonical: 'manual_' + e };
+  }
+  // 日時文字列の救済（String(Date) で文字列化された不安定経路）→ form 扱い
+  var dt = new Date(s).getTime();
+  if (isNaN(dt)) return null;
+  return { sourceType: 'form', epoch: dt, canonical: String(dt) };
+}
+
+// コード.js: buildCaseId_()
+// 決定的サロゲートキー。同じ epoch から常に同じ case_id が再現するため
+// バックフィルが冪等になる（2026 idempotent-backfill ベストプラクティス）。
+function buildCaseId(epoch) {
+  return 'case_' + epoch;
+}
+
+// S1 Stage2: withScriptLock_ の再入ガードを GAS 非依存でモデル化したもの。
+// GAS の ScriptLock は再入不可（保持中の再 waitLock はデッドロック）。実行内
+// フラグで「既に保持中なら再取得せず実行」とし、ロック内チョークポイントから
+// getOrCreateCaseId_ 等を安全にネスト呼び出しできるようにする。
+// lock は { acquire(), release() } を持つ注入可能オブジェクト。
+function makeReentrantLock(lock) {
+  var held = false;
+  return function run(fn) {
+    if (held) return fn();
+    lock.acquire();
+    held = true;
+    try {
+      return fn();
+    } finally {
+      held = false;
+      lock.release();
+    }
+  };
+}
+
 module.exports = {
   getFiscalYear,
   caseFiscalYear,
+  canonicalNaturalKey,
+  buildCaseId,
   annualUsageKey,
   effectiveAnnualCount,
   parseNullablePositiveInteger,
@@ -178,4 +240,5 @@ module.exports = {
   parseScheduleBufferMin,
   selectFirstRecordIndexByFk,
   buildRecordMapFirstWins,
+  makeReentrantLock,
 };

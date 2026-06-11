@@ -21,6 +21,9 @@ const {
   parseScheduleBufferMin,
   selectFirstRecordIndexByFk,
   buildRecordMapFirstWins,
+  canonicalNaturalKey,
+  buildCaseId,
+  makeReentrantLock,
 } = require('./src/pure-functions');
 
 // ============================================================
@@ -485,5 +488,118 @@ describe('Stage0 重複FK行の選択（書込/表示の一致）', () => {
       { fk: '123', payload: { status: 'unhandled' } },
     ]);
     expect(map['123'].status).toBe('completed');
+  });
+});
+
+// ============================================================
+// S1 Stage1: 案件キーのサロゲート化（Expand 基盤）
+//   不安定な日付PK（String(Date) のTZ/型ブレ）を、エポックms基盤の
+//   正準自然キーへ収束させ、決定的サロゲート case_id を導出する。
+// ============================================================
+describe('S1 canonicalNaturalKey 正準自然キー', () => {
+  test('Date オブジェクトは getTime() の epoch で form として正準化', () => {
+    const d = new Date('2026-05-10T01:23:45.000Z');
+    const nk = canonicalNaturalKey(d);
+    expect(nk.sourceType).toBe('form');
+    expect(nk.epoch).toBe(d.getTime());
+    expect(nk.canonical).toBe(String(d.getTime()));
+  });
+
+  test('★根治不変条件: Date と「同時刻の日時文字列」は同一 case_id に収束', () => {
+    const d = new Date('2026-05-10T01:23:45.000Z');
+    const fromDate = canonicalNaturalKey(d);
+    // String(Date) 相当（TZ/型でブレうる不安定経路）でも同じ epoch に収束する
+    const fromString = canonicalNaturalKey(d.toISOString());
+    expect(buildCaseId(fromDate.epoch)).toBe(buildCaseId(fromString.epoch));
+    // 壊れた実装（String(Date)直結）なら表記差で case_id が割れて、ここで失敗する
+  });
+
+  test('manual_<epoch> は manual として解決', () => {
+    const nk = canonicalNaturalKey('manual_1715301825000');
+    expect(nk.sourceType).toBe('manual');
+    expect(nk.epoch).toBe(1715301825000);
+    expect(nk.canonical).toBe('manual_1715301825000');
+    expect(buildCaseId(nk.epoch)).toBe('case_1715301825000');
+  });
+
+  test('パース不能（空・null・NaN・不正manual）は null を返し安全停止', () => {
+    expect(canonicalNaturalKey('')).toBeNull();
+    expect(canonicalNaturalKey(null)).toBeNull();
+    expect(canonicalNaturalKey(undefined)).toBeNull();
+    expect(canonicalNaturalKey('manual_abc')).toBeNull();
+    expect(canonicalNaturalKey('これは日付ではない')).toBeNull();
+    expect(canonicalNaturalKey(new Date(NaN))).toBeNull();
+  });
+
+  test('冪等: 同一入力を2回正準化しても同じ case_id', () => {
+    const a = canonicalNaturalKey(new Date('2026-01-02T03:04:05Z'));
+    const b = canonicalNaturalKey(new Date('2026-01-02T03:04:05Z'));
+    expect(buildCaseId(a.epoch)).toBe(buildCaseId(b.epoch));
+  });
+
+  test('buildCaseId は決定的に case_<epoch> を返す', () => {
+    expect(buildCaseId(0)).toBe('case_0');
+    expect(buildCaseId(1715301825000)).toBe('case_1715301825000');
+  });
+});
+
+// ============================================================
+// S1 Stage2: Dual-write の正当性
+//   ・cross-stage 一致: Stage2(書込時の生PK) と Stage3 Backfill(同じ生PK)が
+//     同じ case_id に収束すること（重複マップ行を作らない不変条件）。
+//   ・再入ガード: ロック内チョークポイントから採番を呼んでもデッドロック
+//     せず、ロック取得は1回だけであること。
+// ============================================================
+describe('S1 Stage2 cross-stage 一致', () => {
+  test('フォーム案件: Date オブジェクトは Stage2/Stage3 で同一 case_id（getTime基準）', () => {
+    // Stage2(初回タッチ)も Stage3(Backfill)も CASES の生 Date オブジェクトを使う
+    const pk = new Date('2026-05-10T00:30:00.000Z');
+    const stage2 = canonicalNaturalKey(pk);
+    const stage3 = canonicalNaturalKey(pk);
+    expect(buildCaseId(stage2.epoch)).toBe(buildCaseId(stage3.epoch));
+  });
+
+  test('手動案件: manual_<epoch> 文字列は両ステージで同一 case_id', () => {
+    const pk = 'manual_1715301825000';
+    expect(buildCaseId(canonicalNaturalKey(pk).epoch))
+      .toBe(buildCaseId(canonicalNaturalKey(pk).epoch));
+    expect(canonicalNaturalKey(pk).sourceType).toBe('manual');
+  });
+});
+
+describe('S1 Stage2 再入ロックガード', () => {
+  function makeFakeLock() {
+    const log = [];
+    return {
+      log,
+      acquire() { log.push('acquire'); },
+      release() { log.push('release'); },
+    };
+  }
+
+  test('非ネストは acquire→release が1回ずつ', () => {
+    const lock = makeFakeLock();
+    const run = makeReentrantLock(lock);
+    const r = run(() => 42);
+    expect(r).toBe(42);
+    expect(lock.log).toEqual(['acquire', 'release']);
+  });
+
+  test('ネスト呼び出しでも acquire は1回だけ（デッドロック回避）', () => {
+    const lock = makeFakeLock();
+    const run = makeReentrantLock(lock);
+    const result = run(() => run(() => run(() => 'ok')));
+    expect(result).toBe('ok');
+    expect(lock.log).toEqual(['acquire', 'release']); // 二重取得しない
+  });
+
+  test('例外時もロックは解放され、フラグが残らない', () => {
+    const lock = makeFakeLock();
+    const run = makeReentrantLock(lock);
+    expect(() => run(() => { throw new Error('boom'); })).toThrow('boom');
+    expect(lock.log).toEqual(['acquire', 'release']);
+    // フラグが正しくクリアされ、次の取得が可能
+    run(() => 1);
+    expect(lock.log).toEqual(['acquire', 'release', 'acquire', 'release']);
   });
 });

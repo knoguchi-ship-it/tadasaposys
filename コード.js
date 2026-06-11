@@ -28,8 +28,12 @@ var SHEET_NAMES = {
   EMAIL_DRAFTS: 'メール下書き',  // v1.11.0: 送信前メール一時保存（担当者ごと）
   EMAIL_SCHEDULED: '予約送信キュー',  // v1.12.1: 予約送信は廃止。既存キューの無効化確認用に参照のみ残す
   AUDIT_LOG: '監査ログ',
-  ANNUAL_ADJUST: '年間利用補正'  // v1.12.4: 管理者による年度利用回数の手動補正（メール+年度ごとの補正量）
+  ANNUAL_ADJUST: '年間利用補正',  // v1.12.4: 管理者による年度利用回数の手動補正（メール+年度ごとの補正量）
+  CASE_KEY_MAP: '案件キーマップ'  // S1 Stage1: 案件の不変サロゲートID(case_id)と自然キーの対応表（参照整合性をコードで強制）
 };
+
+// S1 Stage1: 案件キーマップシートの列定義（A:案件ID, B:種別, C:自然キー_正準化, D:正規化メール, E:作成日時）
+var CASE_KEY_MAP_COL = { CASE_ID: 0, SOURCE_TYPE: 1, NATURAL_KEY: 2, EMAIL_NORM: 3, CREATED_AT: 4 };
 
 var IDX = {
   CASES: { PK: 0, EMAIL: 1, OFFICE: 2, NAME: 3, DETAILS: 4, PREFECTURE: 5, SERVICE: 6 },
@@ -316,14 +320,29 @@ function getCaseRecordRowIndex_(caseId) {
 // v1.12.6 Stage0: サポート記録への「検索→無ければ追記」を排他制御するスクリプトロック。
 // 競合・二重送信で複数実行が同時に rowIndex===-1 を見て二重追記する事故（重複行）を防ぐ。
 // 重い外部API（Zoom/Calendar/Gmail）は内側に入れず、シート検索＋追記のクリティカル区間のみ包むこと。
-function withRecordWriteLock_(fn) {
+// スクリプト全体で単一のグローバルロックを取得し、find-or-create 等の
+// 「読み→書き」を不可分化する汎用ヘルパー（v1.12.6 / S1で一般化）。
+//   ★再入ガード（S1 Stage2）: GAS の ScriptLock は再入不可（保持中に再度
+//   waitLock するとデッドロック→30秒でタイムアウト）。GAS実行は単一スレッドの
+//   ため、実行内フラグで「既に保持中なら再取得せず fn を実行」とすることで、
+//   ロック内チョークポイントから getOrCreateCaseId_ 等を安全にネスト呼び出しできる。
+var _scriptLockHeld = false;
+function withScriptLock_(fn) {
+  if (_scriptLockHeld) return fn(); // 既に同一実行でロック保持中 → 再取得しない
   var lock = LockService.getScriptLock();
   lock.waitLock(30000); // 最大30秒待機（高競合時は tryLock より waitLock が確実）
+  _scriptLockHeld = true;
   try {
     return fn();
   } finally {
+    _scriptLockHeld = false;
     lock.releaseLock();
   }
+}
+
+// サポート記録の検索→追記を排他化（重複行生成を防止）。withScriptLock_ に委譲（DRY）。
+function withRecordWriteLock_(fn) {
+  return withScriptLock_(fn);
 }
 
 function ensureCaseEditableByActor_(caseId, actor, allowUnassigned) {
@@ -372,6 +391,121 @@ function appendAuditLog_(actor, action, targetType, targetId, beforeObj, afterOb
     ]);
   } catch (e) {
     Logger.log('audit log failed: ' + e.message);
+  }
+}
+
+// ======================================================================
+// S1 Stage1: 案件キーマップ（案件の不変サロゲートID ↔ 自然キーの対応表）
+//   ★Expand 基盤。本 PR ではどの既存経路からも呼ばれない（未接続）。
+//   次段 Dual-write で案件作成・初回タッチ時に getOrCreateCaseId_ を接続する。
+// ======================================================================
+
+// 案件キーマップシートを取得（なければ作成）。getOrCreateAuditLogSheet_ と同型。
+function getOrCreateCaseKeyMapSheet_() {
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.CASE_KEY_MAP);
+  if (sheet) return sheet;
+  sheet = ss.insertSheet(SHEET_NAMES.CASE_KEY_MAP);
+  sheet.getRange(1, 1, 1, 5).setValues([[
+    '案件ID', '種別', '自然キー_正準化', '正規化メール', '作成日時'
+  ]]);
+  sheet.setFrozenRows(1);
+  return sheet;
+}
+
+// 案件の不変サロゲートID(case_id)を取得（なければ採番して登録）。冪等。
+//   - withScriptLock_ 内で find-or-create を不可分化（Sheetsは制約を強制できないためコードで強制）
+//   - (種別, 自然キー_正準化) を一意キーとして既存検索 → あれば既存 case_id を返す
+//   - 万一クロス種別で同 epoch（case_id衝突）かつ自然キー不一致なら連番サフィックスで回避
+function getOrCreateCaseId_(pkRaw, emailRaw) {
+  let nk = canonicalNaturalKey_(pkRaw);
+  if (!nk) return null; // パース不能は安全停止（呼び出し側でスキップ）
+  return withScriptLock_(function() {
+    let sheet = getOrCreateCaseKeyMapSheet_();
+    let data = sheet.getDataRange().getValues();
+    let usedCaseIds = {};
+    for (let i = 1; i < data.length; i++) {
+      let row = data[i];
+      let existingType = String(row[CASE_KEY_MAP_COL.SOURCE_TYPE]);
+      let existingNk = String(row[CASE_KEY_MAP_COL.NATURAL_KEY]);
+      let existingId = String(row[CASE_KEY_MAP_COL.CASE_ID]);
+      if (existingId) usedCaseIds[existingId] = true;
+      // 一意キー (種別, 自然キー_正準化) で既存一致 → 冪等に既存IDを返す
+      if (existingType === nk.sourceType && existingNk === nk.canonical) {
+        return existingId;
+      }
+    }
+    // 新規採番（決定的 case_<epoch>）。クロス種別epoch衝突時のみ連番で回避。
+    let caseId = buildCaseId_(nk.epoch);
+    if (usedCaseIds[caseId]) {
+      let suffix = 1;
+      while (usedCaseIds[caseId + '_' + suffix]) suffix++;
+      let collidedId = caseId;
+      caseId = caseId + '_' + suffix;
+      appendAuditLog_(
+        { email: 'system', name: 'case-key-map' },
+        'caseIdCollisionResolved', 'caseKeyMap', caseId,
+        { collidedWith: collidedId, sourceType: nk.sourceType }, { naturalKey: nk.canonical }
+      );
+    }
+    sheet.appendRow([
+      caseId, nk.sourceType, nk.canonical, normalizeEmail_(emailRaw), new Date()
+    ]);
+    return caseId;
+  });
+}
+
+// ----------------------------------------------------------------------
+// S1 Stage2: Dual-write（案件キーマップへの登録を書込チョークポイントに接続）
+//   ★additive・非致死: 案件キーマップへ追記するだけ。既存の読み取り・FK列・
+//   ユーザー操作の結果には一切影響しない。失敗しても本処理は止めない
+//   （未登録分は Stage3 Backfill が権威的に補完するため安全）。
+// ----------------------------------------------------------------------
+
+// caseId(=現行の自然キー文字列)から案件本体の「生PK＋依頼者メール」を解決する。
+//   フォーム案件は CASES の Date オブジェクトを、手動案件は CASES_MANUAL の
+//   "manual_<epoch>" 文字列をそのまま返す。これにより Stage2 と Stage3 Backfill が
+//   同一の正準化源を使い、同じ case_id に収束する（cross-stage 冪等）。
+function resolveCaseNaturalSource_(ss, caseIdStr) {
+  let caseSheet = ss.getSheetByName(SHEET_NAMES.CASES);
+  if (caseSheet && caseSheet.getLastRow() > 1) {
+    let cd = caseSheet.getDataRange().getValues();
+    for (let i = 1; i < cd.length; i++) {
+      let pk = cd[i][IDX.CASES.PK];
+      if (pk !== '' && pk != null && String(pk) === caseIdStr) {
+        return { pkRaw: pk, email: cd[i][IDX.CASES.EMAIL] };
+      }
+    }
+  }
+  let manualSheet = ss.getSheetByName(SHEET_NAMES.CASES_MANUAL);
+  if (manualSheet && manualSheet.getLastRow() > 1) {
+    let md = manualSheet.getDataRange().getValues();
+    for (let j = 1; j < md.length; j++) {
+      let mpk = md[j][IDX.CASES.PK];
+      if (mpk !== '' && mpk != null && String(mpk) === caseIdStr) {
+        return { pkRaw: mpk, email: md[j][IDX.CASES.EMAIL] };
+      }
+    }
+  }
+  return null; // 案件本体が見つからない（孤立FK等）
+}
+
+// 書込チョークポイントから呼ぶ非致死ラッパー。案件本体を権威解決して採番・登録する。
+//   pkRaw/email を直接渡せる場合（新規作成時など）はそれを優先し、再スキャンを避ける。
+function ensureCaseKeyMapping_(caseId, opt) {
+  try {
+    if (caseId === '' || caseId == null) return null;
+    if (opt && opt.pkRaw != null) {
+      // 新規作成パス: 生PKとメールが手元にあるので直接採番（スキャン不要）
+      return getOrCreateCaseId_(opt.pkRaw, opt.email);
+    }
+    let ss = getSpreadsheet_();
+    let resolved = resolveCaseNaturalSource_(ss, String(caseId));
+    if (!resolved) return null; // 案件本体なし → スキップ（Backfill対象外）
+    return getOrCreateCaseId_(resolved.pkRaw, resolved.email);
+  } catch (e) {
+    Logger.log('ensureCaseKeyMapping_ failed (non-fatal) caseId=' + caseId + ': ' + e.message);
+    return null;
   }
 }
 
@@ -452,6 +586,43 @@ function caseFiscalYear_(pkRaw) {
 // フォーム申込と管理者の手動追加案件を、同一メールアドレス + 同一年度で合算するために使用する（v1.12.3）。
 function annualUsageKey_(email, pkRaw) {
   return normalizeEmail_(email) + '_' + caseFiscalYear_(pkRaw);
+}
+
+// ======================================================================
+// S1 Stage1: 案件キーのサロゲート化（Expand 基盤 — 挙動ゼロ変化）
+//   不安定な日付PK（String(Date) の TZ/型ブレ）を、エポックms基盤の
+//   正準自然キーへ収束させ、決定的サロゲート case_id を導出する純粋ヘルパー。
+//   ※テスト同期先: tests/unit/src/pure-functions.js
+// ======================================================================
+
+// 案件PK（Date | "manual_<epoch>" | 日時文字列）を正準形へ。
+// 返り値: { sourceType:'form'|'manual', epoch:Number, canonical:String } | null
+// パース不能（NaN/空）は null を返し、呼び出し側でスキップ＝安全停止する。
+function canonicalNaturalKey_(pkRaw) {
+  // フォーム案件: Sheet から読んだ Date オブジェクト → getTime() で安定化
+  if (pkRaw && typeof pkRaw.getTime === 'function') {
+    let t = pkRaw.getTime();
+    if (isNaN(t)) return null;
+    return { sourceType: 'form', epoch: t, canonical: String(t) };
+  }
+  let s = String(pkRaw == null ? '' : pkRaw).trim();
+  if (!s) return null;
+  // 手動追加案件: "manual_<エポックミリ秒>"（caseFiscalYear_ の判定と整合）
+  if (s.indexOf('manual_') === 0) {
+    let e = Number(s.slice('manual_'.length));
+    if (!isFinite(e)) return null;
+    return { sourceType: 'manual', epoch: e, canonical: 'manual_' + e };
+  }
+  // 日時文字列の救済（String(Date) で文字列化された不安定経路）→ form 扱い
+  let dt = new Date(s).getTime();
+  if (isNaN(dt)) return null;
+  return { sourceType: 'form', epoch: dt, canonical: String(dt) };
+}
+
+// 決定的サロゲートキー。同じ epoch から常に同じ case_id が再現するため
+// バックフィルが冪等になる（2026 idempotent-backfill ベストプラクティス）。
+function buildCaseId_(epoch) {
+  return 'case_' + epoch;
 }
 
 // ======================================================================
@@ -643,6 +814,8 @@ function getAllCasesJoined() {
 function assignCase(caseId, user, tools) {
   let actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, true);
+
+  ensureCaseKeyMapping_(caseId); // S1 Stage2: 案件キーマップへ登録（additive・非致死）
 
   let toolsVal = Array.isArray(tools) && tools.length > 0 ? JSON.stringify(tools) : '[]';
 
@@ -1035,6 +1208,7 @@ function getOrCreateEmailHistorySheet_() {
  * メール送信履歴を記録する（内部ヘルパー）
  */
 function recordEmail_(caseId, user, recipientEmail, subject, body) {
+  ensureCaseKeyMapping_(caseId); // S1 Stage2: 案件キーマップへ登録（additive・非致死）
   let sheet = getOrCreateEmailHistorySheet_();
   sheet.appendRow([
     caseId,
@@ -2570,6 +2744,8 @@ function reassignCaseAdmin(caseId, staffEmail) {
     if (!targetStaff) throw new Error('対象スタッフが見つかりません。');
   }
 
+  ensureCaseKeyMapping_(caseId); // S1 Stage2: 案件キーマップへ登録（additive・非致死）
+
   // v1.12.6 Stage0: 検索→追記/更新を排他化（競合・二重送信による重複行を防止）
   return withRecordWriteLock_(function() {
   let ss     = getSpreadsheet_();
@@ -2875,6 +3051,7 @@ function setAnnualUsageCountAdmin(caseId, desiredCount) {
  * 該当行がなければ PK だけセットした新規行を追加してその行番号を返す。
  */
 function getOrCreateOverrideRowIndex_(sheet, caseId) {
+  ensureCaseKeyMapping_(caseId); // S1 Stage2: 案件キーマップへ登録（additive・非致死）
   let data = sheet.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][IDX.CASES_OVERRIDE.PK]) === String(caseId)) return i + 1;
@@ -2943,10 +3120,14 @@ function addManualCase(payload) {
     requesterName: payload.requesterName
   });
 
+  // S1 Stage2: 新規案件を案件キーマップへ登録（生PKとメールを直接渡す・additive・非致死）
+  ensureCaseKeyMapping_(pk, { pkRaw: pk, email: payload.email });
+
   return { pk: pk };
 }
 
 function ensureRecordRowForCase_(sheet, caseId) {
+  ensureCaseKeyMapping_(caseId); // S1 Stage2: 案件キーマップへ登録（additive・非致死。ロック外で自前ロック取得）
   // v1.12.6 Stage0: 検索→追記を排他化（競合・二重送信による重複行を防止）
   return withRecordWriteLock_(function() {
     let data = sheet.getDataRange().getValues();
@@ -4309,6 +4490,8 @@ function saveDraft(payload) {
   let staffEmail = actor.email;
   let sheet = ensureDraftsSheet_();
 
+  ensureCaseKeyMapping_(payload.caseId); // S1 Stage2: 案件キーマップへ登録（additive・非致死）
+
   let caseId = String(payload.caseId);
   let mode = String(payload.mode);
   let threadId = String(payload.threadId || '');
@@ -4637,5 +4820,95 @@ function getScheduledEmailTriggerStatus() {
     }
   }
   return { active: false };
+}
+
+// ======================================================================
+// S1 Stage1: 案件キー移行リコンサイル診断（読み取り専用・書込ゼロ）
+//   全案件（フォーム＋手動）を走査し、サロゲート化に向けた現状を報告する。
+//   ・案件総数 / マップ登録済 / 未登録（=Backfill 予定件数）
+//   ・正準化不能（安全停止）件数 / 重複自然キー / クロス種別epoch衝突
+//   ・サポート記録FKの重複（Stage0 の重複検出を流用）
+//   ・現行 String(PK) 結合キー → 将来 case_id の対応プレビュー（先頭20件）
+//   これが Stage3 Backfill 前のリコンサイル基準（pre/post 件数突合）になる。
+//   ※マップシートは存在する場合のみ読む（診断では作成しない＝完全な読み取り専用）。
+// ======================================================================
+function diagnoseCaseKeyMigration_() {
+  let ss = getSpreadsheet_();
+  let report = {
+    totalCases: 0, formCases: 0, manualCases: 0,
+    unparseable: 0, mappedCount: 0, unmappedCount: 0,
+    duplicateNaturalKeys: 0, crossTypeEpochCollisions: 0,
+    duplicateRecordFk: 0, recordRows: 0,
+    samples: []
+  };
+
+  // 既存マップ（あれば）を (種別|自然キー) → case_id で読む
+  let mapByNk = {};
+  let caseIdByEpoch = {}; // epoch → {sourceType,canonical} 衝突検出用
+  let mapSheet = ss.getSheetByName(SHEET_NAMES.CASE_KEY_MAP);
+  if (mapSheet && mapSheet.getLastRow() > 1) {
+    let md = mapSheet.getDataRange().getValues();
+    for (let i = 1; i < md.length; i++) {
+      let t = String(md[i][CASE_KEY_MAP_COL.SOURCE_TYPE]);
+      let nk = String(md[i][CASE_KEY_MAP_COL.NATURAL_KEY]);
+      mapByNk[t + '|' + nk] = String(md[i][CASE_KEY_MAP_COL.CASE_ID]);
+    }
+  }
+
+  // 全案件を走査
+  let caseSheet = ss.getSheetByName(SHEET_NAMES.CASES);
+  let manualSheet = ss.getSheetByName(SHEET_NAMES.CASES_MANUAL);
+  let allRows = [];
+  if (caseSheet && caseSheet.getLastRow() > 1) allRows = allRows.concat(caseSheet.getDataRange().getValues().slice(1));
+  if (manualSheet && manualSheet.getLastRow() > 1) allRows = allRows.concat(manualSheet.getDataRange().getValues().slice(1));
+
+  let seenNk = {};
+  for (let j = 0; j < allRows.length; j++) {
+    let pkRaw = allRows[j][IDX.CASES.PK];
+    if (pkRaw === '' || pkRaw == null) continue;
+    report.totalCases++;
+    let nk = canonicalNaturalKey_(pkRaw);
+    if (!nk) { report.unparseable++; continue; }
+    if (nk.sourceType === 'manual') report.manualCases++; else report.formCases++;
+
+    let nkKey = nk.sourceType + '|' + nk.canonical;
+    if (seenNk[nkKey]) report.duplicateNaturalKeys++; else seenNk[nkKey] = true;
+
+    // クロス種別epoch衝突（同一epochで自然キー/種別が異なる）
+    let prev = caseIdByEpoch[nk.epoch];
+    if (prev && (prev.sourceType !== nk.sourceType || prev.canonical !== nk.canonical)) {
+      report.crossTypeEpochCollisions++;
+    } else if (!prev) {
+      caseIdByEpoch[nk.epoch] = { sourceType: nk.sourceType, canonical: nk.canonical };
+    }
+
+    if (mapByNk[nkKey]) report.mappedCount++; else report.unmappedCount++;
+
+    if (report.samples.length < 20) {
+      report.samples.push({
+        currentJoinKey: String(pkRaw),
+        futureCaseId: buildCaseId_(nk.epoch),
+        sourceType: nk.sourceType,
+        mapped: !!mapByNk[nkKey]
+      });
+    }
+  }
+
+  // サポート記録FKの重複（Stage0 と同じ「最初の一致」採用前提の健全性確認）
+  let recordSheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  if (recordSheet && recordSheet.getLastRow() > 1) {
+    let rd = recordSheet.getDataRange().getValues();
+    report.recordRows = rd.length - 1;
+    let seenFk = {};
+    for (let k = 1; k < rd.length; k++) {
+      let fk = rd[k][IDX.RECORDS.FK];
+      if (fk === '' || fk == null) continue;
+      let sfk = String(fk);
+      if (seenFk[sfk]) report.duplicateRecordFk++; else seenFk[sfk] = true;
+    }
+  }
+
+  Logger.log('[案件キー移行診断] ' + JSON.stringify(report, null, 2));
+  return report;
 }
 

@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+### Added (S1 Stage1 — 案件キーのサロゲート化 / Expand 基盤)
+- 「管理アサイン後に完了しても未対応に戻る」バグの**根治**に向けた expand-contract 移行の第1段。不安定な日付PK（`String(Date)` のTZ/型ブレ）を、エポックms基盤の決定的サロゲート `case_id`（`case_<epoch>`）へ収束させる土台を導入。
+  - 新シート `案件キーマップ`（`getOrCreateCaseKeyMapSheet_`）: 案件ID ↔ 自然キーの対応表。`(種別, 自然キー_正準化)` を一意キーとしコードで強制。
+  - 採番ヘルパー `getOrCreateCaseId_(pkRaw, emailRaw)`: `withScriptLock_`（LockService 単一グローバルロック）で find-or-create を不可分化。同一自然キーに冪等、クロス種別epoch衝突は連番サフィックスで回避し監査ログに記録。
+  - 正準化ヘルパー `canonicalNaturalKey_(pkRaw)`（パース不能は `null` で安全停止）/ `buildCaseId_(epoch)`。`withRecordWriteLock_` を `withScriptLock_` に委譲（DRY）。
+  - 読み取り専用診断 `diagnoseCaseKeyMigration_()`: 案件総数/マップ登録済/未登録/重複自然キー/epoch衝突/FK重複/対応プレビューを報告（Stage3 Backfill 前のリコンサイル基準）。
+- **本番挙動ゼロ変化・未デプロイ**: `getOrCreateCaseId_` はどの既存経路からも未接続（Stage2 Dual-write で接続）。`案件リスト`（IMPORTRANGE）へは一切書き込まない。
+- 設計根拠（2026 調査）: expand-contract / 決定的キーによる冪等バックフィル / Sheets は制約を強制できないため UNIQUE はコード強制（単一get-or-create＋Lock＋重複監査）。
+
+### Tests
+- 単体テストに正準自然キーの収束（Date と同時刻の日時文字列が同一 case_id）・`manual_` 解決・NaN安全停止・冪等・決定性を6件追加。計 72→78 件。既存 E2E 51件・単体全件パス（回帰なし）。
+
+### Docs
+- `docs/er-after.dbml` を `case_<uuid>` → `case_<epoch>`（決定的）に訂正。`docs/SDD.md` に §S-09 案件キーマップ追加。`docs/HANDOVER.md` §11 S1 を「Stage1 完了・次=Stage2」に更新。
+
+### Added (S1 Stage2 — Dual-write 接続)
+- 書込チョークポイントから案件キーマップへ ID を登録する **dual-write** を接続（**additive・非致死・読み取り/FK列は不変**）。
+  - `withScriptLock_` に**再入ガード**（`_scriptLockHeld` 実行内フラグ）を追加。GAS の ScriptLock は再入不可（保持中の再 `waitLock` はデッドロック）のため、ロック内チョークポイントから採番を安全にネスト呼び出しできるようにした。既存コードの偶発ネストも堅牢化。
+  - `ensureCaseKeyMapping_(caseId, opt)`（非致死ラッパー）＋ `resolveCaseNaturalSource_`: caseId から案件本体の**生PK（フォーム=Date オブジェクト / 手動=`manual_<epoch>` 文字列）と依頼者メール**を権威解決し採番。Stage3 Backfill と同一の正準化源を使うため **cross-stage で同じ case_id に収束**（重複マップ行を作らない）。
+  - 接続点（7箇所）: `assignCase` / `reassignCaseAdmin` / `ensureRecordRowForCase_` / `recordEmail_` / `saveDraft` / `getOrCreateOverrideRowIndex_` / `addManualCase`（新規作成は生PKを直接渡しスキャン省略）。
+- **本番挙動ゼロ変化（案件キーマップへの追記のみ）・未デプロイ**。登録漏れは Stage3 Backfill が権威的に補完。
+
+### Tests (Stage2)
+- 再入ロックガード（非ネスト/ネスト1回取得/例外時解放）と cross-stage 一致（Date/manual が両ステージで同一 case_id）の単体テストを5件追加。計 78→83 件。E2E 51件パス（回帰なし）。
+
 ---
 
 ## [1.12.6] - 2026-06-11
