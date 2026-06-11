@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<title>S1 案件キー移行 検証ハーネス（コード.js 実ロジック）</title>
+<style>
+  body { font-family: ui-monospace, monospace; margin: 24px; line-height: 1.5; }
+  h1 { font-size: 18px; }
+  .pass { color: #15803d; font-weight: bold; }
+  .fail { color: #b91c1c; font-weight: bold; }
+  pre { background: #f1f5f9; padding: 12px; border-radius: 6px; overflow:auto; }
+  #summary { font-size: 20px; margin: 12px 0; }
+  li { margin: 2px 0; }
+</style>
+</head>
+<body>
+<h1>S1 案件キーのサロゲート化 — 実ロジック検証（本番GAS手動実行の代替）</h1>
+<p>コード.js を改変せずブラウザに読み込み、GAS APIをモックして実関数を実行する。
+既知の重複シナリオ（和みの家＝同一案件PKの重複サポート記録）を再現して検証する。</p>
+
+<div id="summary" data-testid="summary">実行中…</div>
+<h2>アサーション結果</h2>
+<ul id="results" data-testid="results"></ul>
+<h2>diagnoseCaseKeyMigration_() レポート</h2>
+<pre id="report" data-testid="report"></pre>
+<h2>案件キーマップ シート内容</h2>
+<pre id="mapdump" data-testid="mapdump"></pre>
+<h2>Logger 出力</h2>
+<pre id="logs" data-testid="logs"></pre>
+
+<!-- ① GAS グローバルAPIのモックを コード.js 読込前に定義する -->
+<script>
+(function () {
+  window.__logs = [];
+  // ---- MockSheet: 2次元配列(先頭=ヘッダ)を保持する最小スプレッドシート ----
+  function MockSheet(name, data) {
+    this.name = name;
+    this.data = data || []; // 配列の配列
+    this.frozenRows = 0;
+  }
+  MockSheet.prototype.getName = function () { return this.name; };
+  MockSheet.prototype.getLastRow = function () { return this.data.length; };
+  MockSheet.prototype.getLastColumn = function () {
+    return this.data.reduce(function (m, r) { return Math.max(m, r.length); }, 0);
+  };
+  MockSheet.prototype.getDataRange = function () {
+    var self = this;
+    return { getValues: function () { return self.data; } };
+  };
+  MockSheet.prototype.appendRow = function (row) { this.data.push(row.slice()); };
+  MockSheet.prototype.setFrozenRows = function (n) { this.frozenRows = n; };
+  MockSheet.prototype.getRange = function (row, col, numRows, numCols) {
+    var self = this;
+    return {
+      setValues: function (vals) {
+        for (var i = 0; i < vals.length; i++) {
+          var r = row - 1 + i;
+          if (!self.data[r]) self.data[r] = [];
+          for (var j = 0; j < vals[i].length; j++) self.data[r][col - 1 + j] = vals[i][j];
+        }
+        return this;
+      },
+      getValues: function () {
+        var out = [];
+        for (var i = 0; i < (numRows || 1); i++) {
+          var r = row - 1 + i, rowOut = [];
+          for (var j = 0; j < (numCols || 1); j++) rowOut.push(self.data[r] ? self.data[r][col - 1 + j] : '');
+          out.push(rowOut);
+        }
+        return out;
+      }
+    };
+  };
+
+  function MockSpreadsheet() { this.sheets = {}; }
+  MockSpreadsheet.prototype.getSheetByName = function (n) { return this.sheets[n] || null; };
+  MockSpreadsheet.prototype.insertSheet = function (n) {
+    var s = new MockSheet(n, []); this.sheets[n] = s; return s;
+  };
+  MockSpreadsheet.prototype.getSpreadsheetTimeZone = function () { return 'Asia/Tokyo'; };
+  MockSpreadsheet.prototype._add = function (sheet) { this.sheets[sheet.name] = sheet; };
+
+  // ---- 検証用シードデータ（既知の重複シナリオを含む） ----
+  var ss = new MockSpreadsheet();
+  window.__ss = ss;
+
+  // 案件リスト（フォーム案件・PKは Date オブジェクト）
+  var formA = new Date('2026-05-10T00:30:00+09:00'); // 和みの家
+  var formB = new Date('2026-04-01T10:00:00+09:00');
+  window.__formA = formA;
+  ss._add(new MockSheet('案件リスト', [
+    ['タイムスタンプ', '依頼者メール', '介護事業所名', '依頼者氏名', '相談内容', '都道府県', 'サービス種別'],
+    [formA, 'Masaki-Miyachi@Tadakayo.jp', '和みの家', '宮地', 'PC設定', '東京都', '訪問介護'],
+    [formB, 'taro@example.com', 'さくら園', '太郎', 'メール設定', '大阪府', '通所介護']
+  ]));
+
+  // 案件手動追加（PKは "manual_<epoch>" 文字列）
+  var manualEpoch = 1715300000000;
+  window.__manualId = 'manual_' + manualEpoch;
+  ss._add(new MockSheet('案件手動追加', [
+    ['PK', 'メールアドレス', '介護事業所名', 'お名前', '困りごと詳細', '都道府県', 'サービス種別'],
+    ['manual_' + manualEpoch, 'manual-user@example.com', '手動事業所', '花子', '相談', '京都府', '居宅介護']
+  ]));
+
+  // サポート記録（19列）— 和みの家に重複FK行を仕込む（バグ再現）
+  function recRow(fk, status, staff) {
+    return [fk, status, staff, staff ? '担当者' : '', null, 1, null, null, null, null,
+      '[]', null, null, null, '[]', '', '', '[]', '[]'];
+  }
+  ss._add(new MockSheet('サポート記録', [
+    ['案件ID', 'ステータス', '担当者メール', '担当者名', '実施予定日時', '対応回数', '対応方法',
+     '事業種別', '実施内容', '備考', '過去回JSON', 'イベントID', 'MeetURL', 'スレッドID',
+     '添付JSON', '案件上限特例', '年間上限特例', 'ツールJSON', 'サブ担当JSON'],
+    recRow(String(formA), 'completed', 'staff@tadakayo.jp'), // 完了行（書込/表示が指すべき行）
+    recRow(String(formA), 'unhandled', ''),                   // 重複残骸行（バグの元）
+    recRow('manual_' + manualEpoch, 'inProgress', 'staff@tadakayo.jp')
+  ]));
+
+  // ---- GAS グローバルAPI モック ----
+  window.SpreadsheetApp = { openById: function () { return ss; } };
+  window.LockService = { getScriptLock: function () { return { waitLock: function () {}, releaseLock: function () {} }; } };
+  window.Logger = { log: function (m) { window.__logs.push(String(m)); } };
+  window.console.warn = (function (orig) { return function () { window.__logs.push('[warn] ' + Array.prototype.join.call(arguments, ' ')); orig.apply(console, arguments); }; })(window.console.warn.bind(window.console));
+  window.Utilities = { formatDate: function (d) { return String(d); }, getUuid: function () { return 'uuid'; } };
+  window.SpreadsheetApp.flush = function () {};
+})();
+</script>
+
+<!-- ② コード.js を「無改変」で読み込む（サーバルート基準） -->
+<script src="/%E3%82%B3%E3%83%BC%E3%83%89.js"></script>
+
+<!-- ③ 実関数を呼び出して検証する -->
+<script>
+(function () {
+  var results = [];
+  function assert(name, cond, detail) {
+    results.push({ name: name, ok: !!cond, detail: detail || '' });
+  }
+
+  var report = null, err = null;
+  try {
+    var formA = window.__formA;
+    var manualId = window.__manualId;
+
+    // 1) 冪等性: 同一 Date を2回採番 → 同じ case_id・マップは1行のみ
+    var id1 = getOrCreateCaseId_(formA, 'x@example.com');
+    var id1b = getOrCreateCaseId_(formA, 'x@example.com');
+    assert('冪等: 同一Dateの2回採番が同じcase_id', id1 === id1b, id1 + ' / ' + id1b);
+    assert('case_id 形式が case_<epoch>', id1 === ('case_' + formA.getTime()), id1);
+
+    // 2) cross-stage 一致: 文字列caseIdを渡しても、生PK(Date)を権威解決し同一case_idへ収束
+    var idE = ensureCaseKeyMapping_(String(formA));
+    assert('cross-stage一致: 文字列caseId入力でも id1 と一致', idE === id1, idE + ' / ' + id1);
+
+    // 3) 手動案件: ensureCaseKeyMapping_ が CASES_MANUAL から解決し case_<epoch>
+    var idM = ensureCaseKeyMapping_(manualId);
+    assert('手動案件 case_id が case_<epoch>', idM === ('case_' + 1715300000000), idM);
+
+    // マップシートの行数（ヘッダ除く）= 2件（formA, manual）。formBは未タッチ
+    var mapSheet = window.__ss.getSheetByName('案件キーマップ');
+    var mapRows = mapSheet ? mapSheet.getDataRange().getValues() : [];
+    assert('案件キーマップは2案件のみ登録（重複登録なし）', (mapRows.length - 1) === 2, '行数=' + (mapRows.length - 1));
+    // email 正規化の確認（formAのメールは小文字化されて格納される＝最初の採番時の 'x@example.com'）
+    assert('email_norm が正規化済み', String(mapRows[1][3]) === 'x@example.com', String(mapRows[1][3]));
+
+    // 4) 診断（読み取り専用）
+    report = diagnoseCaseKeyMigration_();
+    assert('診断 totalCases=3', report.totalCases === 3, JSON.stringify(report.totalCases));
+    assert('診断 formCases=2 / manualCases=1', report.formCases === 2 && report.manualCases === 1, report.formCases + '/' + report.manualCases);
+    assert('診断 mappedCount=2 / unmappedCount=1（formB未登録）', report.mappedCount === 2 && report.unmappedCount === 1, report.mappedCount + '/' + report.unmappedCount);
+    assert('診断 duplicateRecordFk>=1（和みの家の重複行を検出）', report.duplicateRecordFk >= 1, 'dup=' + report.duplicateRecordFk);
+    assert('診断 unparseable=0 / crossTypeEpochCollisions=0', report.unparseable === 0 && report.crossTypeEpochCollisions === 0, report.unparseable + '/' + report.crossTypeEpochCollisions);
+
+    document.getElementById('mapdump').textContent = JSON.stringify(mapRows, null, 2);
+  } catch (e) {
+    err = e;
+    assert('例外なく完走する', false, e && e.message ? e.message : String(e));
+  }
+
+  // 描画
+  var ul = document.getElementById('results');
+  results.forEach(function (r) {
+    var li = document.createElement('li');
+    li.innerHTML = (r.ok ? '<span class="pass">PASS</span> ' : '<span class="fail">FAIL</span> ') + r.name + (r.detail ? ' — <code>' + r.detail + '</code>' : '');
+    ul.appendChild(li);
+  });
+  document.getElementById('report').textContent = report ? JSON.stringify(report, null, 2) : (err ? String(err && err.stack || err) : '(なし)');
+  document.getElementById('logs').textContent = window.__logs.join('\n');
+
+  var passed = results.filter(function (r) { return r.ok; }).length;
+  var total = results.length;
+  var allOk = passed === total;
+  var sum = document.getElementById('summary');
+  sum.textContent = (allOk ? '✅ ALL PASS' : '❌ FAIL') + '  (' + passed + '/' + total + ')';
+  sum.className = allOk ? 'pass' : 'fail';
+  // Playwright から機械可読に取得するための結果
+  window.__result = { allOk: allOk, passed: passed, total: total, results: results, report: report };
+})();
+</script>
+</body>
+</html>
