@@ -1,126 +1,133 @@
 // =====================================================================
 // タダサポ管理システム ER図（変更後 / サロゲートキー導入案）— DBML
 //   表示方法: https://dbdiagram.io に貼り付け
-//   テーブル名 = スプレッドシートのシート名
-//   headercolor: 緑=新規 / 橙=変更あり / 灰=変更なし
-//   作成日 2026-06-11
+//   テーブル名 = スプレッドシートのシート名 ／ カラム名 = 実列の日本語名
+//   各列の note に「物理列(A/B…)｜内部キー名」を併記
+//   headercolor: 緑=新規 / 橙=変更あり / 灰=変更なし   作成日 2026-06-11
+//
+//   ★重要（実装前提）: スプレッドシートは UNIQUE 制約を強制できないため、
+//     下記 [unique] は「コードで強制する意図の宣言」である。実効には
+//       (1) 全書込を単一の getOrCreateRecordRow_(案件ID) に集約
+//       (2) LockService による排他（find-or-create を不可分化）
+//       (3) 重複検出・マージの監査ツール（事後の防御網）
+//     を必須とする。サロゲートキー単体では競合由来の重複は防げない。
 // =====================================================================
 
 Table "案件キーマップ" [headercolor: #22c55e] {
-  "case_id" varchar [pk, note: '不変サロゲートキー case_<uuid>。全シートの唯一の結合キー']
-  "source_type" varchar [note: 'form / manual']
-  "natural_key" varchar [note: '正準化したフォーム日時 / manual_<epoch>（照会属性）']
-  "email_norm" varchar [note: '正規化メール（照会属性）']
-  "created_at" datetime
+  "案件ID" varchar [pk, note: 'A列｜case_id・不変サロゲートキー case_<uuid>。全シートの唯一の結合キー']
+  "種別" varchar [note: 'B列｜source_type（form＝フォーム / manual＝手動）']
+  "自然キー_正準化" varchar [note: 'C列｜natural_key・正準化したフォーム日時 / manual_<epoch>（照会属性）']
+  "正規化メール" varchar [note: 'D列｜email_norm・小文字化＋trim（照会属性）']
+  "作成日時" datetime [note: 'E列｜created_at']
   Indexes {
-    (source_type, natural_key) [unique, note: '同一案件の重複登録を防止（UNIQUE制約）']
+    ("種別", "自然キー_正準化") [unique, note: '★コードで強制：同一案件の重複登録を防止']
   }
   Note: '案件の不変IDを一元管理。フォーム/手動のキー差異をここで吸収し、参照整合性をコードで強制する'
 }
 
 Table "案件リスト" [headercolor: #94a3b8] {
-  "form_timestamp" datetime [note: '自然キー(属性化)・参照用。IMPORTRANGEのまま書込不可']
-  "EMAIL" varchar
-  "OFFICE" varchar
-  "NAME" varchar
-  "DETAILS" text
-  "PREFECTURE" varchar
-  "SERVICE" varchar
+  "タイムスタンプ" datetime [note: 'A列｜自然キー(属性化)・参照用。IMPORTRANGEのまま書込不可']
+  "依頼者メール" varchar [note: 'B列｜EMAIL']
+  "介護事業所名" varchar [note: 'C列｜OFFICE']
+  "依頼者氏名" varchar [note: 'D列｜NAME']
+  "相談内容" text [note: 'E列｜DETAILS']
+  "都道府県" varchar [note: 'F列｜PREFECTURE']
+  "サービス種別" varchar [note: 'G列｜SERVICE']
 }
 
 Table "案件手動追加" [headercolor: #94a3b8] {
-  "manual_pk" varchar [note: '自然キー(属性化)・manual_<epoch>']
-  "EMAIL" varchar
-  "OFFICE" varchar
-  "NAME" varchar
-  "DETAILS" text
-  "PREFECTURE" varchar
-  "SERVICE" varchar
+  "案件ID_手動" varchar [note: 'A列｜自然キー(属性化)・manual_<エポックミリ秒>']
+  "依頼者メール" varchar [note: 'B列｜EMAIL']
+  "介護事業所名" varchar [note: 'C列｜OFFICE']
+  "依頼者氏名" varchar [note: 'D列｜NAME']
+  "相談内容" text [note: 'E列｜DETAILS']
+  "都道府県" varchar [note: 'F列｜PREFECTURE']
+  "サービス種別" varchar [note: 'G列｜SERVICE']
 }
 
 Table "サポート記録" [headercolor: #f59e0b] {
-  "case_id" varchar [note: 'FK＝case_id(文字列・型一貫) ★変更。1案件1行をUNIQUEで保証']
-  "STATUS" varchar
-  "STAFF_EMAIL" varchar
-  "STAFF_NAME" varchar
-  "DATE" datetime
-  "COUNT" int
-  "METHOD" varchar
-  "BUSINESS" varchar
-  "CONTENT" text
-  "REMARKS" text
-  "HISTORY" json
-  "EVENT_ID" varchar
-  "MEET_URL" varchar
-  "THREAD_ID" varchar
-  "ATTACHMENTS" json
-  "CASE_LIMIT_OVERRIDE" int
-  "ANNUAL_LIMIT_OVERRIDE" int
-  "TOOLS" json
-  "SUB_STAFF" json
+  "案件ID" varchar [note: 'A列｜FK＝案件ID（文字列・型一貫）★変更。1案件1行をコードで保証']
+  "ステータス" varchar [note: 'B列｜STATUS']
+  "担当者メール" varchar [note: 'C列｜STAFF_EMAIL']
+  "担当者名" varchar [note: 'D列｜STAFF_NAME']
+  "実施予定日時" datetime [note: 'E列｜DATE']
+  "対応回数" int [note: 'F列｜COUNT']
+  "対応方法" varchar [note: 'G列｜METHOD']
+  "事業種別" varchar [note: 'H列｜BUSINESS']
+  "実施内容" text [note: 'I列｜CONTENT']
+  "備考" text [note: 'J列｜REMARKS']
+  "過去回の記録JSON" json [note: 'K列｜HISTORY']
+  "カレンダーイベントID" varchar [note: 'L列｜EVENT_ID']
+  "MeetまたはZoomのURL" varchar [note: 'M列｜MEET_URL']
+  "GmailスレッドID" varchar [note: 'N列｜THREAD_ID']
+  "添付ファイルJSON" json [note: 'O列｜ATTACHMENTS']
+  "案件回数上限の特例" int [note: 'P列｜CASE_LIMIT_OVERRIDE']
+  "年間利用上限の特例" int [note: 'Q列｜ANNUAL_LIMIT_OVERRIDE']
+  "対応ツールJSON" json [note: 'R列｜TOOLS']
+  "サブ担当JSON" json [note: 'S列｜SUB_STAFF']
   Indexes {
-    case_id [unique, note: '★追加: 1案件=1記録行を強制し重複行を構造的に防止']
+    "案件ID" [unique, note: '★追加(コードで強制)：1案件=1記録行を保証し重複行を構造的に防止']
   }
 }
 
 Table "案件補正" [headercolor: #f59e0b] {
-  "case_id" varchar [pk, note: 'FK＝case_id ★変更']
-  "EMAIL" varchar
-  "OFFICE" varchar
-  "NAME" varchar
-  "DETAILS" text
-  "PREFECTURE" varchar
-  "SERVICE" varchar
+  "案件ID" varchar [pk, note: 'A列｜FK＝案件ID ★変更']
+  "依頼者メール_補正" varchar [note: 'B列｜EMAIL・空欄=補正なし']
+  "介護事業所名_補正" varchar [note: 'C列｜OFFICE・空欄=補正なし']
+  "依頼者氏名_補正" varchar [note: 'D列｜NAME・空欄=補正なし']
+  "相談内容_補正" text [note: 'E列｜DETAILS・空欄=補正なし']
+  "都道府県_補正" varchar [note: 'F列｜PREFECTURE・空欄=補正なし']
+  "サービス種別_補正" varchar [note: 'G列｜SERVICE・空欄=補正なし']
 }
 
 Table "メール履歴" [headercolor: #f59e0b] {
-  "case_id" varchar [note: 'FK＝case_id ★変更']
-  "SEND_DATE" datetime
-  "SENDER_EMAIL" varchar
-  "SENDER_NAME" varchar
-  "RECIPIENT_EMAIL" varchar
-  "SUBJECT" varchar
-  "BODY" text
+  "案件ID" varchar [note: 'A列｜FK＝案件ID ★変更']
+  "送信日時" datetime [note: 'B列｜SEND_DATE']
+  "送信者メール" varchar [note: 'C列｜SENDER_EMAIL']
+  "送信者名" varchar [note: 'D列｜SENDER_NAME']
+  "宛先メール" varchar [note: 'E列｜RECIPIENT_EMAIL']
+  "件名" varchar [note: 'F列｜SUBJECT']
+  "本文" text [note: 'G列｜BODY']
 }
 
 Table "メール下書き" [headercolor: #f59e0b] {
-  "DRAFT_ID" varchar [pk]
-  "case_id" varchar [note: 'FK＝case_id ★変更']
-  "STAFF_EMAIL" varchar
-  "MODE" varchar
-  "THREAD_ID" varchar
-  "SUBJECT" varchar
-  "BODY" text
-  "CC" varchar
-  "BCC" varchar
-  "TOOLS" json
-  "UPDATED_AT" datetime
+  "下書きID" varchar [pk, note: 'A列｜DRAFT_ID']
+  "案件ID" varchar [note: 'B列｜FK＝案件ID ★変更']
+  "担当者メール" varchar [note: 'C列｜STAFF_EMAIL']
+  "モード" varchar [note: 'D列｜MODE']
+  "返信先スレッドID" varchar [note: 'E列｜THREAD_ID']
+  "件名" varchar [note: 'F列｜SUBJECT']
+  "本文" text [note: 'G列｜BODY']
+  "CC" varchar [note: 'H列｜CC']
+  "BCC" varchar [note: 'I列｜BCC']
+  "対応ツールJSON" json [note: 'J列｜TOOLS']
+  "最終更新日時" datetime [note: 'K列｜UPDATED_AT']
 }
 
 Table "年間利用補正" [headercolor: #94a3b8] {
-  "EMAIL" varchar
-  "FISCAL_YEAR" int
-  "ADJUSTMENT" int
-  "UPDATED_BY" varchar
-  "UPDATED_AT" datetime
+  "メールアドレス" varchar [note: 'A列｜EMAIL']
+  "年度" int [note: 'B列｜FISCAL_YEAR']
+  "補正値" int [note: 'C列｜ADJUSTMENT']
+  "更新者" varchar [note: 'D列｜UPDATED_BY']
+  "更新日時" datetime [note: 'E列｜UPDATED_AT']
   Indexes {
-    (EMAIL, FISCAL_YEAR) [pk]
+    ("メールアドレス", "年度") [pk]
   }
 }
 
 Table "タダメンマスタ" [headercolor: #94a3b8] {
-  "ID" varchar [pk]
-  "NAME" varchar
-  "EMAIL" varchar
-  "ROLE" varchar
-  "IS_ACTIVE" boolean
+  "スタッフID" varchar [pk, note: 'A列｜STAFF_ID']
+  "表示名" varchar [note: 'B列｜NAME']
+  "メール_認証キー" varchar [note: 'C列｜EMAIL・認証キー']
+  "権限ロール" varchar [note: 'D列｜ROLE']
+  "有効フラグ" boolean [note: 'E列｜IS_ACTIVE']
 }
 
-// --- リレーション（case_id による型一貫・参照整合性ありの結合） ---
-Ref: "サポート記録"."case_id" > "案件キーマップ"."case_id"
-Ref: "案件補正"."case_id"     > "案件キーマップ"."case_id"
-Ref: "メール履歴"."case_id"   > "案件キーマップ"."case_id"
-Ref: "メール下書き"."case_id" > "案件キーマップ"."case_id"
-Ref: "案件キーマップ"."natural_key" > "案件リスト"."form_timestamp"   // 自然キーで解決
-Ref: "案件キーマップ"."natural_key" > "案件手動追加"."manual_pk"       // 自然キーで解決
-Ref: "サポート記録"."STAFF_EMAIL" > "タダメンマスタ"."EMAIL"
+// --- リレーション（案件IDによる型一貫・参照整合性ありの結合） ---
+Ref: "サポート記録"."案件ID" > "案件キーマップ"."案件ID"
+Ref: "案件補正"."案件ID"     > "案件キーマップ"."案件ID"
+Ref: "メール履歴"."案件ID"   > "案件キーマップ"."案件ID"
+Ref: "メール下書き"."案件ID" > "案件キーマップ"."案件ID"
+Ref: "案件キーマップ"."自然キー_正準化" > "案件リスト"."タイムスタンプ"        // 自然キーで解決
+Ref: "案件キーマップ"."自然キー_正準化" > "案件手動追加"."案件ID_手動"          // 自然キーで解決
+Ref: "サポート記録"."担当者メール" > "タダメンマスタ"."メール_認証キー"

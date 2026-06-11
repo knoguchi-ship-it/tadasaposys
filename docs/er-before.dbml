@@ -1,111 +1,112 @@
 // =====================================================================
 // タダサポ管理システム ER図（変更前 / 現状）— DBML
 //   表示方法: https://dbdiagram.io に貼り付け
-//   テーブル名 = スプレッドシートのシート名
-//   headercolor: 赤=問題箇所 / 灰=変更なし
-//   作成日 2026-06-11
+//   テーブル名 = スプレッドシートのシート名 ／ カラム名 = 実列の日本語名
+//   各列の note に「物理列(A/B…)｜内部キー名」を併記
+//   headercolor: 赤=問題箇所 / 灰=変更なし   作成日 2026-06-11
 // =====================================================================
 
 Table "案件リスト" [headercolor: #ef4444] {
-  "PK_フォーム日時" datetime [pk, note: 'PK・フォーム送信日時(Dateオブジェクト)／IMPORTRANGE由来・書込不可']
-  "EMAIL" varchar
-  "OFFICE" varchar
-  "NAME" varchar
-  "DETAILS" text
-  "PREFECTURE" varchar
-  "SERVICE" varchar
-  Note: '主キーが時間的ナチュラルキー(Date)。String(Date)で外部キーと突合＝整合性保証なし（日付PKアンチパターン）'
+  "タイムスタンプ" datetime [pk, note: 'A列｜PK・主キー（フォーム送信日時／Dateオブジェクト）']
+  "依頼者メール" varchar [note: 'B列｜EMAIL']
+  "介護事業所名" varchar [note: 'C列｜OFFICE']
+  "依頼者氏名" varchar [note: 'D列｜NAME']
+  "相談内容" text [note: 'E列｜DETAILS']
+  "都道府県" varchar [note: 'F列｜PREFECTURE']
+  "サービス種別" varchar [note: 'G列｜SERVICE']
+  Note: 'フォーム回答をIMPORTRANGEで取込（書込禁止）。主キーが時間的ナチュラルキー(Date)で、String(Date)で突合＝整合性保証なし'
 }
 
 Table "案件手動追加" [headercolor: #ef4444] {
-  "PK_manual" varchar [pk, note: 'manual_<epoch> 文字列。案件リストとキー型・形式が異なる']
-  "EMAIL" varchar
-  "OFFICE" varchar
-  "NAME" varchar
-  "DETAILS" text
-  "PREFECTURE" varchar
-  "SERVICE" varchar
+  "案件ID_手動" varchar [pk, note: 'A列｜PK・manual_<エポックミリ秒> 文字列（案件リストとキー型が異なる）']
+  "依頼者メール" varchar [note: 'B列｜EMAIL']
+  "介護事業所名" varchar [note: 'C列｜OFFICE']
+  "依頼者氏名" varchar [note: 'D列｜NAME']
+  "相談内容" text [note: 'E列｜DETAILS']
+  "都道府県" varchar [note: 'F列｜PREFECTURE']
+  "サービス種別" varchar [note: 'G列｜SERVICE']
 }
 
 Table "サポート記録" [headercolor: #ef4444] {
-  "FK_案件PK" varchar [note: 'String(案件PK)。型不一致(Date↔String)を文字列強制で突合＝孤立化リスク']
-  "STATUS" varchar
-  "STAFF_EMAIL" varchar
-  "STAFF_NAME" varchar
-  "DATE" datetime
-  "COUNT" int
-  "METHOD" varchar
-  "BUSINESS" varchar
-  "CONTENT" text
-  "REMARKS" text
-  "HISTORY" json [note: '非1NF(JSON文字列)']
-  "EVENT_ID" varchar
-  "MEET_URL" varchar
-  "THREAD_ID" varchar
-  "ATTACHMENTS" json [note: '非1NF(JSON文字列)']
-  "CASE_LIMIT_OVERRIDE" int
-  "ANNUAL_LIMIT_OVERRIDE" int
-  "TOOLS" json [note: '非1NF(JSON文字列)']
-  "SUB_STAFF" json [note: '非1NF(JSON文字列)']
+  "案件PK_外部キー" varchar [note: 'A列｜FK・String(案件PK)。型不一致(Date↔String)を文字列強制で突合']
+  "ステータス" varchar [note: 'B列｜STATUS（unhandled/inProgress/completed/rejected/cancelled）']
+  "担当者メール" varchar [note: 'C列｜STAFF_EMAIL']
+  "担当者名" varchar [note: 'D列｜STAFF_NAME']
+  "実施予定日時" datetime [note: 'E列｜DATE']
+  "対応回数" int [note: 'F列｜COUNT']
+  "対応方法" varchar [note: 'G列｜METHOD']
+  "事業種別" varchar [note: 'H列｜BUSINESS']
+  "実施内容" text [note: 'I列｜CONTENT']
+  "備考" text [note: 'J列｜REMARKS']
+  "過去回の記録JSON" json [note: 'K列｜HISTORY・非1NF']
+  "カレンダーイベントID" varchar [note: 'L列｜EVENT_ID']
+  "MeetまたはZoomのURL" varchar [note: 'M列｜MEET_URL']
+  "GmailスレッドID" varchar [note: 'N列｜THREAD_ID・カンマ区切りで複数']
+  "添付ファイルJSON" json [note: 'O列｜ATTACHMENTS・非1NF・最大5件']
+  "案件回数上限の特例" int [note: 'P列｜CASE_LIMIT_OVERRIDE・null=全体設定']
+  "年間利用上限の特例" int [note: 'Q列｜ANNUAL_LIMIT_OVERRIDE・null=全体設定']
+  "対応ツールJSON" json [note: 'R列｜TOOLS・非1NF']
+  "サブ担当JSON" json [note: 'S列｜SUB_STAFF・非1NF・最大1名']
+  Note: '案件リストと 1:0-1 対応の想定だが、基盤がUNIQUEを強制できず重複行が発生し得る（今回の不具合）'
 }
 
 Table "案件補正" [headercolor: #94a3b8] {
-  "案件PK" varchar [pk, note: '案件PK文字列でキー']
-  "EMAIL" varchar
-  "OFFICE" varchar
-  "NAME" varchar
-  "DETAILS" text
-  "PREFECTURE" varchar
-  "SERVICE" varchar
+  "案件PK_外部キー" varchar [pk, note: 'A列｜PK・FK→案件リスト.タイムスタンプ（文字列）']
+  "依頼者メール_補正" varchar [note: 'B列｜EMAIL・空欄=補正なし']
+  "介護事業所名_補正" varchar [note: 'C列｜OFFICE・空欄=補正なし']
+  "依頼者氏名_補正" varchar [note: 'D列｜NAME・空欄=補正なし']
+  "相談内容_補正" text [note: 'E列｜DETAILS・空欄=補正なし']
+  "都道府県_補正" varchar [note: 'F列｜PREFECTURE・空欄=補正なし']
+  "サービス種別_補正" varchar [note: 'G列｜SERVICE・空欄=補正なし']
 }
 
 Table "メール履歴" [headercolor: #94a3b8] {
-  "CASE_ID" varchar [note: '案件PK文字列']
-  "SEND_DATE" datetime
-  "SENDER_EMAIL" varchar
-  "SENDER_NAME" varchar
-  "RECIPIENT_EMAIL" varchar
-  "SUBJECT" varchar
-  "BODY" text
+  "案件PK_外部キー" varchar [note: 'A列｜CASE_ID・FK（文字列）']
+  "送信日時" datetime [note: 'B列｜SEND_DATE']
+  "送信者メール" varchar [note: 'C列｜SENDER_EMAIL']
+  "送信者名" varchar [note: 'D列｜SENDER_NAME']
+  "宛先メール" varchar [note: 'E列｜RECIPIENT_EMAIL']
+  "件名" varchar [note: 'F列｜SUBJECT']
+  "本文" text [note: 'G列｜BODY']
 }
 
 Table "メール下書き" [headercolor: #94a3b8] {
-  "DRAFT_ID" varchar [pk]
-  "CASE_ID" varchar [note: '案件PK文字列']
-  "STAFF_EMAIL" varchar
-  "MODE" varchar
-  "THREAD_ID" varchar
-  "SUBJECT" varchar
-  "BODY" text
-  "CC" varchar
-  "BCC" varchar
-  "TOOLS" json
-  "UPDATED_AT" datetime
+  "下書きID" varchar [pk, note: 'A列｜DRAFT_ID・UUID（draft- 接頭辞）']
+  "案件PK_外部キー" varchar [note: 'B列｜CASE_ID・FK（文字列）']
+  "担当者メール" varchar [note: 'C列｜STAFF_EMAIL']
+  "モード" varchar [note: 'D列｜MODE（initial/new/reply/schedule/decline）']
+  "返信先スレッドID" varchar [note: 'E列｜THREAD_ID']
+  "件名" varchar [note: 'F列｜SUBJECT']
+  "本文" text [note: 'G列｜BODY']
+  "CC" varchar [note: 'H列｜CC']
+  "BCC" varchar [note: 'I列｜BCC']
+  "対応ツールJSON" json [note: 'J列｜TOOLS']
+  "最終更新日時" datetime [note: 'K列｜UPDATED_AT']
 }
 
 Table "年間利用補正" [headercolor: #94a3b8] {
-  "EMAIL" varchar
-  "FISCAL_YEAR" int
-  "ADJUSTMENT" int
-  "UPDATED_BY" varchar
-  "UPDATED_AT" datetime
+  "メールアドレス" varchar [note: 'A列｜EMAIL']
+  "年度" int [note: 'B列｜FISCAL_YEAR']
+  "補正値" int [note: 'C列｜ADJUSTMENT']
+  "更新者" varchar [note: 'D列｜UPDATED_BY']
+  "更新日時" datetime [note: 'E列｜UPDATED_AT']
   Indexes {
-    (EMAIL, FISCAL_YEAR) [pk]
+    ("メールアドレス", "年度") [pk]
   }
 }
 
 Table "タダメンマスタ" [headercolor: #94a3b8] {
-  "ID" varchar [pk]
-  "NAME" varchar
-  "EMAIL" varchar
-  "ROLE" varchar
-  "IS_ACTIVE" boolean
+  "スタッフID" varchar [pk, note: 'A列｜STAFF_ID']
+  "表示名" varchar [note: 'B列｜NAME']
+  "メール_認証キー" varchar [note: 'C列｜EMAIL・認証キー']
+  "権限ロール" varchar [note: 'D列｜ROLE（admin/staff）']
+  "有効フラグ" boolean [note: 'E列｜IS_ACTIVE']
 }
 
 // --- リレーション（すべて String(PK)==String(FK) の文字列強制突合・整合性保証なし） ---
-Ref: "サポート記録"."FK_案件PK" > "案件リスト"."PK_フォーム日時"
-Ref: "サポート記録"."FK_案件PK" > "案件手動追加"."PK_manual"
-Ref: "案件補正"."案件PK"      > "案件リスト"."PK_フォーム日時"
-Ref: "メール履歴"."CASE_ID"   > "案件リスト"."PK_フォーム日時"
-Ref: "メール下書き"."CASE_ID" > "案件リスト"."PK_フォーム日時"
-Ref: "サポート記録"."STAFF_EMAIL" > "タダメンマスタ"."EMAIL"
+Ref: "サポート記録"."案件PK_外部キー" > "案件リスト"."タイムスタンプ"
+Ref: "サポート記録"."案件PK_外部キー" > "案件手動追加"."案件ID_手動"
+Ref: "案件補正"."案件PK_外部キー"     > "案件リスト"."タイムスタンプ"
+Ref: "メール履歴"."案件PK_外部キー"   > "案件リスト"."タイムスタンプ"
+Ref: "メール下書き"."案件PK_外部キー" > "案件リスト"."タイムスタンプ"
+Ref: "サポート記録"."担当者メール"     > "タダメンマスタ"."メール_認証キー"
