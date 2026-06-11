@@ -1,8 +1,11 @@
-# システム詳細設計書 (SDD) — タダサポ管理システム v1.12.7
+# システム詳細設計書 (SDD) — タダサポ管理システム v1.12.8
 
-**Version:** 1.12.7
+**Version:** 1.12.8
 **Date:** 2026/06/11
 **Status:** Released
+
+> **v1.12.8 追補（S1 Stage4 有効化）**
+> - Stage4（Read 切替）を本番有効化。設定 `CASE_KEY_READ_VIA_MAP` を設定管理ダイアログの boolean トグルとして公開（ON で `getAllCasesJoined` の結合を case_id 経由に。既定OFF・OFFで即ロールバック）。Backfill 済み（136案件）・診断クリア（duplicateRecordFk=0）。Stage5（Contract）は便益<リスクのため**見送り**、コードは温存。
 
 > **v1.12.7 追補（S1: 案件キーのサロゲート化 Stage1〜3）**
 > - エポックms基盤の決定的サロゲート `case_id`（`case_<epoch>`）と `案件キーマップ` シート（§S-09）を導入。Stage1=Expand 基盤、Stage2=Dual-write（7チョークポイントで `ensureCaseKeyMapping_`・読取/FK列不変）、Stage3=冪等 Backfill（`backfillCaseKeyMap_`・既定 dryRun／管理画面から実行可能）。`withScriptLock_` に再入ガードを追加。Stage4 Read 切替・Stage5 Contract は後続。

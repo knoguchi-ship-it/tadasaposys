@@ -1,5 +1,5 @@
 /**
- * タダサポ管理システム - Backend Logic (v1.12.7)
+ * タダサポ管理システム - Backend Logic (v1.12.8)
  *
  * 概要:
  * - Google Spreadsheets をデータベースとして利用
@@ -2457,7 +2457,8 @@ function getEditableSettingsKeys_() {
     'DISPLAY_CALENDARS_JSON',
     'SCHEDULE_BUFFER_MIN',
     'SUPPORT_TOOLS',
-    'TOOL_MONTHLY_LIMITS'
+    'TOOL_MONTHLY_LIMITS',
+    'CASE_KEY_READ_VIA_MAP'
   ];
 }
 
@@ -2671,6 +2672,7 @@ function deactivateStaffMember(email) {
 
 // 設定キーの日本語項目名マップ（appendRow フォールバック時に使用）
 var SETTINGS_LABEL_MAP_ = {
+  CASE_KEY_READ_VIA_MAP:       '案件キーをcase_id経由で結合（S1 Stage4）',
   ANNUAL_USAGE_LIMIT:          '年度利用回数上限',
   CASE_USAGE_LIMIT:            '案件ごとの対応上限',
   MAIL_FORCE_CC:               '通常CCメールアドレス',
