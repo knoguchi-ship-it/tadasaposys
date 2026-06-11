@@ -292,6 +292,7 @@
       { email: 'inactive@tadakayo.jp', name: '無効メンバー', role: 'staff', isActive: false }
     ];
     let mockAdminSettings = {
+      CASE_KEY_READ_VIA_MAP: 'false',
       MAIL_FORCE_CC: '',
       ANNUAL_USAGE_LIMIT: '10',
       CASE_USAGE_LIMIT: '3',
@@ -2808,6 +2809,7 @@
       }, [adminPanelData, roleSearchWord, roleStatusFilter, getRoleStatusValue]);
 
       const settingsMeta = useMemo(() => ({
+        CASE_KEY_READ_VIA_MAP: { label: '案件キーをcase_id経由で結合（S1 Stage4）', category: 'other', order: 1, group: 'データ整合性', desc: 'ONにすると案件と記録の結合を不変IDで行い、日付キーの表記ブレを吸収します。既定OFF。問題時はOFFに戻すだけで即ロールバックできます。', type: 'boolean' },
         ANNUAL_USAGE_LIMIT: { label: '年度利用回数上限', category: 'limits', order: 1, desc: '1ユーザーの年度内対応上限' },
         CASE_USAGE_LIMIT: { label: '案件ごとの対応上限', category: 'limits', order: 2, desc: '1案件あたりの対応上限' },
         MAIL_FORCE_CC: { label: '通常CCメールアドレス（任意）', category: 'mail', order: 1, group: '共通設定', desc: '全メールのCCに追加されます（未設定可）' },

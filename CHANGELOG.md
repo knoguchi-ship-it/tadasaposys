@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+---
+
+## [1.12.8] - 2026-06-11
+
+### Changed (S1 Stage4 — 本番有効化手段)
+- 設定 `CASE_KEY_READ_VIA_MAP` を**設定管理ダイアログの boolean トグル**として公開（「その他」タブ／`getEditableSettingsKeys_` ＋ `settingsMeta` に追加）。管理者がアプリ上で ON/OFF でき、ON で読取結合が case_id 経由・OFF（既定）で従来挙動・**OFFで即ロールバック（無デプロイ）**。手動シート/GAS編集は不要。
+- 本番 Backfill 実行済み（既存 **136案件** に case_id 付与）・診断クリア（`duplicateRecordFk=0` / `unmappedCount=0` / `unparseable=0`）。バグの直接原因は本番から消失し**根治は実質完了**。
+- **Stage5（Contract＝識別子の case_id 置換・破壊的データ移行）は見送り**（便益<リスク）。Stage4 コードと case_id 基盤は将来の選択肢として温存。
+
 ### Added (S1 Stage4 — Read 切替 / フラグ既定OFF・挙動ゼロ変化)
 - `getAllCasesJoined` の内部結合キーを、設定フラグ `CASE_KEY_READ_VIA_MAP`（既定 `false`）で `String(PK)` → 正準 `case_id` へ切替可能にした。
   - 純粋ヘルパー `joinKeyForRead_(raw, viaMap)`: ON 時は `canonicalNaturalKey_`→`case_<epoch>`、パース不能は `String(raw)` フォールバック。記録FK／メールCASE_ID／補正PK／案件PK を同一規則で正準化し、**日付PKの表記ブレに起因する「同一案件が別行扱いになる」結合ズレを解消**。
