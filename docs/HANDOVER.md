@@ -12,7 +12,7 @@
 ### 本番稼働中
 
 - **URL**: `https://script.google.com/a/macros/tadakayo.jp/s/AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ/exec`
-- **本番デプロイバージョン**: @152（v1.12.6、2026/06/11 デプロイ。固定 deploymentId / URL 不変）
+- **本番デプロイバージョン**: @153（v1.12.7、2026/06/11 デプロイ。固定 deploymentId / URL 不変。S1 Stage1-3＝サロゲートキー基盤＋Dual-write＋Backfill手段。Backfill本実行はアプリの管理メニューから別途）
 - **Webapp 設定**: `executeAs: USER_ACCESSING` / `access: DOMAIN`（tadakayo.jp ドメインのみ）
 - **認証**: タダメンマスタ（B列=氏名, C列=メール, D列=ROLE）で認証
 
@@ -438,6 +438,7 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 | **v1.12.4** | 2026/06/03 | 年度利用回数の管理者手動修正: 案件詳細「今年度利用数」から実数を直接入力で補正（`年間利用補正` シート + `setAnnualUsageCountAdmin` 新設）。メール+年度単位で反映（@150 デプロイ済み） |
 | **v1.12.5** | 2026/06/09 | 管理担当者インライン変更のバグ修正: `handleAdminReassignInline` が API 戻り値を捕捉せず `result is not defined`（ReferenceError）で失敗していた問題を、共通ヘルパー `applyCaseTransitionResult` への集約（DRY）で修正。デッドコード削除＋回帰E2E追加（@151 デプロイ済み） |
 | **v1.12.6** | 2026/06/11 | 重複サポート記録による「完了しても未対応に戻る」事象の止血（Stage 0）: 表示の `recordMap` を「最初の一致」採用に統一し書込経路と一致＋`withRecordWriteLock_`（LockService）で検索→追記を排他化し重複行生成を防止。単体テスト4件追加（計72件）。根治（案件キーのサロゲート化）は後続 expand-contract 予定（@152 デプロイ済み） |
+| **v1.12.7** | 2026/06/11 | S1 案件キーのサロゲート化 Stage1-3（根治の段階移行）: 決定的サロゲート `case_id`（`case_<epoch>`）＋`案件キーマップ`シート（Expand）／7チョークポイントの Dual-write（additive・読取/FK列不変）／冪等 Backfill `backfillCaseKeyMap_`（既定dryRun・管理画面から実行可能）。`withScriptLock_` 再入ガード追加。単体72→88件・E2E51件パス＋Playwright MCP harness 16/16。**Backfill本実行は未実施**（@153 デプロイ済み） |
 
 ---
 
