@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>案件キー再設計 ER図（変更前／変更後・シート名ベース） — タダサポ管理システム</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true, theme: 'base', flowchart: { htmlLabels: true } });</script>
+<style>
+  body { font-family: "Segoe UI", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif; margin: 0; padding: 2rem; color: #1e293b; background: #f8fafc; line-height: 1.7; }
+  h1 { font-size: 1.6rem; border-bottom: 3px solid #f59e0b; padding-bottom: .5rem; }
+  h2 { font-size: 1.25rem; margin-top: 2.5rem; }
+  h2.before { color: #b91c1c; } h2.after { color: #15803d; }
+  .meta { color: #64748b; font-size: .85rem; }
+  .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1.25rem 1.5rem; margin: 1rem 0; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
+  .before { border-left: 5px solid #ef4444; } .after  { border-left: 5px solid #22c55e; }
+  .mermaid { background:#fff; border:1px solid #e2e8f0; border-radius:10px; padding:1rem; overflow-x:auto; text-align:center; }
+  .legend { display:flex; gap:1.25rem; flex-wrap:wrap; font-size:.85rem; margin:1rem 0; }
+  .legend span { display:inline-flex; align-items:center; gap:.4rem; }
+  .sw { width:18px; height:18px; border-radius:4px; display:inline-block; border:2px solid; }
+  .sw-new { background:#dcfce7; border-color:#22c55e; }
+  .sw-chg { background:#fef9c3; border-color:#f59e0b; }
+  .sw-prob{ background:#fee2e2; border-color:#ef4444; }
+  .sw-norm{ background:#f1f5f9; border-color:#94a3b8; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .9rem; }
+  th, td { border: 1px solid #e2e8f0; padding: .5rem .75rem; text-align: left; vertical-align: top; }
+  th { background: #f1f5f9; }
+  code { background: #f1f5f9; padding: .1rem .35rem; border-radius: 4px; font-size: .85em; }
+  .bad { color:#b91c1c; font-weight:bold; } .good { color:#15803d; font-weight:bold; }
+</style>
+</head>
+<body>
+
+<h1>案件キー再設計 ER図 — 変更前／変更後（実シート名ベース）</h1>
+<p class="meta">タダサポ管理システム ／ 作成日 2026-06-11 ／ テーブル名＝スプレッドシートのシート名 ／ 評価基準: 2026 DB設計BP・DAMA-DMBOK・ISO/IEC 25012・ISO 8000</p>
+
+<div class="legend">
+  <span><i class="sw sw-prob"></i> 問題箇所（変更前）</span>
+  <span><i class="sw sw-new"></i> 新規追加（変更後）</span>
+  <span><i class="sw sw-chg"></i> 変更あり（変更後）</span>
+  <span><i class="sw sw-norm"></i> 変更なし</span>
+</div>
+
+<!-- ============ 変更前 ============ -->
+<h2 class="before">① 変更前（現状）</h2>
+<div class="card before">
+<div class="mermaid">
+flowchart LR
+  CASES["<b>案件リスト</b><br/>PK = フォーム日時【Date型】<br/>EMAIL / OFFICE / SERVICE<br/><i>※IMPORTRANGE・書込不可</i>"]
+  MANUAL["<b>案件手動追加</b><br/>PK = manual_(epoch)【文字列】<br/>EMAIL / OFFICE"]
+  RECORDS["<b>サポート記録</b><br/>FK = String(案件PK)【文字列】<br/>STATUS / STAFF_EMAIL / STAFF_NAME<br/>HISTORY・ATTACHMENTS・TOOLS・SUB_STAFF = JSON文字列"]
+  OVERRIDE["<b>案件補正</b><br/>キー = 案件PK文字列"]
+  EMAILH["<b>メール履歴</b><br/>キー = 案件PK文字列"]
+  ANNUAL["<b>年間利用補正</b><br/>キー = 正規化メール + 年度"]
+
+  CASES  -- "String&#40;PK&#41;==String&#40;FK&#41;｜文字列強制（整合性保証なし）" --> RECORDS
+  MANUAL -- "manual_epoch 文字列" --> RECORDS
+  CASES  -- "PK文字列" --> OVERRIDE
+  CASES  -- "PK文字列" --> EMAILH
+
+  classDef problem fill:#fee2e2,stroke:#ef4444,stroke-width:2.5px,color:#7f1d1d;
+  classDef normal  fill:#f1f5f9,stroke:#94a3b8,color:#1e293b;
+  class CASES,MANUAL,RECORDS problem;
+  class OVERRIDE,EMAILH,ANNUAL normal;
+  linkStyle 0 stroke:#ef4444,stroke-width:3px,color:#b91c1c;
+</div>
+<table>
+<tr><th>問題</th><th>該当標準</th><th>影響</th></tr>
+<tr><td class="bad">主キー＝可変表現の時間的ナチュラルキー（Date）</td><td>2026 BP「安定・不変・最小」／日付PKアンチパターン</td><td>String(Date)表現がTZ/型強制依存で不安定</td></tr>
+<tr><td class="bad">PK=Date／FK=String を文字列強制で突合</td><td>DMBOK Consistency／ISO25012 Precision</td><td>Sheets日付自動変換で同一性が崩れる</td></tr>
+<tr><td class="bad">参照整合性を基盤が強制できない</td><td>DMBOK Integrity／2026 BP orphaned-record防止</td><td><b>孤立レコード発生＝今回の症状</b></td></tr>
+<tr><td class="bad">案件リスト=Date／案件手動追加=文字列 の混在</td><td>DMBOK Consistency</td><td>キー解決が分岐・後追い吸収</td></tr>
+</table>
+</div>
+
+<!-- ============ 変更後 ============ -->
+<h2 class="after">② 変更後（サロゲートキー導入 ＋ 参照整合性のコード強制）</h2>
+<div class="card after">
+<div class="mermaid">
+flowchart LR
+  MAP["<b>案件キーマップ</b> 〔新規〕<br/>case_id = 不変サロゲート case_(uuid) ★PK<br/>source_type = form / manual<br/>natural_key = 正準化日時 / manual_epoch<br/>email_norm = 正規化メール"]
+  CASES["<b>案件リスト</b><br/>form_timestamp【Date】→ 自然キー(属性化)<br/>EMAIL / OFFICE / SERVICE"]
+  MANUAL["<b>案件手動追加</b><br/>manual_pk → 属性化"]
+  RECORDS["<b>サポート記録</b><br/>case_id = FK【文字列・型一貫】★変更<br/>STATUS / STAFF_EMAIL / STAFF_NAME"]
+  OVERRIDE["<b>案件補正</b><br/>case_id = FK ★変更"]
+  EMAILH["<b>メール履歴</b><br/>case_id = FK ★変更"]
+  ANNUAL["<b>年間利用補正</b><br/>キー = 正規化メール + 年度（不変）"]
+
+  CASES  -- "自然キー → case_id 解決" --> MAP
+  MANUAL -- "解決" --> MAP
+  MAP -- "case_id（型一貫・参照整合性あり）" --> RECORDS
+  MAP -- "case_id" --> OVERRIDE
+  MAP -- "case_id" --> EMAILH
+
+  classDef newt    fill:#dcfce7,stroke:#22c55e,stroke-width:2.5px,color:#14532d;
+  classDef changed fill:#fef9c3,stroke:#f59e0b,stroke-width:2.5px,color:#78350f;
+  classDef normal  fill:#f1f5f9,stroke:#94a3b8,color:#1e293b;
+  class MAP newt;
+  class RECORDS,OVERRIDE,EMAILH changed;
+  class CASES,MANUAL,ANNUAL normal;
+  linkStyle 2 stroke:#22c55e,stroke-width:3px,color:#15803d;
+</div>
+<table>
+<tr><th>是正</th><th>適合標準</th><th>効果</th></tr>
+<tr><td class="good">不変サロゲート case_id を唯一の結合キーに</td><td>2026 BP／サロゲート主流見解</td><td>表現が安定・型一貫・突合が決定的</td></tr>
+<tr><td class="good">FKは常に case_id 文字列（Date型を格納しない）</td><td>DMBOK Consistency／ISO Precision</td><td>孤立レコードの構造的発生源を除去</td></tr>
+<tr><td class="good">案件キーマップでフォーム/手動を一元解決</td><td>DMBOK Consistency</td><td>キー分岐ロジックを一本化</td></tr>
+<tr><td class="good">参照整合性をコード強制＋孤立検出ツール</td><td>DMBOK Integrity</td><td>orphaned-record監査・修復が可能</td></tr>
+</table>
+</div>
+
+<h2>③ 変更サマリ（シート単位）</h2>
+<div class="card">
+<table>
+<tr><th>シート</th><th>変更前</th><th>変更後</th><th>区分</th></tr>
+<tr><td><b>案件キーマップ</b></td><td>—（無し）</td><td>case_id(サロゲートPK)・natural_key・email_norm を保持する解決テーブル</td><td class="good">新規</td></tr>
+<tr><td><b>サポート記録</b></td><td>FK = String(案件PK)（Date由来文字列）</td><td>FK = case_id（文字列・型一貫）</td><td style="color:#b45309;font-weight:bold;">変更</td></tr>
+<tr><td><b>案件補正</b></td><td>キー = 案件PK文字列</td><td>キー = case_id</td><td style="color:#b45309;font-weight:bold;">変更</td></tr>
+<tr><td><b>メール履歴</b></td><td>キー = 案件PK文字列</td><td>キー = case_id</td><td style="color:#b45309;font-weight:bold;">変更</td></tr>
+<tr><td><b>案件リスト</b></td><td>PK = フォーム日時(Date)</td><td>自然キーとして属性化（IMPORTRANGEのまま・書込不可維持）</td><td>役割変更のみ</td></tr>
+<tr><td><b>案件手動追加</b></td><td>PK = manual_(epoch)</td><td>natural_key属性として案件キーマップで解決</td><td>役割変更のみ</td></tr>
+<tr><td><b>年間利用補正</b></td><td>メール+年度キー</td><td>変更なし</td><td>—</td></tr>
+</table>
+</div>
+
+<h2>④ 移行の考え方（既存ハードルールと両立）</h2>
+<div class="card">
+<ul>
+  <li><b>案件リストはIMPORTRANGEで書込不可</b> → 列追加せず <code>案件キーマップ</code>（新規シート）で <code>自然キー→case_id</code> を管理。</li>
+  <li><b>URL不変・固定deploymentId</b> → 配信構成は不変。突合は <code>canonicalCaseKey_()</code> に統一。</li>
+  <li><b>段階導入</b>（各段階でE2E回帰必須）: ①正準化＋孤立検出で<b>止血</b> → ②案件キーマップ導入＋FKバックフィル → ③FKをcase_idへ切替。</li>
+</ul>
+</div>
+
+</body>
+</html>

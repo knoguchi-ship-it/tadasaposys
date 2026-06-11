@@ -4608,3 +4608,60 @@ function getScheduledEmailTriggerStatus() {
   return { active: false };
 }
 
+// ======================================================================
+// 【一時・読み取り専用】孤立レコード追跡（診断用 / 本番データ無改変）
+//   GASエディタから手動実行し、実行ログを確認する。
+//   サポート記録(FK)に対応する案件PKが存在しない「孤立行」を列挙する。
+//   診断完了後はこの関数を削除すること（恒久コードではない）。
+// ======================================================================
+function trace_orphanRecords_readonly() {
+  var ss = getSpreadsheet_();
+  var out = [];
+  var targetEmail = 'masaki-miyachi@tadakayo.jp';
+  var norm = function(v){ return String(v == null ? '' : v).trim().toLowerCase(); };
+
+  // ── 1) 全案件PK集合を構築（フォーム案件＋手動案件）。型情報も保持 ──
+  var pkSet = {};
+  [['案件リスト', ss.getSheetByName(SHEET_NAMES.CASES)],
+   ['案件手動追加', ss.getSheetByName(SHEET_NAMES.CASES_MANUAL)]].forEach(function(pair){
+    var label = pair[0], sh = pair[1];
+    if (!sh || sh.getLastRow() < 2) return;
+    var d = sh.getDataRange().getValues();
+    for (var i = 1; i < d.length; i++) {
+      var pk = d[i][IDX.CASES.PK];
+      if (pk === '' || pk == null) continue;
+      var s = String(pk);
+      pkSet[s] = true;
+      if (norm(d[i][IDX.CASES.EMAIL]) === norm(targetEmail) ||
+          String(d[i][IDX.CASES.OFFICE]||'').indexOf('和み') !== -1) {
+        out.push('[対象案件:' + label + ' 行' + (i+1) + '] office="' + d[i][IDX.CASES.OFFICE] +
+          '" email="' + d[i][IDX.CASES.EMAIL] + '"\n   PK type=' + (typeof pk) +
+          (pk && pk.getTime ? '(Date) getTime=' + pk.getTime() : '') +
+          '\n   String(PK)="' + s + '"');
+      }
+    }
+  });
+
+  // ── 2) サポート記録を全走査。FKが案件PK集合に無い＝孤立 ──
+  out.push('--- 孤立レコード（FKに対応する案件PKが存在しない行） ---');
+  var rd = ss.getSheetByName(SHEET_NAMES.RECORDS).getDataRange().getValues();
+  var orphanCount = 0;
+  for (var j = 1; j < rd.length; j++) {
+    var fk = rd[j][IDX.RECORDS.FK];
+    if (fk === '' || fk == null) continue;
+    var sfk = String(fk);
+    if (pkSet[sfk]) continue;
+    orphanCount++;
+    out.push('⚠孤立 [記録 行' + (j+1) + '] FK type=' + (typeof fk) +
+      (fk && fk.getTime ? '(Date) getTime=' + fk.getTime() : '') +
+      '\n   String(FK)="' + sfk + '"' +
+      '\n   status="' + String(rd[j][IDX.RECORDS.STATUS]||'') + '"' +
+      ' staffEmail="' + String(rd[j][IDX.RECORDS.STAFF_EMAIL]||'') + '"' +
+      ' staffName="' + String(rd[j][IDX.RECORDS.STAFF_NAME]||'') + '"' +
+      ' date="' + String(rd[j][IDX.RECORDS.DATE]||'') + '"');
+  }
+  out.push('孤立レコード総数: ' + orphanCount + ' 件 / 記録総行数: ' + (rd.length - 1));
+
+  Logger.log(out.join('\n'));
+}
+
