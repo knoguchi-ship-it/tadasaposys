@@ -1,6 +1,6 @@
 {
   "name": "tadasaposys",
-  "version": "1.12.5",
+  "version": "1.12.6",
   "description": "タダサポ管理システム — E2E テスト",
   "private": true,
   "scripts": {

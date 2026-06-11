@@ -1,8 +1,13 @@
-# システム詳細設計書 (SDD) — タダサポ管理システム v1.12.5
+# システム詳細設計書 (SDD) — タダサポ管理システム v1.12.6
 
-**Version:** 1.12.5
-**Date:** 2026/06/09
+**Version:** 1.12.6
+**Date:** 2026/06/11
 **Status:** Released
+
+> **v1.12.6 追補（重複サポート記録による表示不整合の止血 / Stage 0）**
+> - 事象: 管理アサイン後に完了しても画面が「未対応・担当者未設定」に戻る。根因はサポート記録に同一案件PKの**重複行**が生じた際、書き込み（`assignCase`/`reassignCaseAdmin`/`updateSupportRecord` の `for…break`＝**最初の一致行**）と表示（`getAllCasesJoined` の `recordMap`＝**最後の一致行**で上書き）が別行を指すこと。
+> - 対策（スキーマ変更なし）: ①表示の `recordMap` を「最初の一致」採用に統一し書き込み経路と一致（重複FK検出時に整合性警告ログ）。②サポート記録への「検索→追記/更新」を新ヘルパー `withRecordWriteLock_`（`LockService`）で排他化し、競合・二重送信による重複行生成を防止。
+> - 根治（不安定な日付PKのサロゲート `case_id` 化）は後続の expand-contract 移行で対応予定。ER設計案: `docs/er-before.dbml` / `docs/er-after.dbml`。
 
 > **v1.12.5 追補（管理担当者インライン変更の不具合修正）**
 > - 設計変更なし（バグ修正のみ）。管理モードの担当者インライン変更 `handleAdminReassignInline` が API 戻り値を捕捉せず `result is not defined`（ReferenceError）で失敗していた問題を、共通ヘルパー `applyCaseTransitionResult` への集約（DRY）で修正。デッドコード（未使用 `inlineStaff`・重複 `recalcFiscalYearCounts`）削除。回帰 E2E（`tests/e2e/06-admin-features.spec.ts`）を追加。

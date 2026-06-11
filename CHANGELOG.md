@@ -4,6 +4,21 @@
 
 ---
 
+## [1.12.6] - 2026-06-11
+
+### Fixed
+- **管理アサイン後に完了しても画面が「未対応・担当者未設定」に戻る不具合を修正（止血）**: サポート記録に同一案件PKの重複行が生じると、書き込み（`assignCase`/`reassignCaseAdmin`/`updateSupportRecord` の `for…break`＝最初の一致行）と表示（`getAllCasesJoined` の `recordMap`＝最後の一致行で上書き）が別行を指し、完了済みでも空の残骸行が表示されていた。
+  - 表示側 `recordMap` を「最初の一致」採用に統一し、書き込み経路と一致させた（重複FK検出時に整合性警告ログを出力）。
+  - サポート記録への「検索→追記/更新」を `withRecordWriteLock_`（`LockService` スクリプトロック）で排他化し、競合・二重送信による重複行生成を防止（`assignCase` / `reassignCaseAdmin` / `ensureRecordRowForCase_`）。
+
+### Tests
+- 単体テストに first-wins 不変条件（重複FK時に書き込みと表示が同一行を指す）を4件追加。計 68→72 件。
+
+### Notes
+- 本リリースは**止血（Stage 0）**。不安定な日付PK（`String(Date)` のTZ/型ブレ）の根治＝サロゲート `case_id`（エポックms基盤）化は、後続の expand-contract 移行（Stage 1 以降）で対応予定。設計案は `docs/er-before.dbml` / `docs/er-after.dbml`。
+
+---
+
 ## [1.12.5] - 2026-06-09
 
 ### Fixed
