@@ -400,6 +400,7 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 
 | ID | 内容 | 優先度 | メモ |
 |----|------|--------|------|
+| **S1** | **案件キーのサロゲート化（根治・expand-contract移行）** | **高** | v1.12.6 は止血(Stage0)のみ。根因＝不安定な日付PKを `String()` 突合し Sheets が UNIQUE を強制できないこと。エポックms基盤の不変 `case_id` を導入し `案件キーマップ` シートで一元解決。**Expand→Dual-write→Backfill→Read切替→Contract** で段階移行。設計: `docs/er-after.dbml`。各段E2E回帰＋ロールバック、Backfill以降（本番データ変更）の前で必ず停止。詳細・根因はメモリ `project_case_key_duplicate_bug.md` |
 | R1 | 管理機能不整合データの修復スクリプト | 中 | v1.11.5 以前のデータが対象。過去の不整合を一括検出・補正 |
 | R2 | `updateSupportHistory` 担当者チェック追加 | 中 | 担当者以外の過去履歴編集をブロック |
 | **R3** | **GoogleMeet 以外でのカレンダー登録未実装の修正** | **中** | 電話/対面/メール等で useCalendar=ON にしてもイベント未作成（pre-existing バグ） |
