@@ -78,7 +78,7 @@
 | アプリ内ヘルプ | ✅ | v1.9.83 |
 | 楽観的更新・初期データHTML埋め込みによる高速化 | ✅ | v1.9.67 |
 | **管理機能ステータス遷移の完全修正** | ✅ | **v1.11.6** |
-| **Playwright E2E テストスイート（61テスト）** | ✅ | **v1.11.5〜（T1/T2 で +8）** |
+| **Playwright E2E テストスイート（61テスト）** | ✅ | **v1.11.5〜（T1/T2/R3 で +10）** |
 | **Jest 単体テスト（92テスト）** | ✅ | **v1.12.0〜** |
 | **S1 案件キーのサロゲート化（Stage1-4＋Backfill・根治）** | ✅ | **v1.12.6〜v1.12.8** |
 | **WCAG 2.1 AA color-contrast 全違反修正** | ✅ | **v1.11.5** |
@@ -123,9 +123,9 @@ tadasaposys/
 └── docs/
     ├── SDD.md              ← 設計書 v1.12.9
     ├── HANDOVER.md         ← 本ドキュメント
-    ├── ADR.md              ← アーキテクチャ判断記録（ADR-001〜010）
+    ├── ADR.md              ← アーキテクチャ判断記録（ADR-001〜012）
     ├── RUNBOOK.md          ← 運用手順書
-    ├── Manual.md           ← 操作マニュアル v1.12.1
+    ├── Manual.md           ← 操作マニュアル v1.12.9
     ├── RD.md               ← 要件定義
     ├── playwright-guide.html ← テスト導入・実行ガイド（HTML）
     └── test-criteria.html  ← テスト品質基準チェックリスト（HTML）
@@ -590,7 +590,7 @@ v1.12.1 デプロイ後、次担当者が安全に作業へ入れるよう、開
 1. **本ファイル `docs/HANDOVER.md`** §1〜§13（現状把握）
 2. **`CLAUDE.md`** または **`AGENTS.md`**（AI 開発支援を使う場合）
 3. **`docs/SDD.md`** §1（データモデルと IDX 定数）
-4. **`docs/ADR.md`**（10件の設計判断）
+4. **`docs/ADR.md`**（12件の設計判断）
 
 AIツール起動:
 
@@ -613,8 +613,8 @@ npx serve -s . -l 3000  # → http://localhost:3000
 ### 3. テスト走行（5分）
 
 ```bash
-npm run test:unit  # Jest 55件
-npm test           # Playwright E2E 51件
+npm run test:unit  # Jest 92件
+npm test           # Playwright E2E 61件
 ```
 
 ### 4. 本番デプロイ（変更がある場合）
@@ -652,7 +652,7 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 
 ### 5. 推奨される次の作業（優先度順）
 
-1. ~~**T1/T2** — 日程確定・管理ステータス遷移の E2E テスト追加~~ ✅ 完了（08/09 spec・計8件追加、E2E 59件）
+1. ~~**T1/T2** — 日程確定・管理ステータス遷移の E2E テスト追加~~ ✅ 完了（08/09 spec・R3ガード含め計10件追加、E2E 61件）
 2. **R3** — GoogleMeet 以外のカレンダー登録未実装を修正（pre-existing バグ）
 3. **R4** — GAS 上の temp/* スタブを手動削除
 4. **R1/R2** — 管理機能関連の修復スクリプトと担当者チェック追加
