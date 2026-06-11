@@ -202,6 +202,16 @@ function buildCaseId(epoch) {
   return 'case_' + epoch;
 }
 
+// S1 Stage4: 読み取り結合キー。コード.js: joinKeyForRead_() と同期。
+// viaMap=false は従来どおり String(raw)（後方互換）。viaMap=true は正準 case_id。
+// 同一案件の日付PK表記ブレ（Date と各種文字列表現）を epoch で吸収して同一キーへ収束させる。
+// パース不能は String(raw) にフォールバック。
+function joinKeyForRead(raw, viaMap) {
+  if (!viaMap) return String(raw);
+  var nk = canonicalNaturalKey(raw);
+  return nk ? buildCaseId(nk.epoch) : String(raw);
+}
+
 // S1 Stage2: withScriptLock_ の再入ガードを GAS 非依存でモデル化したもの。
 // GAS の ScriptLock は再入不可（保持中の再 waitLock はデッドロック）。実行内
 // フラグで「既に保持中なら再取得せず実行」とし、ロック内チョークポイントから
@@ -259,6 +269,7 @@ module.exports = {
   caseFiscalYear,
   canonicalNaturalKey,
   buildCaseId,
+  joinKeyForRead,
   annualUsageKey,
   effectiveAnnualCount,
   parseNullablePositiveInteger,

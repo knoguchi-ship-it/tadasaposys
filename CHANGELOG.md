@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added (S1 Stage4 — Read 切替 / フラグ既定OFF・挙動ゼロ変化)
+- `getAllCasesJoined` の内部結合キーを、設定フラグ `CASE_KEY_READ_VIA_MAP`（既定 `false`）で `String(PK)` → 正準 `case_id` へ切替可能にした。
+  - 純粋ヘルパー `joinKeyForRead_(raw, viaMap)`: ON 時は `canonicalNaturalKey_`→`case_<epoch>`、パース不能は `String(raw)` フォールバック。記録FK／メールCASE_ID／補正PK／案件PK を同一規則で正準化し、**日付PKの表記ブレに起因する「同一案件が別行扱いになる」結合ズレを解消**。
+  - 表示用 `id`/`timestamp` は従来どおり `String(PK)` を維持（書込経路の FK 一致を壊さない）。フラグ OFF では完全に従来挙動（デプロイしても無変化、ロールバックは `false` に戻すだけ）。
+- 切替前提: Stage3 Backfill 完了・監視後に `CASE_KEY_READ_VIA_MAP=true`（設定シート）で有効化する。
+
+### Tests (Stage4)
+- `joinKeyForRead`（OFF=String後方互換／ON=Dateと別表記文字列が同一キーに収束／manual解決／パース不能フォールバック）の単体テストを4件追加。計 88→92 件。
+- 検証ハーネスに Stage4 を追加し Playwright MCP で確認: 表記ブレFK が **OFF=unhandled（現行）／ON=completed（結合）**、一致FKは ON でも回帰なし。実 `getAllCasesJoined` で **19/19 ALL PASS**。
+
 ---
 
 ## [1.12.7] - 2026-06-11

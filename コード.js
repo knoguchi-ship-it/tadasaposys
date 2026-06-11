@@ -625,6 +625,17 @@ function buildCaseId_(epoch) {
   return 'case_' + epoch;
 }
 
+// S1 Stage4: 読み取り結合キー。viaMap=false は従来どおり String(raw)（後方互換）。
+// viaMap=true は正準 case_id（同一案件の日付PK表記ブレを epoch で吸収）。
+// 案件PK・記録FK・メールCASE_ID・補正PK を同じ規則で正準化することで、
+// 表記ブレに起因する「同一案件が別行扱いになる」結合ズレを解消する。
+// パース不能（孤立FK等）は String(raw) にフォールバックし従来挙動を維持。
+function joinKeyForRead_(raw, viaMap) {
+  if (!viaMap) return String(raw);
+  let nk = canonicalNaturalKey_(raw);
+  return nk ? buildCaseId_(nk.epoch) : String(raw);
+}
+
 // ======================================================================
 // データ結合取得
 // ======================================================================
@@ -653,8 +664,18 @@ function getAllCasesJoined() {
     allCaseRows = allCaseRows.filter(function(r) { return !deletedSet[String(r[IDX.CASES.PK])]; });
   }
 
+  // S1 Stage4: 読み取り結合を case_id 経由へ切替えるフラグ（既定OFF=従来どおり String(PK)）。
+  // Backfill 完了・監視後に CASE_KEY_READ_VIA_MAP=true で切替える（ロールバックは false に戻すだけ）。
+  let readViaMap = parseBoolean_(getSetting_('CASE_KEY_READ_VIA_MAP', 'false'), false);
+
   // 案件補正マップを読み込む（管理者が修正した値を案件リストに上書き表示するため）
   let overrideMap = getCasesOverrideMap_(ss);
+  // Stage4: フラグON時は補正マップのキーも結合キー（case_id）へ正準化して引けるようにする
+  let overrideLookup = overrideMap;
+  if (readViaMap) {
+    overrideLookup = {};
+    Object.keys(overrideMap).forEach(function(k) { overrideLookup[joinKeyForRead_(k, true)] = overrideMap[k]; });
+  }
 
   // 年間利用補正マップ（管理者が手動修正した利用回数の補正量。キー=正規化メール+'_'+年度）— v1.12.4
   let annualAdjustMap = getAnnualAdjustmentMap_(ss);
@@ -665,7 +686,7 @@ function getAllCasesJoined() {
   if (emailSheet && emailSheet.getLastRow() > 1) {
     let emailData = emailSheet.getDataRange().getValues();
     for (let ei = 1; ei < emailData.length; ei++) {
-      let eCaseId = String(emailData[ei][IDX.EMAIL.CASE_ID]);
+      let eCaseId = joinKeyForRead_(emailData[ei][IDX.EMAIL.CASE_ID], readViaMap);
       if (!emailMap[eCaseId]) emailMap[eCaseId] = [];
       emailMap[eCaseId].push({
         sendDate: emailData[ei][IDX.EMAIL.SEND_DATE] ? new Date(emailData[ei][IDX.EMAIL.SEND_DATE]).toISOString() : null,
@@ -682,7 +703,7 @@ function getAllCasesJoined() {
 
   for (let i = 1; i < recordData.length; i++) {
     let r = recordData[i];
-    let fkKey = String(r[IDX.RECORDS.FK]);
+    let fkKey = joinKeyForRead_(r[IDX.RECORDS.FK], readViaMap);
     // v1.12.6 Stage0: 重複FK行は「最初の行」を採用する。
     // 書込経路（assignCase/reassignCaseAdmin/updateSupportRecord）は for…break で
     // 最初の一致行へ書くため、表示側も最初の一致に揃えて読み書きのズレを解消する。
@@ -734,10 +755,11 @@ function getAllCasesJoined() {
     let c = allCaseRows[j];
     let ts = String(c[IDX.CASES.PK]);
     if (!ts) continue;
+    let joinKey = joinKeyForRead_(c[IDX.CASES.PK], readViaMap); // Stage4: 結合キー（表示idは ts のまま）
     // 補正シートにメールアドレスの補正があればそちらを使う（年度集計の正確性のため）
-    let ovr = overrideMap[ts] || {};
+    let ovr = overrideLookup[joinKey] || {};
     let email = ovr.email !== null && ovr.email !== undefined ? ovr.email : String(c[IDX.CASES.EMAIL]);
-    let record = recordMap[ts] || { status: 'unhandled' };
+    let record = recordMap[joinKey] || { status: 'unhandled' };
     if (record.status === 'inProgress' || record.status === 'completed') {
       // 手動追加案件もフォーム案件と同一メール+年度で合算する（manual_PKの年度を正しく解決）
       let key = annualUsageKey_(email, c[IDX.CASES.PK]);
@@ -753,9 +775,10 @@ function getAllCasesJoined() {
     if (!ts) continue;
     if (seenPks[ts]) continue; // 重複PKをスキップ
     seenPks[ts] = true;
-    let record = recordMap[ts] || { status: 'unhandled', supportCount: 1 };
+    let joinKey = joinKeyForRead_(c[IDX.CASES.PK], readViaMap); // Stage4: 結合キー（表示idは ts のまま）
+    let record = recordMap[joinKey] || { status: 'unhandled', supportCount: 1 };
     // 案件補正マップを適用（補正値が存在する場合は上書き、null は補正なし）
-    let ovr = overrideMap[ts] || {};
+    let ovr = overrideLookup[joinKey] || {};
     let email       = ovr.email         !== null && ovr.email         !== undefined ? ovr.email         : String(c[IDX.CASES.EMAIL]);
     let officeName  = ovr.officeName    !== null && ovr.officeName    !== undefined ? ovr.officeName    : c[IDX.CASES.OFFICE];
     let reqName     = ovr.requesterName !== null && ovr.requesterName !== undefined ? ovr.requesterName : c[IDX.CASES.NAME];
@@ -801,7 +824,7 @@ function getAllCasesJoined() {
       tools: record.tools || [],
       subStaff: record.subStaff || [],
       currentFiscalYearCount: count,
-      emails: emailMap[ts] || []
+      emails: emailMap[joinKey] || []
     });
   }
 
