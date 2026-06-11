@@ -5010,3 +5010,27 @@ function backfillCaseKeyMap_(options) {
   });
 }
 
+// ----------------------------------------------------------------------
+// S1 Stage3: 管理者向け公開エントリ（アプリ管理画面から実行するため）
+//   手動GASエディタ操作を避け、管理者がアプリ上でドライラン→本実行できる。
+//   いずれも requireAdmin_ で権限を強制し、監査ログに記録する。
+// ----------------------------------------------------------------------
+
+// 案件キー移行の現状診断（読み取り専用）。管理者のみ。
+function runCaseKeyMigrationDiagnosis() {
+  let actor = requireAdmin_();
+  let report = diagnoseCaseKeyMigration_();
+  appendAuditLog_(actor, 'caseKeyMigration_diagnose', 'caseKeyMap', '', null, report);
+  return report;
+}
+
+// 案件キーマップ Backfill。管理者のみ。dryRun=true（既定）は計画のみ・書込ゼロ。
+//   dryRun=false で実書込（破壊的＝本番データ追記）。監査ログに結果を記録する。
+function runCaseKeyBackfill(dryRun) {
+  let actor = requireAdmin_();
+  let isDry = dryRun !== false; // 既定 true（安全側）。明示的に false のときだけ実書込
+  let report = backfillCaseKeyMap_({ dryRun: isDry });
+  appendAuditLog_(actor, isDry ? 'caseKeyBackfill_dryRun' : 'caseKeyBackfill_execute', 'caseKeyMap', '', null, report);
+  return report;
+}
+

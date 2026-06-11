@@ -38,6 +38,12 @@
 - `planCaseKeyBackfill`（空マップ全採番／**全登録済みで toCreate=空＝再実行冪等**／一部登録／重複自然キー dedup／衝突連番）の単体テストを5件追加。計 83→88 件。
 - **検証ハーネス**（`tests/manual/case-key-migration-harness.html`）に Backfill 検証を追加し Playwright MCP で確認: dryRun（書込ゼロ）→ live（未登録分のみ作成）→ **再live（created=0・行数不変＝冪等）**→ 再診断（unmapped=0）。実 `コード.js` ロジックで **16/16 アサーション ALL PASS**。
 
+### Added (S1 Stage3 — 管理画面からの実行手段)
+- 手動GASエディタ操作を避け、**管理者がアプリ上で Backfill を実行**できる公開エントリと UI を追加。
+  - バックエンド: `runCaseKeyMigrationDiagnosis()`（診断・読取専用）/ `runCaseKeyBackfill(dryRun)`（既定 dryRun=true）。いずれも `requireAdmin_` で権限強制・監査ログ記録。
+  - フロント: 設定管理ダイアログに「メンテナンス：案件キーマップ Backfill」セクション（①診断 ②ドライラン ③本実行）。本実行は確認ダイアログ付き。結果 JSON を画面表示。ローカルはモック動作。
+- Playwright MCP でローカル（モック）動作確認: 管理→設定管理→ドライランで `created:0`（書込なし）レポート表示・console error 0。
+
 ---
 
 ## [1.12.6] - 2026-06-11
