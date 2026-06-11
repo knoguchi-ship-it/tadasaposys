@@ -1,0 +1,111 @@
+// =====================================================================
+// タダサポ管理システム ER図（変更前 / 現状）— DBML
+//   表示方法: https://dbdiagram.io に貼り付け
+//   テーブル名 = スプレッドシートのシート名
+//   headercolor: 赤=問題箇所 / 灰=変更なし
+//   作成日 2026-06-11
+// =====================================================================
+
+Table "案件リスト" [headercolor: #ef4444] {
+  "PK_フォーム日時" datetime [pk, note: 'PK・フォーム送信日時(Dateオブジェクト)／IMPORTRANGE由来・書込不可']
+  "EMAIL" varchar
+  "OFFICE" varchar
+  "NAME" varchar
+  "DETAILS" text
+  "PREFECTURE" varchar
+  "SERVICE" varchar
+  Note: '主キーが時間的ナチュラルキー(Date)。String(Date)で外部キーと突合＝整合性保証なし（日付PKアンチパターン）'
+}
+
+Table "案件手動追加" [headercolor: #ef4444] {
+  "PK_manual" varchar [pk, note: 'manual_<epoch> 文字列。案件リストとキー型・形式が異なる']
+  "EMAIL" varchar
+  "OFFICE" varchar
+  "NAME" varchar
+  "DETAILS" text
+  "PREFECTURE" varchar
+  "SERVICE" varchar
+}
+
+Table "サポート記録" [headercolor: #ef4444] {
+  "FK_案件PK" varchar [note: 'String(案件PK)。型不一致(Date↔String)を文字列強制で突合＝孤立化リスク']
+  "STATUS" varchar
+  "STAFF_EMAIL" varchar
+  "STAFF_NAME" varchar
+  "DATE" datetime
+  "COUNT" int
+  "METHOD" varchar
+  "BUSINESS" varchar
+  "CONTENT" text
+  "REMARKS" text
+  "HISTORY" json [note: '非1NF(JSON文字列)']
+  "EVENT_ID" varchar
+  "MEET_URL" varchar
+  "THREAD_ID" varchar
+  "ATTACHMENTS" json [note: '非1NF(JSON文字列)']
+  "CASE_LIMIT_OVERRIDE" int
+  "ANNUAL_LIMIT_OVERRIDE" int
+  "TOOLS" json [note: '非1NF(JSON文字列)']
+  "SUB_STAFF" json [note: '非1NF(JSON文字列)']
+}
+
+Table "案件補正" [headercolor: #94a3b8] {
+  "案件PK" varchar [pk, note: '案件PK文字列でキー']
+  "EMAIL" varchar
+  "OFFICE" varchar
+  "NAME" varchar
+  "DETAILS" text
+  "PREFECTURE" varchar
+  "SERVICE" varchar
+}
+
+Table "メール履歴" [headercolor: #94a3b8] {
+  "CASE_ID" varchar [note: '案件PK文字列']
+  "SEND_DATE" datetime
+  "SENDER_EMAIL" varchar
+  "SENDER_NAME" varchar
+  "RECIPIENT_EMAIL" varchar
+  "SUBJECT" varchar
+  "BODY" text
+}
+
+Table "メール下書き" [headercolor: #94a3b8] {
+  "DRAFT_ID" varchar [pk]
+  "CASE_ID" varchar [note: '案件PK文字列']
+  "STAFF_EMAIL" varchar
+  "MODE" varchar
+  "THREAD_ID" varchar
+  "SUBJECT" varchar
+  "BODY" text
+  "CC" varchar
+  "BCC" varchar
+  "TOOLS" json
+  "UPDATED_AT" datetime
+}
+
+Table "年間利用補正" [headercolor: #94a3b8] {
+  "EMAIL" varchar
+  "FISCAL_YEAR" int
+  "ADJUSTMENT" int
+  "UPDATED_BY" varchar
+  "UPDATED_AT" datetime
+  Indexes {
+    (EMAIL, FISCAL_YEAR) [pk]
+  }
+}
+
+Table "タダメンマスタ" [headercolor: #94a3b8] {
+  "ID" varchar [pk]
+  "NAME" varchar
+  "EMAIL" varchar
+  "ROLE" varchar
+  "IS_ACTIVE" boolean
+}
+
+// --- リレーション（すべて String(PK)==String(FK) の文字列強制突合・整合性保証なし） ---
+Ref: "サポート記録"."FK_案件PK" > "案件リスト"."PK_フォーム日時"
+Ref: "サポート記録"."FK_案件PK" > "案件手動追加"."PK_manual"
+Ref: "案件補正"."案件PK"      > "案件リスト"."PK_フォーム日時"
+Ref: "メール履歴"."CASE_ID"   > "案件リスト"."PK_フォーム日時"
+Ref: "メール下書き"."CASE_ID" > "案件リスト"."PK_フォーム日時"
+Ref: "サポート記録"."STAFF_EMAIL" > "タダメンマスタ"."EMAIL"

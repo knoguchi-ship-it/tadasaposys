@@ -1,0 +1,126 @@
+// =====================================================================
+// タダサポ管理システム ER図（変更後 / サロゲートキー導入案）— DBML
+//   表示方法: https://dbdiagram.io に貼り付け
+//   テーブル名 = スプレッドシートのシート名
+//   headercolor: 緑=新規 / 橙=変更あり / 灰=変更なし
+//   作成日 2026-06-11
+// =====================================================================
+
+Table "案件キーマップ" [headercolor: #22c55e] {
+  "case_id" varchar [pk, note: '不変サロゲートキー case_<uuid>。全シートの唯一の結合キー']
+  "source_type" varchar [note: 'form / manual']
+  "natural_key" varchar [note: '正準化したフォーム日時 / manual_<epoch>（照会属性）']
+  "email_norm" varchar [note: '正規化メール（照会属性）']
+  "created_at" datetime
+  Indexes {
+    (source_type, natural_key) [unique, note: '同一案件の重複登録を防止（UNIQUE制約）']
+  }
+  Note: '案件の不変IDを一元管理。フォーム/手動のキー差異をここで吸収し、参照整合性をコードで強制する'
+}
+
+Table "案件リスト" [headercolor: #94a3b8] {
+  "form_timestamp" datetime [note: '自然キー(属性化)・参照用。IMPORTRANGEのまま書込不可']
+  "EMAIL" varchar
+  "OFFICE" varchar
+  "NAME" varchar
+  "DETAILS" text
+  "PREFECTURE" varchar
+  "SERVICE" varchar
+}
+
+Table "案件手動追加" [headercolor: #94a3b8] {
+  "manual_pk" varchar [note: '自然キー(属性化)・manual_<epoch>']
+  "EMAIL" varchar
+  "OFFICE" varchar
+  "NAME" varchar
+  "DETAILS" text
+  "PREFECTURE" varchar
+  "SERVICE" varchar
+}
+
+Table "サポート記録" [headercolor: #f59e0b] {
+  "case_id" varchar [note: 'FK＝case_id(文字列・型一貫) ★変更。1案件1行をUNIQUEで保証']
+  "STATUS" varchar
+  "STAFF_EMAIL" varchar
+  "STAFF_NAME" varchar
+  "DATE" datetime
+  "COUNT" int
+  "METHOD" varchar
+  "BUSINESS" varchar
+  "CONTENT" text
+  "REMARKS" text
+  "HISTORY" json
+  "EVENT_ID" varchar
+  "MEET_URL" varchar
+  "THREAD_ID" varchar
+  "ATTACHMENTS" json
+  "CASE_LIMIT_OVERRIDE" int
+  "ANNUAL_LIMIT_OVERRIDE" int
+  "TOOLS" json
+  "SUB_STAFF" json
+  Indexes {
+    case_id [unique, note: '★追加: 1案件=1記録行を強制し重複行を構造的に防止']
+  }
+}
+
+Table "案件補正" [headercolor: #f59e0b] {
+  "case_id" varchar [pk, note: 'FK＝case_id ★変更']
+  "EMAIL" varchar
+  "OFFICE" varchar
+  "NAME" varchar
+  "DETAILS" text
+  "PREFECTURE" varchar
+  "SERVICE" varchar
+}
+
+Table "メール履歴" [headercolor: #f59e0b] {
+  "case_id" varchar [note: 'FK＝case_id ★変更']
+  "SEND_DATE" datetime
+  "SENDER_EMAIL" varchar
+  "SENDER_NAME" varchar
+  "RECIPIENT_EMAIL" varchar
+  "SUBJECT" varchar
+  "BODY" text
+}
+
+Table "メール下書き" [headercolor: #f59e0b] {
+  "DRAFT_ID" varchar [pk]
+  "case_id" varchar [note: 'FK＝case_id ★変更']
+  "STAFF_EMAIL" varchar
+  "MODE" varchar
+  "THREAD_ID" varchar
+  "SUBJECT" varchar
+  "BODY" text
+  "CC" varchar
+  "BCC" varchar
+  "TOOLS" json
+  "UPDATED_AT" datetime
+}
+
+Table "年間利用補正" [headercolor: #94a3b8] {
+  "EMAIL" varchar
+  "FISCAL_YEAR" int
+  "ADJUSTMENT" int
+  "UPDATED_BY" varchar
+  "UPDATED_AT" datetime
+  Indexes {
+    (EMAIL, FISCAL_YEAR) [pk]
+  }
+}
+
+Table "タダメンマスタ" [headercolor: #94a3b8] {
+  "ID" varchar [pk]
+  "NAME" varchar
+  "EMAIL" varchar
+  "ROLE" varchar
+  "IS_ACTIVE" boolean
+}
+
+// --- リレーション（case_id による型一貫・参照整合性ありの結合） ---
+Ref: "サポート記録"."case_id" > "案件キーマップ"."case_id"
+Ref: "案件補正"."case_id"     > "案件キーマップ"."case_id"
+Ref: "メール履歴"."case_id"   > "案件キーマップ"."case_id"
+Ref: "メール下書き"."case_id" > "案件キーマップ"."case_id"
+Ref: "案件キーマップ"."natural_key" > "案件リスト"."form_timestamp"   // 自然キーで解決
+Ref: "案件キーマップ"."natural_key" > "案件手動追加"."manual_pk"       // 自然キーで解決
+Ref: "サポート記録"."STAFF_EMAIL" > "タダメンマスタ"."EMAIL"
