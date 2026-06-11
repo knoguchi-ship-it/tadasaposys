@@ -4620,8 +4620,9 @@ function trace_orphanRecords_readonly() {
   var targetEmail = 'masaki-miyachi@tadakayo.jp';
   var norm = function(v){ return String(v == null ? '' : v).trim().toLowerCase(); };
 
-  // ── 1) 全案件PK集合を構築（フォーム案件＋手動案件）。型情報も保持 ──
+  // ── 1) 全案件PK集合を構築（フォーム案件＋手動案件）。対象案件はpkStrを保持 ──
   var pkSet = {};
+  var targets = []; // {label,row,office,pkStr}
   [['案件リスト', ss.getSheetByName(SHEET_NAMES.CASES)],
    ['案件手動追加', ss.getSheetByName(SHEET_NAMES.CASES_MANUAL)]].forEach(function(pair){
     var label = pair[0], sh = pair[1];
@@ -4634,33 +4635,51 @@ function trace_orphanRecords_readonly() {
       pkSet[s] = true;
       if (norm(d[i][IDX.CASES.EMAIL]) === norm(targetEmail) ||
           String(d[i][IDX.CASES.OFFICE]||'').indexOf('和み') !== -1) {
-        out.push('[対象案件:' + label + ' 行' + (i+1) + '] office="' + d[i][IDX.CASES.OFFICE] +
-          '" email="' + d[i][IDX.CASES.EMAIL] + '"\n   PK type=' + (typeof pk) +
-          (pk && pk.getTime ? '(Date) getTime=' + pk.getTime() : '') +
-          '\n   String(PK)="' + s + '"');
+        targets.push({ label: label, row: i+1, office: String(d[i][IDX.CASES.OFFICE]||''), pkStr: s });
       }
     }
   });
 
-  // ── 2) サポート記録を全走査。FKが案件PK集合に無い＝孤立 ──
-  out.push('--- 孤立レコード（FKに対応する案件PKが存在しない行） ---');
+  // ── 2) サポート記録を読み込み、FK文字列 → 行リストの索引を作成 ──
   var rd = ss.getSheetByName(SHEET_NAMES.RECORDS).getDataRange().getValues();
-  var orphanCount = 0;
+  var recByFk = {};
   for (var j = 1; j < rd.length; j++) {
     var fk = rd[j][IDX.RECORDS.FK];
     if (fk === '' || fk == null) continue;
     var sfk = String(fk);
-    if (pkSet[sfk]) continue;
-    orphanCount++;
-    out.push('⚠孤立 [記録 行' + (j+1) + '] FK type=' + (typeof fk) +
-      (fk && fk.getTime ? '(Date) getTime=' + fk.getTime() : '') +
-      '\n   String(FK)="' + sfk + '"' +
-      '\n   status="' + String(rd[j][IDX.RECORDS.STATUS]||'') + '"' +
-      ' staffEmail="' + String(rd[j][IDX.RECORDS.STAFF_EMAIL]||'') + '"' +
-      ' staffName="' + String(rd[j][IDX.RECORDS.STAFF_NAME]||'') + '"' +
-      ' date="' + String(rd[j][IDX.RECORDS.DATE]||'') + '"');
+    (recByFk[sfk] = recByFk[sfk] || []).push({
+      row: j+1,
+      status: String(rd[j][IDX.RECORDS.STATUS]||''),
+      staffEmail: String(rd[j][IDX.RECORDS.STAFF_EMAIL]||''),
+      staffName: String(rd[j][IDX.RECORDS.STAFF_NAME]||''),
+      date: String(rd[j][IDX.RECORDS.DATE]||''),
+      count: String(rd[j][IDX.RECORDS.COUNT]||'')
+    });
   }
-  out.push('孤立レコード総数: ' + orphanCount + ' 件 / 記録総行数: ' + (rd.length - 1));
+
+  // ── 3) 対象案件ごとに、サポート記録の突合（行の有無・status・担当・重複）を出力 ──
+  out.push('=== 対象案件ごとの サポート記録 突合 ===');
+  targets.forEach(function(t){
+    var recs = recByFk[t.pkStr] || [];
+    out.push('[案件 行' + t.row + '] ' + t.office + ' | String(PK)="' + t.pkStr + '"');
+    out.push('   → 一致するサポート記録: ' + recs.length + ' 件' +
+      (recs.length === 0 ? '  ★記録行なし＝未対応のまま（アサイン未保存）' :
+       recs.length > 1  ? '  ⚠重複行あり' : ''));
+    recs.forEach(function(r){
+      out.push('      ・記録行' + r.row + ' status="' + r.status + '"' +
+        ' staffEmail="' + r.staffEmail + '" staffName="' + r.staffName + '"' +
+        ' date="' + r.date + '" count="' + r.count + '"');
+    });
+  });
+
+  // ── 4) 孤立レコード（FKに対応する案件PKが無い行）の総数 ──
+  var orphanCount = 0;
+  for (var k = 1; k < rd.length; k++) {
+    var fk2 = rd[k][IDX.RECORDS.FK];
+    if (fk2 === '' || fk2 == null) continue;
+    if (!pkSet[String(fk2)]) orphanCount++;
+  }
+  out.push('--- 孤立レコード総数: ' + orphanCount + ' 件 / 記録総行数: ' + (rd.length - 1) + ' ---');
 
   Logger.log(out.join('\n'));
 }
