@@ -4912,3 +4912,101 @@ function diagnoseCaseKeyMigration_() {
   return report;
 }
 
+// ======================================================================
+// S1 Stage3: 案件キーマップ Backfill（既存全案件をマップへ冪等投入）
+//   ★破壊的（本番データ追記）。既定は dryRun=true で「計画のみ」を返し
+//   何も書き込まない。実行（dryRun:false）は本番GASからの明示操作が必要で、
+//   実行前に必ず停止・ドライラン・復元手順確認（CLAUDE.md グランドルール）。
+//   ・冪等: 既存 (種別, 自然キー) はスキップ。再実行しても重複を作らない。
+//   ・Stage2 Dual-write と同一の正準化源（生PK）を使うため case_id が一致。
+// ----------------------------------------------------------------------
+
+// Backfill 計画ロジック（純粋）。既存登録スキップ・バッチ内重複自然キーの
+// dedup・case_id 衝突の連番回避を行う。tests/unit/src/pure-functions.js に同期。
+//   cases: [{ sourceType, canonical, epoch, email }]
+//   existingKeySet: { '種別|自然キー': true }（既存マップ）
+//   usedCaseIds: { caseId: true }（既存マップの採番済みID）
+function planBackfill_(cases, existingKeySet, usedCaseIds) {
+  existingKeySet = existingKeySet || {};
+  let used = {};
+  if (usedCaseIds) Object.keys(usedCaseIds).forEach(function(k) { used[k] = true; });
+  let planned = {};
+  let toCreate = [];
+  let alreadyMapped = 0, duplicateNaturalKeys = 0, collisions = 0;
+  for (let i = 0; i < cases.length; i++) {
+    let c = cases[i];
+    let key = c.sourceType + '|' + c.canonical;
+    if (existingKeySet[key]) { alreadyMapped++; continue; }      // 既に登録済み（冪等）
+    if (planned[key]) { duplicateNaturalKeys++; continue; }       // 同一バッチ内の重複自然キー
+    let caseId = buildCaseId_(c.epoch);
+    if (used[caseId]) {                                           // クロス種別epoch衝突 → 連番回避
+      let s = 1;
+      while (used[caseId + '_' + s]) s++;
+      caseId = caseId + '_' + s;
+      collisions++;
+    }
+    used[caseId] = true;
+    planned[key] = true;
+    toCreate.push({ caseId: caseId, sourceType: c.sourceType, canonical: c.canonical, email: c.email });
+  }
+  return { toCreate: toCreate, alreadyMapped: alreadyMapped, duplicateNaturalKeys: duplicateNaturalKeys, collisions: collisions };
+}
+
+function backfillCaseKeyMap_(options) {
+  options = options || {};
+  let dryRun = options.dryRun !== false; // 既定 true（安全側。明示的に false で実書込）
+  let ss = getSpreadsheet_();
+
+  // 全案件（フォーム＋手動）を {sourceType,canonical,epoch,email} へ正準化
+  let cases = [];
+  let totalCases = 0, unparseable = 0;
+  [SHEET_NAMES.CASES, SHEET_NAMES.CASES_MANUAL].forEach(function(name) {
+    let sh = ss.getSheetByName(name);
+    if (!sh || sh.getLastRow() < 2) return;
+    let d = sh.getDataRange().getValues();
+    for (let i = 1; i < d.length; i++) {
+      let pk = d[i][IDX.CASES.PK];
+      if (pk === '' || pk == null) continue;
+      totalCases++;
+      let nk = canonicalNaturalKey_(pk); // Stage2 と同一の生PK正準化（cross-stage一致）
+      if (!nk) { unparseable++; continue; }
+      cases.push({ sourceType: nk.sourceType, canonical: nk.canonical, epoch: nk.epoch, email: d[i][IDX.CASES.EMAIL] });
+    }
+  });
+
+  return withScriptLock_(function() {
+    let sheet = dryRun ? ss.getSheetByName(SHEET_NAMES.CASE_KEY_MAP) : getOrCreateCaseKeyMapSheet_();
+    let existingKeySet = {}, usedCaseIds = {};
+    if (sheet && sheet.getLastRow() > 1) {
+      let md = sheet.getDataRange().getValues();
+      for (let j = 1; j < md.length; j++) {
+        let t = String(md[j][CASE_KEY_MAP_COL.SOURCE_TYPE]);
+        let nkc = String(md[j][CASE_KEY_MAP_COL.NATURAL_KEY]);
+        let id = String(md[j][CASE_KEY_MAP_COL.CASE_ID]);
+        existingKeySet[t + '|' + nkc] = true;
+        if (id) usedCaseIds[id] = true;
+      }
+    }
+
+    let plan = planBackfill_(cases, existingKeySet, usedCaseIds);
+    let report = {
+      dryRun: dryRun, totalCases: totalCases, unparseable: unparseable,
+      alreadyMapped: plan.alreadyMapped, duplicateNaturalKeys: plan.duplicateNaturalKeys,
+      collisions: plan.collisions, toCreate: plan.toCreate.length, created: 0,
+      sample: plan.toCreate.slice(0, 20)
+    };
+
+    if (!dryRun && plan.toCreate.length > 0) {
+      let now = new Date();
+      let rows = plan.toCreate.map(function(p) {
+        return [p.caseId, p.sourceType, p.canonical, normalizeEmail_(p.email), now];
+      });
+      sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, 5).setValues(rows);
+      report.created = rows.length;
+    }
+
+    Logger.log('[案件キーBackfill] ' + JSON.stringify(report, null, 2));
+    return report;
+  });
+}
+

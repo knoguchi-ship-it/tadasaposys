@@ -27,6 +27,17 @@
 ### Tests (Stage2)
 - 再入ロックガード（非ネスト/ネスト1回取得/例外時解放）と cross-stage 一致（Date/manual が両ステージで同一 case_id）の単体テストを5件追加。計 78→83 件。E2E 51件パス（回帰なし）。
 
+### Added (S1 Stage3 — Backfill 実装 ※本番未実行)
+- 既存全案件を案件キーマップへ投入する**冪等バッチ Backfill** `backfillCaseKeyMap_(options)` を実装。
+  - **既定 `dryRun:true`（安全側）**: 何も書き込まず「作成予定件数・既登録件数・衝突件数・サンプル」を返す。`dryRun:false` で初めて一括 `setValues` 追記。
+  - **冪等**: 既存 `(種別, 自然キー)` はスキップ。再実行しても重複行を作らない（テスト・ハーネスで検証済み）。Stage2 Dual-write と同一の生PK正準化を使い case_id が一致。
+  - 計画ロジック `planBackfill_`（既登録スキップ・バッチ内重複自然キー dedup・case_id 衝突の連番回避）を分離。
+- **本番未実行・未デプロイ**。実行は破壊的（本番データ追記）のため、本番GASからの明示操作＋実行前停止・ドライラン・復元手順確認が必須（CLAUDE.md グランドルール）。
+
+### Tests (Stage3)
+- `planCaseKeyBackfill`（空マップ全採番／**全登録済みで toCreate=空＝再実行冪等**／一部登録／重複自然キー dedup／衝突連番）の単体テストを5件追加。計 83→88 件。
+- **検証ハーネス**（`tests/manual/case-key-migration-harness.html`）に Backfill 検証を追加し Playwright MCP で確認: dryRun（書込ゼロ）→ live（未登録分のみ作成）→ **再live（created=0・行数不変＝冪等）**→ 再診断（unmapped=0）。実 `コード.js` ロジックで **16/16 アサーション ALL PASS**。
+
 ---
 
 ## [1.12.6] - 2026-06-11

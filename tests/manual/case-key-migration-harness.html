@@ -171,6 +171,31 @@
     assert('診断 duplicateRecordFk>=1（和みの家の重複行を検出）', report.duplicateRecordFk >= 1, 'dup=' + report.duplicateRecordFk);
     assert('診断 unparseable=0 / crossTypeEpochCollisions=0', report.unparseable === 0 && report.crossTypeEpochCollisions === 0, report.unparseable + '/' + report.crossTypeEpochCollisions);
 
+    // 5) Stage3 Backfill: ドライラン → live → 再live（冪等）
+    function mapRowCount() {
+      var s = window.__ss.getSheetByName('案件キーマップ');
+      return s ? (s.getDataRange().getValues().length - 1) : 0;
+    }
+    var beforeRows = mapRowCount(); // 2件（formA, manual）。formB未登録
+
+    // ドライラン: 計画のみ・書込ゼロ
+    var dry = backfillCaseKeyMap_({ dryRun: true });
+    assert('Backfill dryRun: toCreate=1（formBのみ） / alreadyMapped=2', dry.toCreate === 1 && dry.alreadyMapped === 2, 'toCreate=' + dry.toCreate + ' alreadyMapped=' + dry.alreadyMapped);
+    assert('Backfill dryRun: created=0（書込なし）', dry.created === 0 && mapRowCount() === beforeRows, 'created=' + dry.created + ' rows=' + mapRowCount());
+
+    // live: 未登録分(formB)のみ作成
+    var live = backfillCaseKeyMap_({ dryRun: false });
+    assert('Backfill live: created=1 / マップ3件に', live.created === 1 && mapRowCount() === 3, 'created=' + live.created + ' rows=' + mapRowCount());
+
+    // 再live: 冪等（追加ゼロ・行数不変）
+    var live2 = backfillCaseKeyMap_({ dryRun: false });
+    assert('★Backfill 再実行は冪等: created=0 / alreadyMapped=3 / 行数3固定', live2.created === 0 && live2.alreadyMapped === 3 && mapRowCount() === 3, 'created=' + live2.created + ' alreadyMapped=' + live2.alreadyMapped + ' rows=' + mapRowCount());
+
+    // 全案件が登録され未登録ゼロになったことを再診断で確認
+    var report2 = diagnoseCaseKeyMigration_();
+    assert('Backfill後 診断 unmappedCount=0 / mappedCount=3', report2.unmappedCount === 0 && report2.mappedCount === 3, 'mapped=' + report2.mappedCount + ' unmapped=' + report2.unmappedCount);
+
+    mapRows = window.__ss.getSheetByName('案件キーマップ').getDataRange().getValues();
     document.getElementById('mapdump').textContent = JSON.stringify(mapRows, null, 2);
   } catch (e) {
     err = e;

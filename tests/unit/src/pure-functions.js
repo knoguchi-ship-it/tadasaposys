@@ -222,6 +222,38 @@ function makeReentrantLock(lock) {
   };
 }
 
+// S1 Stage3: Backfill 計画ロジック（純粋）。コード.js: planBackfill_() と同期。
+// 既存登録スキップ・バッチ内重複自然キーの dedup・case_id 衝突の連番回避を行う。
+// 同じ入力で常に同じ計画を返し、既に全登録済みなら toCreate=[]（再実行で冪等）。
+//   cases: [{ sourceType, canonical, epoch, email }]
+//   existingKeySet: { '種別|自然キー': true }
+//   usedCaseIds: { caseId: true }
+function planCaseKeyBackfill(cases, existingKeySet, usedCaseIds) {
+  existingKeySet = existingKeySet || {};
+  var used = {};
+  if (usedCaseIds) Object.keys(usedCaseIds).forEach(function (k) { used[k] = true; });
+  var planned = {};
+  var toCreate = [];
+  var alreadyMapped = 0, duplicateNaturalKeys = 0, collisions = 0;
+  for (var i = 0; i < cases.length; i++) {
+    var c = cases[i];
+    var key = c.sourceType + '|' + c.canonical;
+    if (existingKeySet[key]) { alreadyMapped++; continue; }
+    if (planned[key]) { duplicateNaturalKeys++; continue; }
+    var caseId = buildCaseId(c.epoch);
+    if (used[caseId]) {
+      var s = 1;
+      while (used[caseId + '_' + s]) s++;
+      caseId = caseId + '_' + s;
+      collisions++;
+    }
+    used[caseId] = true;
+    planned[key] = true;
+    toCreate.push({ caseId: caseId, sourceType: c.sourceType, canonical: c.canonical, email: c.email });
+  }
+  return { toCreate: toCreate, alreadyMapped: alreadyMapped, duplicateNaturalKeys: duplicateNaturalKeys, collisions: collisions };
+}
+
 module.exports = {
   getFiscalYear,
   caseFiscalYear,
@@ -241,4 +273,5 @@ module.exports = {
   selectFirstRecordIndexByFk,
   buildRecordMapFirstWins,
   makeReentrantLock,
+  planCaseKeyBackfill,
 };

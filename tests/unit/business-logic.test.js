@@ -24,6 +24,7 @@ const {
   canonicalNaturalKey,
   buildCaseId,
   makeReentrantLock,
+  planCaseKeyBackfill,
 } = require('./src/pure-functions');
 
 // ============================================================
@@ -601,5 +602,54 @@ describe('S1 Stage2 再入ロックガード', () => {
     // フラグが正しくクリアされ、次の取得が可能
     run(() => 1);
     expect(lock.log).toEqual(['acquire', 'release', 'acquire', 'release']);
+  });
+});
+
+// ============================================================
+// S1 Stage3: Backfill 計画ロジック（冪等・dedup・衝突回避）
+// ============================================================
+describe('S1 Stage3 planCaseKeyBackfill', () => {
+  const cases = [
+    { sourceType: 'form', canonical: '1778340600000', epoch: 1778340600000, email: 'a@x.com' },
+    { sourceType: 'manual', canonical: 'manual_1715300000000', epoch: 1715300000000, email: 'b@x.com' },
+  ];
+
+  test('空マップからは全件を採番（決定的 case_<epoch>）', () => {
+    const plan = planCaseKeyBackfill(cases, {}, {});
+    expect(plan.toCreate.map((p) => p.caseId)).toEqual(['case_1778340600000', 'case_1715300000000']);
+    expect(plan.alreadyMapped).toBe(0);
+  });
+
+  test('★冪等: 全件登録済みなら toCreate は空（再実行で重複ゼロ）', () => {
+    const existing = {
+      'form|1778340600000': true,
+      'manual|manual_1715300000000': true,
+    };
+    const plan = planCaseKeyBackfill(cases, existing, {
+      case_1778340600000: true, case_1715300000000: true,
+    });
+    expect(plan.toCreate).toEqual([]);
+    expect(plan.alreadyMapped).toBe(2);
+  });
+
+  test('一部のみ登録済みなら未登録分だけ採番', () => {
+    const plan = planCaseKeyBackfill(cases, { 'form|1778340600000': true }, { case_1778340600000: true });
+    expect(plan.toCreate.map((p) => p.caseId)).toEqual(['case_1715300000000']);
+    expect(plan.alreadyMapped).toBe(1);
+  });
+
+  test('バッチ内の重複自然キーは1件だけ採番（dedup）', () => {
+    const dup = [cases[0], { ...cases[0] }, cases[1]];
+    const plan = planCaseKeyBackfill(dup, {}, {});
+    expect(plan.toCreate.length).toBe(2);
+    expect(plan.duplicateNaturalKeys).toBe(1);
+  });
+
+  test('case_id 衝突（既存IDと同じepoch・異なる自然キー）は連番で回避', () => {
+    const collide = [{ sourceType: 'manual', canonical: 'manual_1778340600000', epoch: 1778340600000, email: 'c@x.com' }];
+    // 既に case_1778340600000 が別自然キーで使用済み
+    const plan = planCaseKeyBackfill(collide, {}, { case_1778340600000: true });
+    expect(plan.toCreate[0].caseId).toBe('case_1778340600000_1');
+    expect(plan.collisions).toBe(1);
   });
 });
