@@ -135,6 +135,33 @@ function parseScheduleBufferMin(raw, defaultValue) {
   return Math.floor(num);
 }
 
+// ============================================================
+// Stage0: 重複FK行の選択不変条件（書込と表示の一致）
+// 書込経路（for…break）と表示経路（recordMap）が、重複FK時に同一行
+// （=最初の一致）を指すことを保証する。ズレると「完了しても未対応に
+// 戻る」バグ（行109に書き行110を表示）が再発する。
+// ============================================================
+
+// コード.js: 書込経路の行選択（最初の一致のインデックス）
+function selectFirstRecordIndexByFk(fkList, caseId) {
+  var key = String(caseId);
+  for (var i = 0; i < fkList.length; i++) {
+    if (String(fkList[i]) === key) return i;
+  }
+  return -1;
+}
+
+// コード.js: getAllCasesJoined の recordMap 構築（最初の一致を採用）
+function buildRecordMapFirstWins(records) {
+  var map = {};
+  for (var i = 0; i < records.length; i++) {
+    var k = String(records[i].fk);
+    if (Object.prototype.hasOwnProperty.call(map, k)) continue; // 重複は最初の行を採用
+    map[k] = records[i].payload;
+  }
+  return map;
+}
+
 module.exports = {
   getFiscalYear,
   caseFiscalYear,
@@ -149,4 +176,6 @@ module.exports = {
   eventsOverlap,
   computeBufferedWindow,
   parseScheduleBufferMin,
+  selectFirstRecordIndexByFk,
+  buildRecordMapFirstWins,
 };

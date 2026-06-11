@@ -19,6 +19,8 @@ const {
   eventsOverlap,
   computeBufferedWindow,
   parseScheduleBufferMin,
+  selectFirstRecordIndexByFk,
+  buildRecordMapFirstWins,
 } = require('./src/pure-functions');
 
 // ============================================================
@@ -441,5 +443,47 @@ describe('parseScheduleBufferMin', () => {
 
   test('小数は切り捨て', () => {
     expect(parseScheduleBufferMin('29.9', 30)).toBe(29);
+  });
+});
+
+// ============================================================
+// Stage0: 重複FK行の選択不変条件（書込と表示の一致）
+//   回帰: 「管理アサイン後に完了しても未対応に戻る」バグ（行109に書き
+//   行110を表示）の再発防止。last-wins に戻すと本ブロックが失敗する。
+// ============================================================
+describe('Stage0 重複FK行の選択（書込/表示の一致）', () => {
+  test('書込経路は最初の一致行を選ぶ', () => {
+    expect(selectFirstRecordIndexByFk(['A', 'B', 'A'], 'A')).toBe(0);
+    expect(selectFirstRecordIndexByFk(['B', 'A', 'A'], 'A')).toBe(1);
+    expect(selectFirstRecordIndexByFk(['B', 'C'], 'A')).toBe(-1);
+  });
+
+  test('表示の recordMap も最初の一致を採用（完了行を表示）', () => {
+    const recs = [
+      { fk: 'A', payload: { status: 'completed' } },
+      { fk: 'B', payload: { status: 'unhandled' } },
+      { fk: 'A', payload: { status: 'unhandled' } }, // 残骸（後行）
+    ];
+    const map = buildRecordMapFirstWins(recs);
+    expect(map['A'].status).toBe('completed'); // last-wins だと 'unhandled' になり失敗
+  });
+
+  test('書込index と 表示採用行が同一行を指す（ズレなし）', () => {
+    const recs = [
+      { fk: 'A', payload: { status: 'completed' } },
+      { fk: 'A', payload: { status: 'unhandled' } },
+    ];
+    const writeIdx = selectFirstRecordIndexByFk(recs.map((r) => r.fk), 'A');
+    const map = buildRecordMapFirstWins(recs);
+    expect(map['A']).toBe(recs[writeIdx].payload);
+  });
+
+  test('PK/FKが数値・文字列混在でも String 比較で一致', () => {
+    expect(selectFirstRecordIndexByFk([123, '123'], '123')).toBe(0);
+    const map = buildRecordMapFirstWins([
+      { fk: 123, payload: { status: 'completed' } },
+      { fk: '123', payload: { status: 'unhandled' } },
+    ]);
+    expect(map['123'].status).toBe('completed');
   });
 });

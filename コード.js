@@ -313,6 +313,19 @@ function getCaseRecordRowIndex_(caseId) {
   return -1;
 }
 
+// v1.12.6 Stage0: サポート記録への「検索→無ければ追記」を排他制御するスクリプトロック。
+// 競合・二重送信で複数実行が同時に rowIndex===-1 を見て二重追記する事故（重複行）を防ぐ。
+// 重い外部API（Zoom/Calendar/Gmail）は内側に入れず、シート検索＋追記のクリティカル区間のみ包むこと。
+function withRecordWriteLock_(fn) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000); // 最大30秒待機（高競合時は tryLock より waitLock が確実）
+  try {
+    return fn();
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function ensureCaseEditableByActor_(caseId, actor, allowUnassigned) {
   let ss = getSpreadsheet_();
   let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
@@ -494,9 +507,15 @@ function getAllCasesJoined() {
 
   let recordMap = {};
   let fiscalYearCounts = {};
+  let duplicateFkCount = 0;
 
   for (let i = 1; i < recordData.length; i++) {
     let r = recordData[i];
+    let fkKey = String(r[IDX.RECORDS.FK]);
+    // v1.12.6 Stage0: 重複FK行は「最初の行」を採用する。
+    // 書込経路（assignCase/reassignCaseAdmin/updateSupportRecord）は for…break で
+    // 最初の一致行へ書くため、表示側も最初の一致に揃えて読み書きのズレを解消する。
+    if (recordMap.hasOwnProperty(fkKey)) { duplicateFkCount++; continue; }
     let historyStr = r[IDX.RECORDS.HISTORY] ? String(r[IDX.RECORDS.HISTORY]) : '[]';
     let parsedHistory = [];
     try { parsedHistory = JSON.parse(historyStr); } catch(e) { parsedHistory = []; }
@@ -509,7 +528,7 @@ function getAllCasesJoined() {
     let subStaffStr = r[IDX.RECORDS.SUB_STAFF] ? String(r[IDX.RECORDS.SUB_STAFF]) : '[]';
     let parsedSubStaff = [];
     try { parsedSubStaff = JSON.parse(subStaffStr); } catch(e) { parsedSubStaff = []; }
-    recordMap[String(r[IDX.RECORDS.FK])] = {
+    recordMap[fkKey] = {
       status: r[IDX.RECORDS.STATUS],
       staffEmail: r[IDX.RECORDS.STAFF_EMAIL],
       staffName: r[IDX.RECORDS.STAFF_NAME],
@@ -535,6 +554,9 @@ function getAllCasesJoined() {
       tools: parsedTools,
       subStaff: parsedSubStaff
     };
+  }
+  if (duplicateFkCount > 0) {
+    console.warn('[整合性警告] サポート記録に重複FK行 ' + duplicateFkCount + ' 件を検出。表示は最初の行を採用（要データ修復）。');
   }
 
   for (let j = 0; j < allCaseRows.length; j++) {
@@ -622,43 +644,46 @@ function assignCase(caseId, user, tools) {
   let actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, true);
 
-  let ss = getSpreadsheet_();
-  let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
-  let data = sheet.getDataRange().getValues();
-
   let toolsVal = Array.isArray(tools) && tools.length > 0 ? JSON.stringify(tools) : '[]';
 
-  let rowIndex = -1;
-  for (let i = 1; i < data.length; i++) {
-    if (String(data[i][IDX.RECORDS.FK]) === String(caseId)) {
-      rowIndex = i + 1;
-      break;
-    }
-  }
+  // v1.12.6 Stage0: 検索→追記/更新を排他化（競合・二重送信による重複行を防止）
+  withRecordWriteLock_(function() {
+    let ss = getSpreadsheet_();
+    let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+    let data = sheet.getDataRange().getValues();
 
-  if (rowIndex === -1) {
-    sheet.appendRow([
-      caseId, 'inProgress', actor.email, actor.name,
-      null, 1, null, null, null, null, null, null, null, null, '[]', '', '', toolsVal, '[]'
-    ]);
-  } else {
-    let before = {
-      status: String(data[rowIndex - 1][IDX.RECORDS.STATUS] || ''),
-      staffEmail: String(data[rowIndex - 1][IDX.RECORDS.STAFF_EMAIL] || ''),
-      staffName: String(data[rowIndex - 1][IDX.RECORDS.STAFF_NAME] || '')
-    };
-    sheet.getRange(rowIndex, IDX.RECORDS.STATUS + 1).setValue('inProgress');
-    sheet.getRange(rowIndex, IDX.RECORDS.STAFF_EMAIL + 1).setValue(actor.email);
-    sheet.getRange(rowIndex, IDX.RECORDS.STAFF_NAME + 1).setValue(actor.name);
-    if (toolsVal !== '[]') {
-      sheet.getRange(rowIndex, IDX.RECORDS.TOOLS + 1).setValue(toolsVal);
+    let rowIndex = -1;
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][IDX.RECORDS.FK]) === String(caseId)) {
+        rowIndex = i + 1;
+        break;
+      }
     }
-    appendAuditLog_(actor, 'assign_case', 'case', caseId, before, {
-      status: 'inProgress',
-      staffEmail: actor.email,
-      staffName: actor.name
-    });
-  }
+
+    if (rowIndex === -1) {
+      sheet.appendRow([
+        caseId, 'inProgress', actor.email, actor.name,
+        null, 1, null, null, null, null, null, null, null, null, '[]', '', '', toolsVal, '[]'
+      ]);
+    } else {
+      let before = {
+        status: String(data[rowIndex - 1][IDX.RECORDS.STATUS] || ''),
+        staffEmail: String(data[rowIndex - 1][IDX.RECORDS.STAFF_EMAIL] || ''),
+        staffName: String(data[rowIndex - 1][IDX.RECORDS.STAFF_NAME] || '')
+      };
+      sheet.getRange(rowIndex, IDX.RECORDS.STATUS + 1).setValue('inProgress');
+      sheet.getRange(rowIndex, IDX.RECORDS.STAFF_EMAIL + 1).setValue(actor.email);
+      sheet.getRange(rowIndex, IDX.RECORDS.STAFF_NAME + 1).setValue(actor.name);
+      if (toolsVal !== '[]') {
+        sheet.getRange(rowIndex, IDX.RECORDS.TOOLS + 1).setValue(toolsVal);
+      }
+      appendAuditLog_(actor, 'assign_case', 'case', caseId, before, {
+        status: 'inProgress',
+        staffEmail: actor.email,
+        staffName: actor.name
+      });
+    }
+  });
   return;
 }
 
@@ -2545,6 +2570,8 @@ function reassignCaseAdmin(caseId, staffEmail) {
     if (!targetStaff) throw new Error('対象スタッフが見つかりません。');
   }
 
+  // v1.12.6 Stage0: 検索→追記/更新を排他化（競合・二重送信による重複行を防止）
+  return withRecordWriteLock_(function() {
   let ss     = getSpreadsheet_();
   let sheet  = ss.getSheetByName(SHEET_NAMES.RECORDS);
   let rowIndex = getCaseRecordRowIndex_(caseId);
@@ -2611,6 +2638,7 @@ function reassignCaseAdmin(caseId, staffEmail) {
     status: result.status, staffEmail: targetEmail, staffName: targetStaff.name
   });
   return result;
+  });
 }
 
 // ======================================================================
@@ -2919,15 +2947,18 @@ function addManualCase(payload) {
 }
 
 function ensureRecordRowForCase_(sheet, caseId) {
-  let data = sheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    if (String(data[i][IDX.RECORDS.FK]) === String(caseId)) return i + 1;
-  }
-  sheet.appendRow([
-    caseId, 'unhandled', '', '',
-    null, 1, null, null, null, null, '[]', null, null, null, '[]', '', '', '[]', '[]'
-  ]);
-  return sheet.getLastRow();
+  // v1.12.6 Stage0: 検索→追記を排他化（競合・二重送信による重複行を防止）
+  return withRecordWriteLock_(function() {
+    let data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][IDX.RECORDS.FK]) === String(caseId)) return i + 1;
+    }
+    sheet.appendRow([
+      caseId, 'unhandled', '', '',
+      null, 1, null, null, null, null, '[]', null, null, null, '[]', '', '', '[]', '[]'
+    ]);
+    return sheet.getLastRow();
+  });
 }
 
 // サブ担当更新（メイン担当者 or 管理者のみ）
@@ -4606,81 +4637,5 @@ function getScheduledEmailTriggerStatus() {
     }
   }
   return { active: false };
-}
-
-// ======================================================================
-// 【一時・読み取り専用】孤立レコード追跡（診断用 / 本番データ無改変）
-//   GASエディタから手動実行し、実行ログを確認する。
-//   サポート記録(FK)に対応する案件PKが存在しない「孤立行」を列挙する。
-//   診断完了後はこの関数を削除すること（恒久コードではない）。
-// ======================================================================
-function trace_orphanRecords_readonly() {
-  var ss = getSpreadsheet_();
-  var out = [];
-  var targetEmail = 'masaki-miyachi@tadakayo.jp';
-  var norm = function(v){ return String(v == null ? '' : v).trim().toLowerCase(); };
-
-  // ── 1) 全案件PK集合を構築（フォーム案件＋手動案件）。対象案件はpkStrを保持 ──
-  var pkSet = {};
-  var targets = []; // {label,row,office,pkStr}
-  [['案件リスト', ss.getSheetByName(SHEET_NAMES.CASES)],
-   ['案件手動追加', ss.getSheetByName(SHEET_NAMES.CASES_MANUAL)]].forEach(function(pair){
-    var label = pair[0], sh = pair[1];
-    if (!sh || sh.getLastRow() < 2) return;
-    var d = sh.getDataRange().getValues();
-    for (var i = 1; i < d.length; i++) {
-      var pk = d[i][IDX.CASES.PK];
-      if (pk === '' || pk == null) continue;
-      var s = String(pk);
-      pkSet[s] = true;
-      if (norm(d[i][IDX.CASES.EMAIL]) === norm(targetEmail) ||
-          String(d[i][IDX.CASES.OFFICE]||'').indexOf('和み') !== -1) {
-        targets.push({ label: label, row: i+1, office: String(d[i][IDX.CASES.OFFICE]||''), pkStr: s });
-      }
-    }
-  });
-
-  // ── 2) サポート記録を読み込み、FK文字列 → 行リストの索引を作成 ──
-  var rd = ss.getSheetByName(SHEET_NAMES.RECORDS).getDataRange().getValues();
-  var recByFk = {};
-  for (var j = 1; j < rd.length; j++) {
-    var fk = rd[j][IDX.RECORDS.FK];
-    if (fk === '' || fk == null) continue;
-    var sfk = String(fk);
-    (recByFk[sfk] = recByFk[sfk] || []).push({
-      row: j+1,
-      status: String(rd[j][IDX.RECORDS.STATUS]||''),
-      staffEmail: String(rd[j][IDX.RECORDS.STAFF_EMAIL]||''),
-      staffName: String(rd[j][IDX.RECORDS.STAFF_NAME]||''),
-      date: String(rd[j][IDX.RECORDS.DATE]||''),
-      count: String(rd[j][IDX.RECORDS.COUNT]||'')
-    });
-  }
-
-  // ── 3) 対象案件ごとに、サポート記録の突合（行の有無・status・担当・重複）を出力 ──
-  out.push('=== 対象案件ごとの サポート記録 突合 ===');
-  targets.forEach(function(t){
-    var recs = recByFk[t.pkStr] || [];
-    out.push('[案件 行' + t.row + '] ' + t.office + ' | String(PK)="' + t.pkStr + '"');
-    out.push('   → 一致するサポート記録: ' + recs.length + ' 件' +
-      (recs.length === 0 ? '  ★記録行なし＝未対応のまま（アサイン未保存）' :
-       recs.length > 1  ? '  ⚠重複行あり' : ''));
-    recs.forEach(function(r){
-      out.push('      ・記録行' + r.row + ' status="' + r.status + '"' +
-        ' staffEmail="' + r.staffEmail + '" staffName="' + r.staffName + '"' +
-        ' date="' + r.date + '" count="' + r.count + '"');
-    });
-  });
-
-  // ── 4) 孤立レコード（FKに対応する案件PKが無い行）の総数 ──
-  var orphanCount = 0;
-  for (var k = 1; k < rd.length; k++) {
-    var fk2 = rd[k][IDX.RECORDS.FK];
-    if (fk2 === '' || fk2 == null) continue;
-    if (!pkSet[String(fk2)]) orphanCount++;
-  }
-  out.push('--- 孤立レコード総数: ' + orphanCount + ' 件 / 記録総行数: ' + (rd.length - 1) + ' ---');
-
-  Logger.log(out.join('\n'));
 }
 
