@@ -47,8 +47,9 @@
 | アプリ内ヘルプ | ✅ | v1.9.83 |
 | 楽観的更新・初期データHTML埋め込みによる高速化 | ✅ | v1.9.67 |
 | **管理機能ステータス遷移の完全修正** | ✅ | **v1.11.6** |
-| **Playwright E2E テストスイート（49テスト）** | ✅ | **v1.11.5** |
-| **Jest 単体テスト（55テスト）** | ✅ | **v1.12.0** |
+| **Playwright E2E テストスイート（51テスト）** | ✅ | **v1.11.5** |
+| **Jest 単体テスト（92テスト）** | ✅ | **v1.12.0〜** |
+| **S1 案件キーのサロゲート化（Stage1-4＋Backfill・根治）** | ✅ | **v1.12.6〜v1.12.8** |
 | **WCAG 2.1 AA color-contrast 全違反修正** | ✅ | **v1.11.5** |
 | **日程の重複検知（バッファ込み・Zoom時のみ）** | ✅ | **v1.12.0** |
 | **Zoom時のチームカレンダー強制登録（重複防止）** | ✅ | **v1.11.8** |
@@ -83,12 +84,13 @@ tadasaposys/
 ├── .codex/config.toml      ← Codex 起動方針（GitHub共有用）
 ├── codex-tadasaposys.ps1   ← Codex プロジェクト起動ランチャー
 ├── tests/
-│   ├── e2e/                ← Playwright E2E テスト（7スペック、49テスト）
+│   ├── e2e/                ← Playwright E2E テスト（7スペック、51テスト）
 │   ├── pages/app.page.ts   ← Page Object Model
 │   ├── fixtures/           ← カスタム Fixture
-│   └── unit/               ← Jest 単体テスト（34テスト）
+│   ├── unit/               ← Jest 単体テスト（92テスト）
+│   └── manual/             ← 検証ハーネス（case-key-migration-harness.html・Playwright MCP用）
 └── docs/
-    ├── SDD.md              ← 設計書 v1.12.1
+    ├── SDD.md              ← 設計書 v1.12.8
     ├── HANDOVER.md         ← 本ドキュメント
     ├── ADR.md              ← アーキテクチャ判断記録（ADR-001〜010）
     ├── RUNBOOK.md          ← 運用手順書
@@ -291,7 +293,7 @@ v1.11.6 以降は全ての管理者 STATUS 変更が `adminTransitionStatus_()` 
 ### E2E テスト（Playwright）
 
 ```bash
-# 全テスト実行（49テスト / 約1.4分）
+# 全テスト実行（51テスト / 約1.6分）
 npm test
 
 # UIモード（デバッグ用）
@@ -315,7 +317,7 @@ npm run test:report
 ### 単体テスト（Jest）
 
 ```bash
-npm run test:unit  # 34テスト / 約0.2秒
+npm run test:unit  # 92テスト / 約0.2秒
 ```
 
 対象: `getFiscalYear` / `sanitizeForSheet_` / `parseNullablePositiveInteger_` / `normalizeEmail_` / `parseBoolean_` 等の純粋関数
@@ -334,7 +336,7 @@ npm run test:unit  # 34テスト / 約0.2秒
 | color-contrast（旧バージョンデータ） | 修正済み | v1.11.5 で全違反を解消。既存 DB 内のデータは未修正 |
 | `updateSupportHistory` 担当者チェックなし | 中リスク残存 | 担当者以外が過去履歴を編集可能（別 Issue で管理） |
 | 管理機能で作成された不整合データ（v1.11.5 以前） | 残存可能性あり | v1.11.6 で今後の操作は整合性保証済み。旧データは修復スクリプトを別途検討 |
-| SDD.md / Manual.md ドキュメント | v1.12.1 対応済み | 2026/05/28 更新 |
+| SDD.md / Manual.md ドキュメント | v1.12.8 対応済み | 2026/06/11 更新 |
 | GitHub Actions CI | ワークフローファイル設定済み | `.github/workflows/playwright.yml` |
 | **GAS 上の `temp/index.html` `temp/コード.js`** | 残存（無害化済み） | clasp push 事故で残存したスタブファイル。doGet 等の関数定義は除去済みで動作影響なし。GAS エディタから手動削除推奨 |
 | **`appsscript.json` の `exceptionLogging`** | 監視継続 | 過去に GAS 側で `STACKDRIVER`→`NONE` に変更された痕跡あり。v1.11.8 デプロイ時に復元済み。デプロイ前は git diff で要確認 |
@@ -400,7 +402,7 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 
 | ID | 内容 | 優先度 | メモ |
 |----|------|--------|------|
-| **S1** | **案件キーのサロゲート化（根治・expand-contract移行）** | **進行中** | v1.12.6 は止血(Stage0)のみ。根因＝不安定な日付PKを `String()` 突合し Sheets が UNIQUE を強制できないこと。エポックms基盤の決定的 `case_id`（`case_<epoch>`）を導入し `案件キーマップ` シートで一元解決。**Expand→Dual-write→Backfill→Read切替→Contract** で段階移行。設計: `docs/er-after.dbml` / `docs/SDD.md` §S-09。各段E2E回帰＋ロールバック、Backfill以降（本番データ変更）の前で必ず停止。詳細・根因はメモリ `project_case_key_duplicate_bug.md`。<br>**✅ Stage1（Expand 基盤）完了**: `案件キーマップ` シート（`getOrCreateCaseKeyMapSheet_`）＋採番ヘルパー `getOrCreateCaseId_`（`withScriptLock_` で排他・冪等）＋正準化 `canonicalNaturalKey_`/`buildCaseId_`＋読み取り専用診断 `diagnoseCaseKeyMigration_`。<br>**✅ Stage2（Dual-write）完了**: 7チョークポイント（`assignCase`/`reassignCaseAdmin`/`ensureRecordRowForCase_`/`recordEmail_`/`saveDraft`/`getOrCreateOverrideRowIndex_`/`addManualCase`）から `ensureCaseKeyMapping_`（非致死・生PKを権威解決しBackfillと同一 case_id に収束）を呼び案件キーマップへ登録。`withScriptLock_` に再入ガード追加（GAS ScriptLock 非再入のデッドロック防止）。単体テスト計83件・E2E 51件パス。**いずれも本番挙動ゼロ変化（マップ追記のみ）・未デプロイ**。<br>**✅ Stage3（Backfill）実装完了・本番未実行**: `backfillCaseKeyMap_(options)`（既定 `dryRun:true`＝計画のみ／`dryRun:false`で一括追記）＋計画ロジック `planBackfill_`（既登録スキップ・重複自然キー dedup・衝突連番）。冪等（再実行で重複ゼロ）。単体5件追加（計88）＋検証ハーネスに Backfill 検証を追加し Playwright MCP で 16/16 PASS（dryRun→live→再live冪等→再診断unmapped=0）。<br>**✅ Stage3 アプリ実行手段**: 管理者がアプリ上で実行できる公開エントリ `runCaseKeyMigrationDiagnosis()` / `runCaseKeyBackfill(dryRun)`（`requireAdmin_`・監査ログ記録）と、設定管理ダイアログの「メンテナンス：案件キーマップ Backfill」UI（①診断 ②ドライラン ③本実行）を追加。手動GASエディタ操作は不要。<br>**⚠️ 残: Stage3 の本番実行（破壊的）**: ①Stage1-3 を本番GASへ `clasp push`＋`clasp deploy -i`（バージョンアップ）②管理→設定管理→①診断 ②ドライランで件数確認 ③復元手順（マップは新規シートゆえ最悪シート削除で原状復帰）確認 ④③本実行（書込）。**本実行前に必ず停止**。<br>**✅ Stage4（Read切替）実装完了・フラグ既定OFF**: `getAllCasesJoined` の内部結合キーを `joinKeyForRead_(raw, viaMap)` 経由にし、設定 `CASE_KEY_READ_VIA_MAP`（既定false）で `String(PK)`→正準 `case_id` へ切替可能に。表示id は `String(PK)` 維持（書込互換）。表記ブレFKの結合ズレを解消。単体4件追加（計92）＋ハーネスに Stage4 追加し Playwright MCP 19/19（OFF=unhandled／ON=completed／一致FK回帰なし）。**デプロイ済みコードだが既定OFFで挙動ゼロ変化**。<br>**✅ Stage4 有効化手段（v1.12.8 @154 デプロイ済）**: 設定 `CASE_KEY_READ_VIA_MAP` を**設定管理ダイアログの boolean トグル**として公開（「その他」タブ）。ON で読取結合が case_id 経由、OFF（既定）で従来挙動。Backfill 済み・診断クリアのため ON/OFF とも表示同一（堅牢化）。**ロールバックはトグルOFFのみ（無デプロイ）**。<br>**🟡 Stage5（Contract）は見送り**: バグ直接原因は消失済（duplicateRecordFk=0）で根治は実質完了。識別子の case_id 置換（フロント~15＋バック~30箇所改修＋破壊的データ移行）は便益<リスクのため未実施。Stage4 コードと case_id 基盤は将来の選択肢として温存（master 保持）。 |
+| **S1** | **案件キーのサロゲート化（根治・expand-contract移行）** | **✅ 完了（Stage1-4＋Backfill）** | v1.12.6 は止血(Stage0)のみ。根因＝不安定な日付PKを `String()` 突合し Sheets が UNIQUE を強制できないこと。エポックms基盤の決定的 `case_id`（`case_<epoch>`）を導入し `案件キーマップ` シートで一元解決。**Expand→Dual-write→Backfill→Read切替→Contract** で段階移行。設計: `docs/er-after.dbml` / `docs/SDD.md` §S-09。各段E2E回帰＋ロールバック、Backfill以降（本番データ変更）の前で必ず停止。詳細・根因はメモリ `project_case_key_duplicate_bug.md`。<br>**✅ Stage1（Expand 基盤）完了**: `案件キーマップ` シート（`getOrCreateCaseKeyMapSheet_`）＋採番ヘルパー `getOrCreateCaseId_`（`withScriptLock_` で排他・冪等）＋正準化 `canonicalNaturalKey_`/`buildCaseId_`＋読み取り専用診断 `diagnoseCaseKeyMigration_`。<br>**✅ Stage2（Dual-write）完了**: 7チョークポイント（`assignCase`/`reassignCaseAdmin`/`ensureRecordRowForCase_`/`recordEmail_`/`saveDraft`/`getOrCreateOverrideRowIndex_`/`addManualCase`）から `ensureCaseKeyMapping_`（非致死・生PKを権威解決しBackfillと同一 case_id に収束）を呼び案件キーマップへ登録。`withScriptLock_` に再入ガード追加（GAS ScriptLock 非再入のデッドロック防止）。単体テスト計83件・E2E 51件パス。**本番挙動ゼロ変化（マップ追記のみ）。v1.12.7 で本番反映済**。<br>**✅ Stage3（Backfill）本番実行済**: `backfillCaseKeyMap_(options)`（既定 `dryRun:true`／`dryRun:false`で一括追記）＋`planBackfill_`（既登録スキップ・重複自然キー dedup・衝突連番）。冪等（再実行で重複ゼロ）。**本番で既存136案件すべてに case_id 付与済み**（診断: unmappedCount=0 / unparseable=0 / duplicateRecordFk=0）。単体5件追加（計88）＋ハーネス Playwright MCP 16/16。<br>**✅ Stage3 アプリ実行手段**: 管理者がアプリ上で実行できる公開エントリ `runCaseKeyMigrationDiagnosis()` / `runCaseKeyBackfill(dryRun)`（`requireAdmin_`・監査ログ記録）と、設定管理ダイアログの「メンテナンス：案件キーマップ Backfill」UI（①診断 ②ドライラン ③本実行）を追加。手動GASエディタ操作は不要。<br>**✅ Stage4（Read切替）実装完了・フラグ既定OFF**: `getAllCasesJoined` の内部結合キーを `joinKeyForRead_(raw, viaMap)` 経由にし、設定 `CASE_KEY_READ_VIA_MAP`（既定false）で `String(PK)`→正準 `case_id` へ切替可能に。表示id は `String(PK)` 維持（書込互換）。表記ブレFKの結合ズレを解消。単体4件追加（計92）＋ハーネスに Stage4 追加し Playwright MCP 19/19（OFF=unhandled／ON=completed／一致FK回帰なし）。**デプロイ済みコードだが既定OFFで挙動ゼロ変化**。<br>**✅ Stage4 有効化手段（v1.12.8 @154 デプロイ済）**: 設定 `CASE_KEY_READ_VIA_MAP` を**設定管理ダイアログの boolean トグル**として公開（「その他」タブ）。ON で読取結合が case_id 経由、OFF（既定）で従来挙動。Backfill 済み・診断クリアのため ON/OFF とも表示同一（堅牢化）。**ロールバックはトグルOFFのみ（無デプロイ）**。<br>**🟡 Stage5（Contract）は見送り**: バグ直接原因は消失済（duplicateRecordFk=0）で根治は実質完了。識別子の case_id 置換（フロント~15＋バック~30箇所改修＋破壊的データ移行）は便益<リスクのため未実施。Stage4 コードと case_id 基盤は将来の選択肢として温存（master 保持）。 |
 | R1 | 管理機能不整合データの修復スクリプト | 中 | v1.11.5 以前のデータが対象。過去の不整合を一括検出・補正 |
 | R2 | `updateSupportHistory` 担当者チェック追加 | 中 | 担当者以外の過去履歴編集をブロック |
 | **R3** | **GoogleMeet 以外でのカレンダー登録未実装の修正** | **中** | 電話/対面/メール等で useCalendar=ON にしてもイベント未作成（pre-existing バグ） |
@@ -497,7 +499,7 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 
 検証結果:
 ```
-Jest 単体テスト   : 55/55 PASS
+Jest 単体テスト   : 92/92 PASS
 JSX 構文          : OK
 pure-functions.js : 10/10 関数同期
 設定キー          : getEditableSettingsKeys_(25) ≡ SETTINGS_LABEL_MAP_(25) ≡ settingsMeta(25)
@@ -576,7 +578,7 @@ npx serve -s . -l 3000  # → http://localhost:3000
 
 ```bash
 npm run test:unit  # Jest 55件
-npm test           # Playwright E2E 49件
+npm test           # Playwright E2E 51件
 ```
 
 ### 4. 本番デプロイ（変更がある場合）
