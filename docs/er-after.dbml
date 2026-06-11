@@ -14,15 +14,15 @@
 // =====================================================================
 
 Table "案件キーマップ" [headercolor: #22c55e] {
-  "案件ID" varchar [pk, note: 'A列｜case_id・不変サロゲートキー case_<uuid>。全シートの唯一の結合キー']
+  "案件ID" varchar [pk, note: 'A列｜case_id・不変サロゲートキー case_<epoch>（決定的）。全シートの唯一の結合キー']
   "種別" varchar [note: 'B列｜source_type（form＝フォーム / manual＝手動）']
-  "自然キー_正準化" varchar [note: 'C列｜natural_key・正準化したフォーム日時 / manual_<epoch>（照会属性）']
+  "自然キー_正準化" varchar [note: 'C列｜natural_key・フォーム=getTime()のepoch文字列 / 手動=manual_<epoch>（照会属性）']
   "正規化メール" varchar [note: 'D列｜email_norm・小文字化＋trim（照会属性）']
   "作成日時" datetime [note: 'E列｜created_at']
   Indexes {
     ("種別", "自然キー_正準化") [unique, note: '★コードで強制：同一案件の重複登録を防止']
   }
-  Note: '案件の不変IDを一元管理。フォーム/手動のキー差異をここで吸収し、参照整合性をコードで強制する'
+  Note: '案件の不変IDを一元管理。フォーム/手動のキー差異をここで吸収し、参照整合性をコードで強制する。\n案件ID=case_<epoch>は決定的（同じ自然キーから常に同じID）でバックフィルが冪等。\n万一クロス種別で同epoch衝突かつ自然キー不一致なら連番サフィックス(_1,_2…)で回避し監査ログに記録する。'
 }
 
 Table "案件リスト" [headercolor: #94a3b8] {

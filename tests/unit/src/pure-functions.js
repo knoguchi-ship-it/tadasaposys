@@ -162,9 +162,103 @@ function buildRecordMapFirstWins(records) {
   return map;
 }
 
+// ============================================================
+// S1 Stage1: 案件キーのサロゲート化（Expand 基盤）
+// 不安定な日付PK（String(Date) の TZ/型ブレ）を、エポックms基盤の
+// 正準自然キーへ収束させ、決定的サロゲート case_id を生成する。
+// 「Date オブジェクト」「同時刻の日時文字列」「取りこぼし経路」が
+// すべて同一 case_id に収束することがバグ根治の不変条件。
+// ============================================================
+
+// コード.js: canonicalNaturalKey_()
+// 案件PK（Date | "manual_<epoch>" | 日時文字列）を正準形へ。
+// 返り値: { sourceType:'form'|'manual', epoch:number, canonical:string } | null
+// 不正値（パース不能）は null を返し、呼び出し側でスキップ＝安全停止する。
+function canonicalNaturalKey(pkRaw) {
+  // フォーム案件: Sheet から読んだ Date オブジェクト → getTime() で安定化
+  if (pkRaw && typeof pkRaw.getTime === 'function') {
+    var t = pkRaw.getTime();
+    if (isNaN(t)) return null;
+    return { sourceType: 'form', epoch: t, canonical: String(t) };
+  }
+  var s = String(pkRaw == null ? '' : pkRaw).trim();
+  if (!s) return null;
+  // 手動追加案件: "manual_<エポックミリ秒>"
+  if (s.indexOf('manual_') === 0) {
+    var e = Number(s.slice('manual_'.length));
+    if (!isFinite(e)) return null;
+    return { sourceType: 'manual', epoch: e, canonical: 'manual_' + e };
+  }
+  // 日時文字列の救済（String(Date) で文字列化された不安定経路）→ form 扱い
+  var dt = new Date(s).getTime();
+  if (isNaN(dt)) return null;
+  return { sourceType: 'form', epoch: dt, canonical: String(dt) };
+}
+
+// コード.js: buildCaseId_()
+// 決定的サロゲートキー。同じ epoch から常に同じ case_id が再現するため
+// バックフィルが冪等になる（2026 idempotent-backfill ベストプラクティス）。
+function buildCaseId(epoch) {
+  return 'case_' + epoch;
+}
+
+// S1 Stage2: withScriptLock_ の再入ガードを GAS 非依存でモデル化したもの。
+// GAS の ScriptLock は再入不可（保持中の再 waitLock はデッドロック）。実行内
+// フラグで「既に保持中なら再取得せず実行」とし、ロック内チョークポイントから
+// getOrCreateCaseId_ 等を安全にネスト呼び出しできるようにする。
+// lock は { acquire(), release() } を持つ注入可能オブジェクト。
+function makeReentrantLock(lock) {
+  var held = false;
+  return function run(fn) {
+    if (held) return fn();
+    lock.acquire();
+    held = true;
+    try {
+      return fn();
+    } finally {
+      held = false;
+      lock.release();
+    }
+  };
+}
+
+// S1 Stage3: Backfill 計画ロジック（純粋）。コード.js: planBackfill_() と同期。
+// 既存登録スキップ・バッチ内重複自然キーの dedup・case_id 衝突の連番回避を行う。
+// 同じ入力で常に同じ計画を返し、既に全登録済みなら toCreate=[]（再実行で冪等）。
+//   cases: [{ sourceType, canonical, epoch, email }]
+//   existingKeySet: { '種別|自然キー': true }
+//   usedCaseIds: { caseId: true }
+function planCaseKeyBackfill(cases, existingKeySet, usedCaseIds) {
+  existingKeySet = existingKeySet || {};
+  var used = {};
+  if (usedCaseIds) Object.keys(usedCaseIds).forEach(function (k) { used[k] = true; });
+  var planned = {};
+  var toCreate = [];
+  var alreadyMapped = 0, duplicateNaturalKeys = 0, collisions = 0;
+  for (var i = 0; i < cases.length; i++) {
+    var c = cases[i];
+    var key = c.sourceType + '|' + c.canonical;
+    if (existingKeySet[key]) { alreadyMapped++; continue; }
+    if (planned[key]) { duplicateNaturalKeys++; continue; }
+    var caseId = buildCaseId(c.epoch);
+    if (used[caseId]) {
+      var s = 1;
+      while (used[caseId + '_' + s]) s++;
+      caseId = caseId + '_' + s;
+      collisions++;
+    }
+    used[caseId] = true;
+    planned[key] = true;
+    toCreate.push({ caseId: caseId, sourceType: c.sourceType, canonical: c.canonical, email: c.email });
+  }
+  return { toCreate: toCreate, alreadyMapped: alreadyMapped, duplicateNaturalKeys: duplicateNaturalKeys, collisions: collisions };
+}
+
 module.exports = {
   getFiscalYear,
   caseFiscalYear,
+  canonicalNaturalKey,
+  buildCaseId,
   annualUsageKey,
   effectiveAnnualCount,
   parseNullablePositiveInteger,
@@ -178,4 +272,6 @@ module.exports = {
   parseScheduleBufferMin,
   selectFirstRecordIndexByFk,
   buildRecordMapFirstWins,
+  makeReentrantLock,
+  planCaseKeyBackfill,
 };

@@ -677,6 +677,27 @@
           google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).getAdminPanelData();
         });
       },
+      runCaseKeyMigrationDiagnosis: () => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            resolve({ totalCases: 14, formCases: 13, manualCases: 1, unparseable: 0, mappedCount: 0, unmappedCount: 14, duplicateNaturalKeys: 0, crossTypeEpochCollisions: 0, duplicateRecordFk: 0, recordRows: 12, samples: [] });
+          }, 200));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).runCaseKeyMigrationDiagnosis();
+        });
+      },
+      runCaseKeyBackfill: (dryRun) => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            const isDry = dryRun !== false;
+            resolve({ dryRun: isDry, totalCases: 14, unparseable: 0, alreadyMapped: 0, duplicateNaturalKeys: 0, collisions: 0, toCreate: 14, created: isDry ? 0 : 14, sample: [] });
+          }, 300));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).runCaseKeyBackfill(dryRun === false ? false : true);
+        });
+      },
       upsertStaffMember: (payload) => {
         if (IS_LOCAL) {
           return new Promise(resolve => setTimeout(() => {
@@ -1328,6 +1349,10 @@
 
       // ヘルプ
       const [helpOpen, setHelpOpen] = useState(false);
+
+      // S1 Stage3: 案件キーマップ Backfill（管理者メンテナンス）
+      const [backfillBusy, setBackfillBusy] = useState(false);
+      const [backfillReport, setBackfillReport] = useState(null);
 
       // Dialog state
       const [toasts, setToasts] = useState([]);
@@ -2729,6 +2754,45 @@
           showToast(e.message || String(e), { type: 'error', title: '設定更新エラー' });
         } finally {
           setSubmitting(false);
+        }
+      };
+
+      // S1 Stage3: 案件キーマップ Backfill（管理者がアプリ上で実行）
+      const handleCaseKeyDiagnose = async () => {
+        setBackfillBusy(true);
+        try {
+          const r = await Api.runCaseKeyMigrationDiagnosis();
+          setBackfillReport({ kind: 'diagnose', data: r });
+          showToast('診断を実行しました。', { type: 'success', title: '案件キー移行' });
+        } catch (e) {
+          showToast(e.message || String(e), { type: 'error', title: '診断エラー' });
+        } finally {
+          setBackfillBusy(false);
+        }
+      };
+      const handleCaseKeyBackfillDryRun = async () => {
+        setBackfillBusy(true);
+        try {
+          const r = await Api.runCaseKeyBackfill(true);
+          setBackfillReport({ kind: 'dryRun', data: r });
+          showToast(`ドライラン完了: ${r.toCreate}件が登録対象（既登録${r.alreadyMapped}件）。`, { type: 'success', title: 'Backfill ドライラン' });
+        } catch (e) {
+          showToast(e.message || String(e), { type: 'error', title: 'ドライランエラー' });
+        } finally {
+          setBackfillBusy(false);
+        }
+      };
+      const handleCaseKeyBackfillExecute = async () => {
+        if (!window.confirm('案件キーマップに未登録案件を書き込みます（本番データへの追記）。\n先にドライランで件数を確認しましたか？ 実行してよろしいですか？')) return;
+        setBackfillBusy(true);
+        try {
+          const r = await Api.runCaseKeyBackfill(false);
+          setBackfillReport({ kind: 'execute', data: r });
+          showToast(`Backfill 実行完了: ${r.created}件を登録しました。`, { type: 'success', title: 'Backfill 実行' });
+        } catch (e) {
+          showToast(e.message || String(e), { type: 'error', title: 'Backfill実行エラー' });
+        } finally {
+          setBackfillBusy(false);
         }
       };
 
@@ -4861,6 +4925,26 @@
                     <button onClick={handleSaveSettings} disabled={submitting || adminPanelLoading} className="px-4 py-2 rounded-xl text-xs font-black bg-sky-600 text-white disabled:opacity-40 inline-flex items-center gap-1.5">
                       <Save size={12}/> 設定を保存
                     </button>
+                  </div>
+
+                  {/* S1 Stage3: 案件キーマップ Backfill（メンテナンス） */}
+                  <div className="border-2 border-amber-100 rounded-2xl p-4 space-y-3 bg-amber-50/40">
+                    <div>
+                      <p className="text-xs font-black text-slate-700 flex items-center gap-1.5"><Settings2 size={13} className="text-amber-500"/> メンテナンス：案件キーマップ Backfill</p>
+                      <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
+                        既存案件に不変ID（case_id）を一括付与します。<b>診断 → ドライラン → 本実行</b>の順に押してください。
+                        診断・ドライランは読み取り専用（書込なし）。<b>本実行は本番データへの追記</b>です（冪等のため再実行しても重複しません）。
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button onClick={handleCaseKeyDiagnose} disabled={backfillBusy} className="px-3 py-1.5 rounded-xl text-[11px] font-black bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-40">① 診断（読取専用）</button>
+                      <button onClick={handleCaseKeyBackfillDryRun} disabled={backfillBusy} className="px-3 py-1.5 rounded-xl text-[11px] font-black bg-sky-100 text-sky-700 hover:bg-sky-200 disabled:opacity-40">② ドライラン</button>
+                      <button onClick={handleCaseKeyBackfillExecute} disabled={backfillBusy} className="px-3 py-1.5 rounded-xl text-[11px] font-black bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-40">③ 本実行（書込）</button>
+                      {backfillBusy && <span className="text-[10px] text-slate-500">実行中…</span>}
+                    </div>
+                    {backfillReport && (
+                      <pre className="text-[10px] bg-white border border-slate-200 rounded-xl p-3 overflow-auto max-h-48 leading-relaxed">{JSON.stringify(backfillReport.data, null, 2)}</pre>
+                    )}
                   </div>
                 </div>
               </div>

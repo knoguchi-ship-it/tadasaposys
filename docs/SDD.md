@@ -1,8 +1,11 @@
-# システム詳細設計書 (SDD) — タダサポ管理システム v1.12.6
+# システム詳細設計書 (SDD) — タダサポ管理システム v1.12.7
 
-**Version:** 1.12.6
+**Version:** 1.12.7
 **Date:** 2026/06/11
 **Status:** Released
+
+> **v1.12.7 追補（S1: 案件キーのサロゲート化 Stage1〜3）**
+> - エポックms基盤の決定的サロゲート `case_id`（`case_<epoch>`）と `案件キーマップ` シート（§S-09）を導入。Stage1=Expand 基盤、Stage2=Dual-write（7チョークポイントで `ensureCaseKeyMapping_`・読取/FK列不変）、Stage3=冪等 Backfill（`backfillCaseKeyMap_`・既定 dryRun／管理画面から実行可能）。`withScriptLock_` に再入ガードを追加。Stage4 Read 切替・Stage5 Contract は後続。
 
 > **v1.12.6 追補（重複サポート記録による表示不整合の止血 / Stage 0）**
 > - 事象: 管理アサイン後に完了しても画面が「未対応・担当者未設定」に戻る。根因はサポート記録に同一案件PKの**重複行**が生じた際、書き込み（`assignCase`/`reassignCaseAdmin`/`updateSupportRecord` の `for…break`＝**最初の一致行**）と表示（`getAllCasesJoined` の `recordMap`＝**最後の一致行**で上書き）が別行を指すこと。
@@ -64,6 +67,7 @@
 | メール下書き | `EMAIL_DRAFTS` | 送信前メール一時保存（v1.11.0） |
 | 予約送信キュー | `EMAIL_SCHEDULED` | 予約送信は v1.12.1 で廃止。既存キュー履歴・無効化確認用に保持 |
 | 年間利用補正 | `ANNUAL_ADJUST` | 管理者による年度利用回数の手動補正（メール+年度→補正量。列: メールアドレス/年度/補正値/更新者/更新日時）（v1.12.4） |
+| 案件キーマップ | `CASE_KEY_MAP` | 案件の不変サロゲートID(case_id)と自然キーの対応表。S1 Stage1 で新設（Expand 基盤・未接続） |
 
 ---
 
@@ -273,6 +277,36 @@ completed  → cancelled（完了後キャンセル）
 ```
 pending/sending → disabled（予約送信機能廃止により未送信のまま無効化）
 ```
+
+---
+
+### S-09: 案件キーマップ (Case Key Map) ※S1 Stage1 で新設
+
+**用途:** 案件の不変サロゲートID `case_id` と自然キーの対応を一元管理し、サポート記録／案件補正／メール履歴／メール下書きの結合キーを安定化する。「管理アサイン後に完了しても未対応に戻る」バグの**根治**（不安定な日付PK `String(Date)` のTZ/型ブレ → 重複行 → 書込/表示のズレ）に向けた **expand-contract 移行の Expand 基盤**。
+
+**現行状態（Stage1）:** シート・ヘルパー・診断・テストのみ導入。**どの既存経路からも呼ばれない（未接続）／本番挙動ゼロ変化**。Dual-write 接続は Stage2、本番データへの Backfill は Stage3（破壊的ステップのため実行前に必ず停止）。
+
+**PK:** `案件ID`（`case_<epoch>`・決定的）
+**全 5 列。**
+
+| 物理列 | 論理名 | 型 | 備考 |
+|--------|-------|----|------|
+| A | 案件ID | String | `case_<epoch>`。同じ自然キーから常に同じID（決定的＝冪等バックフィル可） |
+| B | 種別 | String | `form`（フォーム） / `manual`（手動追加） |
+| C | 自然キー_正準化 | String | フォーム=`getTime()` の epoch 文字列 / 手動=`manual_<epoch>` |
+| D | 正規化メール | String | `normalizeEmail_`（小文字化＋trim）。照会属性 |
+| E | 作成日時 | Date | 登録日時 |
+
+**一意制約:** `(種別, 自然キー_正準化)` を一意キーとする。スプレッドシートは UNIQUE を強制できないため、以下3点を**コードで強制**する。
+1. 単一の `getOrCreateCaseId_(pkRaw, emailRaw)` に採番を集約（find-or-create）
+2. `withScriptLock_`（LockService の単一グローバルロック）で find-or-create を不可分化
+3. 重複検出・衝突解決を監査ログに記録（クロス種別epoch衝突時は連番サフィックス `_1` 等で回避）
+
+**関連ヘルパー:** `canonicalNaturalKey_(pkRaw)`（正準化・パース不能は `null` で安全停止） / `buildCaseId_(epoch)` / `getOrCreateCaseKeyMapSheet_()` / 読み取り専用診断 `diagnoseCaseKeyMigration_()`（Backfill 前のリコンサイル基準）。
+
+**Stage2 Dual-write（実装済・本番挙動ゼロ変化）:** 書込チョークポイント（`assignCase`/`reassignCaseAdmin`/`ensureRecordRowForCase_`/`recordEmail_`/`saveDraft`/`getOrCreateOverrideRowIndex_`/`addManualCase`）から `ensureCaseKeyMapping_(caseId, opt)`（非致死）を呼び、`resolveCaseNaturalSource_` で案件本体の生PK（フォーム=Date オブジェクト／手動=`manual_<epoch>`）と依頼者メールを権威解決して採番・登録する。`withScriptLock_` は再入ガード `_scriptLockHeld` を持ち、ロック内チョークポイントからの採番ネスト呼び出しでデッドロックしない。読み取り・FK列は不変。
+
+**Stage3 Backfill（実装済・本番未実行）:** `backfillCaseKeyMap_(options)` が全既存案件をマップへ冪等投入する。既定 `dryRun:true` は計画のみ（書込ゼロ）。計画ロジック `planBackfill_` が既登録スキップ・バッチ内重複自然キー dedup・case_id 衝突の連番回避を行い、再実行しても重複行を作らない。実行（`dryRun:false`）は破壊的（本番データ追記）のため**実行前に必ず停止・ドライラン・復元手順確認**。
 
 ---
 

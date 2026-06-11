@@ -4,6 +4,52 @@
 
 ---
 
+## [1.12.7] - 2026-06-11
+
+### Added (S1 Stage1 — 案件キーのサロゲート化 / Expand 基盤)
+- 「管理アサイン後に完了しても未対応に戻る」バグの**根治**に向けた expand-contract 移行の第1段。不安定な日付PK（`String(Date)` のTZ/型ブレ）を、エポックms基盤の決定的サロゲート `case_id`（`case_<epoch>`）へ収束させる土台を導入。
+  - 新シート `案件キーマップ`（`getOrCreateCaseKeyMapSheet_`）: 案件ID ↔ 自然キーの対応表。`(種別, 自然キー_正準化)` を一意キーとしコードで強制。
+  - 採番ヘルパー `getOrCreateCaseId_(pkRaw, emailRaw)`: `withScriptLock_`（LockService 単一グローバルロック）で find-or-create を不可分化。同一自然キーに冪等、クロス種別epoch衝突は連番サフィックスで回避し監査ログに記録。
+  - 正準化ヘルパー `canonicalNaturalKey_(pkRaw)`（パース不能は `null` で安全停止）/ `buildCaseId_(epoch)`。`withRecordWriteLock_` を `withScriptLock_` に委譲（DRY）。
+  - 読み取り専用診断 `diagnoseCaseKeyMigration_()`: 案件総数/マップ登録済/未登録/重複自然キー/epoch衝突/FK重複/対応プレビューを報告（Stage3 Backfill 前のリコンサイル基準）。
+- **本番挙動ゼロ変化・未デプロイ**: `getOrCreateCaseId_` はどの既存経路からも未接続（Stage2 Dual-write で接続）。`案件リスト`（IMPORTRANGE）へは一切書き込まない。
+- 設計根拠（2026 調査）: expand-contract / 決定的キーによる冪等バックフィル / Sheets は制約を強制できないため UNIQUE はコード強制（単一get-or-create＋Lock＋重複監査）。
+
+### Tests
+- 単体テストに正準自然キーの収束（Date と同時刻の日時文字列が同一 case_id）・`manual_` 解決・NaN安全停止・冪等・決定性を6件追加。計 72→78 件。既存 E2E 51件・単体全件パス（回帰なし）。
+
+### Docs
+- `docs/er-after.dbml` を `case_<uuid>` → `case_<epoch>`（決定的）に訂正。`docs/SDD.md` に §S-09 案件キーマップ追加。`docs/HANDOVER.md` §11 S1 を「Stage1 完了・次=Stage2」に更新。
+
+### Added (S1 Stage2 — Dual-write 接続)
+- 書込チョークポイントから案件キーマップへ ID を登録する **dual-write** を接続（**additive・非致死・読み取り/FK列は不変**）。
+  - `withScriptLock_` に**再入ガード**（`_scriptLockHeld` 実行内フラグ）を追加。GAS の ScriptLock は再入不可（保持中の再 `waitLock` はデッドロック）のため、ロック内チョークポイントから採番を安全にネスト呼び出しできるようにした。既存コードの偶発ネストも堅牢化。
+  - `ensureCaseKeyMapping_(caseId, opt)`（非致死ラッパー）＋ `resolveCaseNaturalSource_`: caseId から案件本体の**生PK（フォーム=Date オブジェクト / 手動=`manual_<epoch>` 文字列）と依頼者メール**を権威解決し採番。Stage3 Backfill と同一の正準化源を使うため **cross-stage で同じ case_id に収束**（重複マップ行を作らない）。
+  - 接続点（7箇所）: `assignCase` / `reassignCaseAdmin` / `ensureRecordRowForCase_` / `recordEmail_` / `saveDraft` / `getOrCreateOverrideRowIndex_` / `addManualCase`（新規作成は生PKを直接渡しスキャン省略）。
+- **本番挙動ゼロ変化（案件キーマップへの追記のみ）・未デプロイ**。登録漏れは Stage3 Backfill が権威的に補完。
+
+### Tests (Stage2)
+- 再入ロックガード（非ネスト/ネスト1回取得/例外時解放）と cross-stage 一致（Date/manual が両ステージで同一 case_id）の単体テストを5件追加。計 78→83 件。E2E 51件パス（回帰なし）。
+
+### Added (S1 Stage3 — Backfill 実装 ※本番未実行)
+- 既存全案件を案件キーマップへ投入する**冪等バッチ Backfill** `backfillCaseKeyMap_(options)` を実装。
+  - **既定 `dryRun:true`（安全側）**: 何も書き込まず「作成予定件数・既登録件数・衝突件数・サンプル」を返す。`dryRun:false` で初めて一括 `setValues` 追記。
+  - **冪等**: 既存 `(種別, 自然キー)` はスキップ。再実行しても重複行を作らない（テスト・ハーネスで検証済み）。Stage2 Dual-write と同一の生PK正準化を使い case_id が一致。
+  - 計画ロジック `planBackfill_`（既登録スキップ・バッチ内重複自然キー dedup・case_id 衝突の連番回避）を分離。
+- **本番未実行・未デプロイ**。実行は破壊的（本番データ追記）のため、本番GASからの明示操作＋実行前停止・ドライラン・復元手順確認が必須（CLAUDE.md グランドルール）。
+
+### Tests (Stage3)
+- `planCaseKeyBackfill`（空マップ全採番／**全登録済みで toCreate=空＝再実行冪等**／一部登録／重複自然キー dedup／衝突連番）の単体テストを5件追加。計 83→88 件。
+- **検証ハーネス**（`tests/manual/case-key-migration-harness.html`）に Backfill 検証を追加し Playwright MCP で確認: dryRun（書込ゼロ）→ live（未登録分のみ作成）→ **再live（created=0・行数不変＝冪等）**→ 再診断（unmapped=0）。実 `コード.js` ロジックで **16/16 アサーション ALL PASS**。
+
+### Added (S1 Stage3 — 管理画面からの実行手段)
+- 手動GASエディタ操作を避け、**管理者がアプリ上で Backfill を実行**できる公開エントリと UI を追加。
+  - バックエンド: `runCaseKeyMigrationDiagnosis()`（診断・読取専用）/ `runCaseKeyBackfill(dryRun)`（既定 dryRun=true）。いずれも `requireAdmin_` で権限強制・監査ログ記録。
+  - フロント: 設定管理ダイアログに「メンテナンス：案件キーマップ Backfill」セクション（①診断 ②ドライラン ③本実行）。本実行は確認ダイアログ付き。結果 JSON を画面表示。ローカルはモック動作。
+- Playwright MCP でローカル（モック）動作確認: 管理→設定管理→ドライランで `created:0`（書込なし）レポート表示・console error 0。
+
+---
+
 ## [1.12.6] - 2026-06-11
 
 ### Fixed

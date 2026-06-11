@@ -9,7 +9,7 @@
 
 介護事業所向け無料 IT サポート管理システム。GAS 上の React SPA で、Google スプレッドシートをデータストアとして使用。
 
-- **現行バージョン:** v1.12.6
+- **現行バージョン:** v1.12.7
 - **詳細設計:** `docs/SDD.md`
 - **引き継ぎ書:** `docs/HANDOVER.md`
 - **運用手順:** `docs/RUNBOOK.md`
@@ -263,11 +263,11 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 |---------|------|------|
 | `CLAUDE.md`（本ファイル） | Claude Code 専用指示 | Claude Code |
 | `AGENTS.md` | OpenAI Codex 専用指示 | OpenAI Codex |
-| `docs/SDD.md` | システム詳細設計書 v1.12.6 | AI・開発者 |
-| `docs/HANDOVER.md` | 引き継ぎ書 v1.12.6 | 開発者 |
+| `docs/SDD.md` | システム詳細設計書 v1.12.7 | AI・開発者 |
+| `docs/HANDOVER.md` | 引き継ぎ書 v1.12.7 | 開発者 |
 | `docs/ADR.md` | アーキテクチャ判断記録（ADR-001〜012） | AI・開発者 |
 | `docs/RUNBOOK.md` | 運用手順書（デプロイ・障害対応） | 開発者・運用者 |
-| `docs/Manual.md` | 操作マニュアル v1.12.6 | エンドユーザー |
+| `docs/Manual.md` | 操作マニュアル v1.12.7 | エンドユーザー |
 | `docs/RD.md` | 要件定義 | 参照用 |
 | `docs/BUILD_SPEC.md` | 総合仕様書 BSD-001（単独完結・人間可読。概要〜データモデル〜機能〜構築〜運用〜セキュリティを内包） | 開発者・運用者・検収担当 |
 | `docs/build-from-scratch.html` | ゼロから構築ガイド（C4全体像・構築手順・必要ドキュメント体系） | 開発者・運用者 |
