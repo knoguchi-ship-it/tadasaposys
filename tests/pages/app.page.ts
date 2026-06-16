@@ -273,7 +273,7 @@ export class AppPage {
 
   /** メールモーダルの見出し（スレッド返信 / 新規メール送信 等） */
   getEmailModalHeading(): Locator {
-    return this.page.getByRole('heading', { name: /スレッド返信|新規メール送信|初回メール送信|日程確定メール送信|回数超過の連絡/ });
+    return this.page.getByRole('heading', { name: /スレッド返信|新規メール送信|初回メール送信|日程確定メール送信|サポート終了メール送信|回数超過の連絡/ });
   }
 
   /** モーダル内の件名 input（CC/BCC/件名 の順で最後の text input） */
@@ -281,9 +281,9 @@ export class AppPage {
     return this.getEmailModal().locator('input[type="text"]').last();
   }
 
-  /** モーダル内の送信実行ボタン（reply=返信する / new=送信する） */
+  /** モーダル内の送信実行ボタン（reply=返信する / new=送信する / closing=サポート終了メールを送信） */
   getEmailSendButton(): Locator {
-    return this.getEmailModal().getByRole('button', { name: /返信する|送信する|送信して担当する/ });
+    return this.getEmailModal().getByRole('button', { name: /返信する|送信する|送信して担当する|サポート終了メールを送信/ });
   }
 
   async saveDraftInModal(): Promise<void> {

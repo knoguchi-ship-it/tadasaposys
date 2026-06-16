@@ -1,19 +1,20 @@
 /**
- * 11 — サポート終了メール（v1.12.11 回帰ガード）
+ * 11 — サポート終了メール（v1.12.11 機能 / v1.12.12 で「送信前に編集」方式へ）
  *
- * 完了報告モーダルに「サポート終了メールを送信する」チェック（既定ON）を追加し、
- * 完了と同時に相談者へ終了連絡メールを既存スレッドへ返信送信する機能を保護する。
- * 件名・本文は管理設定（MAIL_CLOSING_SUBJECT / MAIL_CLOSING_BODY）で編集可能。
+ * 完了報告モーダルに「サポート終了メールを送信する」チェック（既定ON）を追加。
+ * v1.12.12 以降は、完了報告のあと**テンプレートを入れたメール作成モーダル**を開き、
+ * ログイン中のメンバーが件名・本文をその場で書き換えて送信する（既存スレッドへ返信／
+ * 無ければ新規）。送信しない場合は×で閉じる。本テンプレ初期値は管理設定で編集可能
+ * （MAIL_CLOSING_SUBJECT / MAIL_CLOSING_BODY）。
  *
- * ローカルモック（sendCaseEmail/sendNewCaseEmail, IS_LOCAL）は backend と同様に
- * 既存スレッドへ返信追記する。emailTemplates.closing* と MOCK_SETTINGS により
- * テンプレ取得・タグ置換・設定画面表示を再現する。
+ * ローカルモック（sendCaseEmail/sendNewCaseEmail, IS_LOCAL）は backend 同様に
+ * 既存スレッドへ返信追記する。emailTemplates.closing* と MOCK_SETTINGS で再現。
  */
 import { test, expect } from '../fixtures';
 
 test.describe('サポート終了メール', () => {
 
-  test('完了報告でサポート終了メールを送信する（既定ON）', async ({ appPage }) => {
+  test('完了報告ONで終了メール作成画面が開き、編集してその場で送信できる', async ({ appPage }) => {
     // たなかヘルパーセンター: 対応中 / 既存スレッド（mock-thread-1）あり
     await appPage.clickTab('対応中');
     await appPage.openReportModal('たなかヘルパーセンター');
@@ -24,12 +25,17 @@ test.describe('サポート終了メール', () => {
     await appPage.fillReportContent('Excel支援を実施。完了。');
     await appPage.submitReport();
 
-    // 完了報告＋終了メール送信の両方のトーストが出る（壊れたコードでは終了メールが送られない）
+    // 完了報告が保存され、続けて「サポート終了メール送信」モーダルが開く（編集可能）
     await expect(appPage.getToast('完了報告を保存しました')).toBeVisible();
+    await expect(appPage.getEmailModalHeading()).toBeVisible();
+    await expect(appPage.getEmailSubjectInput()).toHaveValue(/サポート完了/);
+
+    // その場で送信（壊れたコードでは終了メールモーダルが開かず送信できない）
+    await appPage.getEmailSendButton().click();
     await expect(appPage.getToast('サポート終了メールを送信しました')).toBeVisible();
   });
 
-  test('チェックOFFならサポート終了メールは送信されない', async ({ appPage }) => {
+  test('チェックOFFなら終了メール作成画面は開かない', async ({ appPage }) => {
     // もり小規模多機能ホーム: 対応中
     await appPage.clickTab('対応中');
     await appPage.openReportModal('もり小規模多機能ホーム');
@@ -39,8 +45,8 @@ test.describe('サポート終了メール', () => {
     await appPage.submitReport();
 
     await expect(appPage.getToast('完了報告を保存しました')).toBeVisible();
-    // 終了メールのトーストは出ない
-    await expect(appPage.getToast('サポート終了メールを送信しました')).toHaveCount(0);
+    // 終了メール作成モーダルは開かない
+    await expect(appPage.getEmailModalHeading()).toHaveCount(0);
   });
 
 });

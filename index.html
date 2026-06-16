@@ -2157,8 +2157,8 @@
           } else if (emailModal.mode === 'decline') {
             result = await Api.declineCase(emailModal.caseId, user, emailModal.subject, emailModal.body, trimmedCc, trimmedBcc);
             patch = { status: 'rejected', staffEmail: user.email, staffName: user.name };
-          } else if (emailModal.mode === 'schedule') {
-            // 日程確定メール: 既存スレッドがあれば返信、なければ新規スレッド
+          } else if (emailModal.mode === 'schedule' || emailModal.mode === 'closing') {
+            // 日程確定メール / サポート終了メール: 既存スレッドがあれば返信、なければ新規スレッド
             if (emailModal.threadId) {
               result = await Api.sendCaseEmail(emailModal.caseId, user, emailModal.subject, emailModal.body, emailModal.threadId, trimmedCc, trimmedBcc);
             } else {
@@ -2192,6 +2192,8 @@
             showToast('回数超過の連絡を送信し、対応不可に設定しました。', { type: 'success', title: '対応不可' });
           } else if (emailModal.mode === 'schedule') {
             showToast('日程確定メールを送信しました。', { type: 'success', title: '送信完了' });
+          } else if (emailModal.mode === 'closing') {
+            showToast('サポート終了メールを送信しました。', { type: 'success', title: '終了メール送信' });
           } else {
             showToast('メールを送信しました。', { type: 'success', title: '送信完了' });
           }
@@ -2287,32 +2289,6 @@
           } else if (payload.status === 'completed') {
             setActiveTab('completed');
             showToast('完了報告を保存しました。', { type: 'success', title: '保存完了' });
-            // v1.12.11: サポート終了メールを送信（既存スレッドへ返信／無ければ新規・本文は設定テンプレ）
-            if (doSendClosingEmail) {
-              try {
-                const tplC = masters?.emailTemplates || {};
-                const closingSubject = replaceCaseTags(tplC.closingSubject || 'タダサポ｜サポート完了のお知らせ');
-                const closingBody = replaceCaseTags(tplC.closingBody || '');
-                const closingCc = (getSubStaffAutoCc(selectedCase) || '').trim() || null;
-                const closingThreads = selectedCase.threadIds || [];
-                const latestClosingThreadId = closingThreads.length > 0 ? closingThreads[closingThreads.length - 1] : null;
-                let closingRes;
-                if (latestClosingThreadId) {
-                  closingRes = await Api.sendCaseEmail(selectedCase.timestamp, user, closingSubject, closingBody, latestClosingThreadId, closingCc, null);
-                } else {
-                  closingRes = await Api.sendNewCaseEmail(selectedCase.timestamp, user, closingSubject, closingBody, closingCc, null);
-                }
-                if (closingRes?.threadId) {
-                  setCases(prev => prev.map(c => (c.id === editCaseId && !(c.threadIds || []).includes(closingRes.threadId))
-                    ? { ...c, threadIds: [...(c.threadIds || []), closingRes.threadId] } : c));
-                }
-                // スレッド一覧を再読み込み
-                Api.getThreadMessages(selectedCase.timestamp).then(groups => setThreadGroups(groups || [])).catch(() => {});
-                showToast('サポート終了メールを送信しました。', { type: 'success', title: '終了メール送信' });
-              } catch (closingErr) {
-                showToast('完了は保存しましたが、サポート終了メールの送信に失敗しました：' + (closingErr.message || String(closingErr)), { type: 'error', title: '終了メール送信エラー' });
-              }
-            }
           } else {
             showToast('記録を保存しました。', { type: 'success', title: '保存完了' });
           }
@@ -2353,6 +2329,23 @@
               subject: replaceScheduleTags(tpl.scheduleSubject || 'タダサポ｜サポート日程のご連絡'),
               body: replaceScheduleTags(tpl.scheduleBody || ''),
               threadId: latestThreadId
+            });
+          }
+
+          // v1.12.12: サポート終了メールを「送信前に編集」する。完了報告で送信ONなら
+          // テンプレを入れたメール作成モーダルを開き、ログイン中メンバーがその場で書き換えて送信する。
+          if (doSendClosingEmail && payload.status === 'completed') {
+            const tplC = masters?.emailTemplates || {};
+            const closingThreads = selectedCase.threadIds || [];
+            const latestClosingThreadId = closingThreads.length > 0 ? closingThreads[closingThreads.length - 1] : null;
+            setEmailModal({
+              mode: 'closing',
+              caseId: selectedCase.timestamp,
+              to: selectedCase.email,
+              cc: getSubStaffAutoCc(selectedCase), bcc: '',
+              subject: replaceCaseTags(tplC.closingSubject || 'タダサポ｜サポート完了のお知らせ'),
+              body: replaceCaseTags(tplC.closingBody || ''),
+              threadId: latestClosingThreadId || undefined
             });
           }
         } catch (err) {
@@ -5101,11 +5094,11 @@
                 <div className="flex justify-between items-center mb-6">
                   <div>
                     <h3 className="font-black text-lg text-slate-800 flex items-center gap-2">
-                      <Mail size={20} className={emailModal.mode === 'initial' ? 'text-teal-500' : emailModal.mode === 'decline' ? 'text-rose-500' : emailModal.mode === 'schedule' ? 'text-indigo-500' : emailModal.mode === 'reply' ? 'text-amber-500' : 'text-sky-500'}/>
-                      {emailModal.mode === 'initial' ? '初回メール送信' : emailModal.mode === 'decline' ? '回数超過の連絡' : emailModal.mode === 'schedule' ? '日程確定メール送信' : emailModal.mode === 'reply' ? 'スレッド返信' : '新規メール送信'}
+                      <Mail size={20} className={emailModal.mode === 'initial' ? 'text-teal-500' : emailModal.mode === 'decline' ? 'text-rose-500' : emailModal.mode === 'schedule' ? 'text-indigo-500' : emailModal.mode === 'closing' ? 'text-emerald-500' : emailModal.mode === 'reply' ? 'text-amber-500' : 'text-sky-500'}/>
+                      {emailModal.mode === 'initial' ? '初回メール送信' : emailModal.mode === 'decline' ? '回数超過の連絡' : emailModal.mode === 'schedule' ? '日程確定メール送信' : emailModal.mode === 'closing' ? 'サポート終了メール送信' : emailModal.mode === 'reply' ? 'スレッド返信' : '新規メール送信'}
                     </h3>
                     <p className="text-[10px] font-bold text-slate-500 mt-0.5">
-                      {emailModal.mode === 'initial' ? 'メール送信と同時に担当が確定します' : emailModal.mode === 'decline' ? '回数超過のメールを送信し、対応不可に設定します' : emailModal.mode === 'schedule' ? '日程確定の連絡メールを送信します（送信しない場合は×で閉じてください）' : emailModal.mode === 'reply' ? '既存スレッドに返信します' : '新しいスレッドでメールを送信します'}
+                      {emailModal.mode === 'initial' ? 'メール送信と同時に担当が確定します' : emailModal.mode === 'decline' ? '回数超過のメールを送信し、対応不可に設定します' : emailModal.mode === 'schedule' ? '日程確定の連絡メールを送信します（送信しない場合は×で閉じてください）' : emailModal.mode === 'closing' ? '内容を編集してサポート終了メールを送信します（送信しない場合は×で閉じてください）' : emailModal.mode === 'reply' ? '既存スレッドに返信します' : '新しいスレッドでメールを送信します'}
                     </p>
                   </div>
                   <button onClick={() => setEmailModal(null)} aria-label="閉じる">
@@ -5175,6 +5168,7 @@
                       emailModal.mode === 'initial' ? 'bg-teal-600 hover:bg-teal-700 shadow-lg shadow-teal-200'
                       : emailModal.mode === 'decline' ? 'bg-rose-600 hover:bg-rose-700 shadow-lg shadow-rose-200'
                       : emailModal.mode === 'schedule' ? 'bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200'
+                      : emailModal.mode === 'closing' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-200'
                       : emailModal.mode === 'reply' ? 'bg-amber-500 hover:bg-amber-600 shadow-lg shadow-amber-200'
                       : 'bg-sky-600 hover:bg-sky-700 shadow-lg shadow-sky-200'
                     }`}
@@ -5187,9 +5181,11 @@
                           ? <><AlertTriangle size={16}/> 送信して対応不可にする</>
                           : emailModal.mode === 'schedule'
                             ? <><Calendar size={16}/> 日程確定メールを送信</>
-                            : emailModal.mode === 'reply'
-                              ? <><Reply size={16}/> 返信する</>
-                              : <><Send size={16}/> 送信する</>
+                            : emailModal.mode === 'closing'
+                              ? <><Send size={16}/> サポート終了メールを送信</>
+                              : emailModal.mode === 'reply'
+                                ? <><Reply size={16}/> 返信する</>
+                                : <><Send size={16}/> 送信する</>
                     }
                   </button>
                   {/* v1.11.0: 下書き保存 */}
@@ -5506,7 +5502,7 @@
                       />
                       <span className="text-[11px] font-bold text-slate-600 leading-snug">
                         <span className="text-emerald-700 font-black flex items-center gap-1 mb-0.5"><Mail size={12}/> サポート終了メールを送信する</span>
-                        完了と同時に、相談者へサポート終了の連絡メールを既存スレッドへ返信送信します（スレッドが無い場合は新規送信）。件名・本文は管理者の「設定」→メールテンプレートで編集できます。
+                        完了報告のあと、テンプレートを入れたメール作成画面が開きます。件名・本文をその場で自由に書き換えて送信できます（既存スレッドへ返信／無ければ新規・送信しない場合は×で閉じる）。テンプレートの初期値は管理者の「設定」→メールテンプレートで編集できます。
                       </span>
                     </label>
                   )}
