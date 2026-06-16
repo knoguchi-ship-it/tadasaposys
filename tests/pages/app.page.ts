@@ -314,4 +314,33 @@ export class AppPage {
   getDraftDeleteButton(): Locator {
     return this.getDraftListSection().getByRole('button', { name: '削除' }).first();
   }
+
+  // ── 完了報告 / サポート終了メール（v1.12.11） ──────
+
+  /** 完了報告・記録修正モーダル本体（実施記録・完了報告 見出しで特定） */
+  getReportModal(): Locator {
+    return this.page.locator('div.fixed.inset-0').filter({ has: this.page.getByRole('heading', { name: '実施記録・完了報告' }) });
+  }
+
+  /** 案件詳細から「完了報告」モーダルを開く */
+  async openReportModal(officeName: string): Promise<void> {
+    await this.selectCase(officeName);
+    await this.getActionButton('完了報告').click();
+    await this.page.getByRole('heading', { name: '実施記録・完了報告' }).waitFor({ state: 'visible', timeout: 5_000 });
+  }
+
+  /** 「サポート終了メールを送信する」チェックボックス（既定ON） */
+  getClosingEmailCheckbox(): Locator {
+    return this.getReportModal().getByRole('checkbox', { name: /サポート終了メール/ });
+  }
+
+  /** 完了報告の実施記録テキストを入力する */
+  async fillReportContent(text: string): Promise<void> {
+    await this.getReportModal().getByPlaceholder(/実施したサポート内容/).fill(text);
+  }
+
+  /** 完了報告を保存して完了にする */
+  async submitReport(): Promise<void> {
+    await this.getReportModal().getByRole('button', { name: '記録を保存して完了にする' }).click();
+  }
 }

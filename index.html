@@ -204,6 +204,8 @@
         includeDetails: 'true',
         newSubject: '',
         newBody: '{{名前}} 様\n\n\n\n{{担当者名}}',
+        closingSubject: 'タダサポ｜サポート完了のお知らせ',
+        closingBody: '{{名前}} 様\n\nこの度はタダサポをご利用いただき、誠にありがとうございました。\n{{事業所名}} 様へのサポートは今回をもちまして完了とさせていただきます。\n\nまたお困りごとがございましたら、いつでもお気軽にご相談ください。\n今後ともタダサポをよろしくお願いいたします。\n\n{{担当者名}}',
         scheduleSubject: 'タダサポ｜サポート日程のご連絡',
         scheduleBody: '{{名前}} 様\n\nいつもお世話になっております。\nタダサポ担当の{{担当者名}}です。\n\nサポート日程が決まりましたのでご連絡いたします。\n\n----------------\n【サポート日程】\n日時：{{日程}}\n方法：{{対応方法}}\n{{URL}}\n----------------\n\n当日はどうぞよろしくお願いいたします。\nご不明な点がございましたらお気軽にご連絡ください。'
       }
@@ -305,6 +307,8 @@
       MAIL_NEW_BODY: MOCK_MASTERS.emailTemplates.newBody,
       MAIL_SCHEDULE_SUBJECT: MOCK_MASTERS.emailTemplates.scheduleSubject,
       MAIL_SCHEDULE_BODY: MOCK_MASTERS.emailTemplates.scheduleBody,
+      MAIL_CLOSING_SUBJECT: MOCK_MASTERS.emailTemplates.closingSubject,
+      MAIL_CLOSING_BODY: MOCK_MASTERS.emailTemplates.closingBody,
       SHARED_CALENDAR_ID: '',
       ATTACHMENT_FOLDER_ID: '',
       ZOOM_ACCOUNT_ID: '',
@@ -1319,6 +1323,7 @@
       const [threadLoading, setThreadLoading] = useState(false);
       const [openThreadId, setOpenThreadId] = useState(null);
       const [caseDrafts, setCaseDrafts] = useState([]); // v1.12.10: 選択中案件の保存済み下書き一覧
+      const [sendClosingEmail, setSendClosingEmail] = useState(true); // v1.12.11: 完了報告時にサポート終了メールを送るか（既定ON）
       const [historyEditIdx, setHistoryEditIdx] = useState(null); // 編集中の履歴インデックス (null=非編集)
       const [historyEditDraft, setHistoryEditDraft] = useState({});
       const [meetUrlEditing, setMeetUrlEditing] = useState(false); // URL編集モード
@@ -2215,6 +2220,8 @@
           showToast('重複チェック中です。少しお待ちください。', { type: 'info' });
           return;
         }
+        // v1.12.11: 完了報告時にサポート終了メールを送るか（モーダルを閉じる前に確定値を退避）
+        const doSendClosingEmail = modalMode === 'report' && sendClosingEmail;
         startSubmit('保存中...');
 
         try {
@@ -2280,6 +2287,32 @@
           } else if (payload.status === 'completed') {
             setActiveTab('completed');
             showToast('完了報告を保存しました。', { type: 'success', title: '保存完了' });
+            // v1.12.11: サポート終了メールを送信（既存スレッドへ返信／無ければ新規・本文は設定テンプレ）
+            if (doSendClosingEmail) {
+              try {
+                const tplC = masters?.emailTemplates || {};
+                const closingSubject = replaceCaseTags(tplC.closingSubject || 'タダサポ｜サポート完了のお知らせ');
+                const closingBody = replaceCaseTags(tplC.closingBody || '');
+                const closingCc = (getSubStaffAutoCc(selectedCase) || '').trim() || null;
+                const closingThreads = selectedCase.threadIds || [];
+                const latestClosingThreadId = closingThreads.length > 0 ? closingThreads[closingThreads.length - 1] : null;
+                let closingRes;
+                if (latestClosingThreadId) {
+                  closingRes = await Api.sendCaseEmail(selectedCase.timestamp, user, closingSubject, closingBody, latestClosingThreadId, closingCc, null);
+                } else {
+                  closingRes = await Api.sendNewCaseEmail(selectedCase.timestamp, user, closingSubject, closingBody, closingCc, null);
+                }
+                if (closingRes?.threadId) {
+                  setCases(prev => prev.map(c => (c.id === editCaseId && !(c.threadIds || []).includes(closingRes.threadId))
+                    ? { ...c, threadIds: [...(c.threadIds || []), closingRes.threadId] } : c));
+                }
+                // スレッド一覧を再読み込み
+                Api.getThreadMessages(selectedCase.timestamp).then(groups => setThreadGroups(groups || [])).catch(() => {});
+                showToast('サポート終了メールを送信しました。', { type: 'success', title: '終了メール送信' });
+              } catch (closingErr) {
+                showToast('完了は保存しましたが、サポート終了メールの送信に失敗しました：' + (closingErr.message || String(closingErr)), { type: 'error', title: '終了メール送信エラー' });
+              }
+            }
           } else {
             showToast('記録を保存しました。', { type: 'success', title: '保存完了' });
           }
@@ -2480,6 +2513,7 @@
         if (!selectedCase) return;
         setModalMode(mode);
         setUseCalendar(true); // 毎回デフォルトONでリセット
+        setSendClosingEmail(true); // v1.12.11: 完了報告のサポート終了メール送信を毎回デフォルトONでリセット
         setConflictState({ status: 'idle', conflicts: [], bufferMin: 30, error: null }); // v1.11.8: 重複状態リセット
         setZoomMode('new'); // v1.12.0: Zoom発行モードを既定に
         setEditFormData({
@@ -2880,6 +2914,8 @@
         MAIL_NEW_BODY: { label: '本文', category: 'mail', order: 31, desc: '使用可能タグ: {{名前}} {{事業所名}} {{担当者名}}' },
         MAIL_DECLINED_SUBJECT: { label: '件名', category: 'mail', order: 40, group: '回数超過メール', desc: '年間利用回数超過時に送信するメールの件名' },
         MAIL_DECLINED_BODY: { label: '本文', category: 'mail', order: 41, desc: '使用可能タグ: {{名前}} {{事業所名}} {{担当者名}}' },
+        MAIL_CLOSING_SUBJECT: { label: '件名', category: 'mail', order: 50, group: 'サポート終了メール', desc: '完了報告時に「サポート終了メールを送信する」を選んだ際に送信する件名' },
+        MAIL_CLOSING_BODY: { label: '本文', category: 'mail', order: 51, desc: '使用可能タグ: {{名前}} {{事業所名}} {{担当者名}}' },
         SHARED_CALENDAR_ID: { label: '共有カレンダーID', category: 'integration', order: 1, desc: '予定作成に使用（個人カレンダーへのフォールバック）' },
         ATTACHMENT_FOLDER_ID: { label: '添付保存先フォルダID', category: 'integration', order: 2, desc: '添付ファイル保存先' },
         TEAM_CALENDAR_ID: { label: 'チームカレンダーID（書込先）', category: 'integration', order: 3, group: '日程・予約管理', desc: 'Zoom予約・日程確定時に必ず登録するチーム共有カレンダーID。空欄時はSHARED_CALENDAR_IDにフォールバック' },
@@ -5459,6 +5495,20 @@
                         <button type="button" onClick={() => setEditFormData({...editFormData, status: 'completed'})} className={`flex-1 py-3 rounded-xl text-xs font-black border-2 ${editFormData.status === 'completed' ? 'border-emerald-500 bg-emerald-50 text-emerald-600' : 'border-slate-100 text-slate-500'}`}>完了</button>
                       </div>
                     </div>
+                  )}
+                  {modalMode === 'report' && (
+                    <label className="flex items-start gap-2.5 p-3 rounded-xl border-2 border-emerald-100 bg-emerald-50/60 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={sendClosingEmail}
+                        onChange={e => setSendClosingEmail(e.target.checked)}
+                        className="mt-0.5 w-4 h-4 accent-emerald-600 shrink-0"
+                      />
+                      <span className="text-[11px] font-bold text-slate-600 leading-snug">
+                        <span className="text-emerald-700 font-black flex items-center gap-1 mb-0.5"><Mail size={12}/> サポート終了メールを送信する</span>
+                        完了と同時に、相談者へサポート終了の連絡メールを既存スレッドへ返信送信します（スレッドが無い場合は新規送信）。件名・本文は管理者の「設定」→メールテンプレートで編集できます。
+                      </span>
+                    </label>
                   )}
                   <button disabled={submitting || conflictState.status === 'conflict' || conflictState.status === 'checking'} className={`relative w-full py-4 text-white rounded-xl font-black text-sm transition-all shadow-lg shadow-slate-200 disabled:opacity-50 disabled:cursor-not-allowed ${
                     modalMode === 'cancel' ? 'bg-amber-500 hover:bg-amber-600' : modalMode === 'schedule' ? 'bg-indigo-600 hover:bg-indigo-700' : modalMode === 'report' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-900 hover:bg-slate-800'
