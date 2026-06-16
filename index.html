@@ -1318,6 +1318,7 @@
       const [threadGroups, setThreadGroups] = useState([]);
       const [threadLoading, setThreadLoading] = useState(false);
       const [openThreadId, setOpenThreadId] = useState(null);
+      const [caseDrafts, setCaseDrafts] = useState([]); // v1.12.10: 選択中案件の保存済み下書き一覧
       const [historyEditIdx, setHistoryEditIdx] = useState(null); // 編集中の履歴インデックス (null=非編集)
       const [historyEditDraft, setHistoryEditDraft] = useState({});
       const [meetUrlEditing, setMeetUrlEditing] = useState(false); // URL編集モード
@@ -1743,7 +1744,12 @@
         setHistoryEditDraft({});
         setMeetUrlEditing(false);
         setMeetUrlDraft('');
+        setCaseDrafts([]);
         if (!selectedCaseId) return;
+        // v1.12.10: 保存済み下書き一覧を読み込む（未対応案件の初回メール下書き等も対象）
+        Api.listDraftsForCase(selectedCaseId)
+          .then(drafts => setCaseDrafts(drafts || []))
+          .catch(() => setCaseDrafts([]));
         // selectedCase はレンダー時に最新値が取れるので ref 不要で直接参照
         if (selectedCase && selectedCase.status === 'unhandled') return;
         setThreadLoading(true);
@@ -2041,6 +2047,56 @@
           .catch(() => {});
       }, [emailModal?.caseId, emailModal?.mode, emailModal?.threadId]);
 
+      // v1.12.10: 案件詳細の「下書き一覧」用ヘルパー
+      // 保存済み下書きを再読込（保存・送信・削除後の同期に使用）
+      const reloadCaseDrafts = async (caseId) => {
+        if (!caseId) return;
+        try {
+          var drafts = await Api.listDraftsForCase(caseId);
+          setCaseDrafts(drafts || []);
+        } catch (e) { /* 一覧取得失敗はサイレント（操作自体は成功済み） */ }
+      };
+
+      // 下書きの種類ラベル（メールモーダルの見出しと同一表現に揃える）
+      const draftModeLabel = (mode) => (
+        mode === 'initial' ? '初回メール' : mode === 'decline' ? '回数超過の連絡'
+          : mode === 'schedule' ? '日程確定メール' : mode === 'reply' ? 'スレッド返信' : '新規メール'
+      );
+
+      // 下書き一覧から該当のメールモーダルを復元して開く（再編集・送信用）
+      const openDraftFromList = (d) => {
+        if (!selectedCase || !d) return;
+        // 同キーの自動読込プロンプトを抑止（一覧から開いた時点で内容を反映済みのため二重に尋ねない）
+        setDraftChecked(selectedCase.timestamp + '|' + (d.mode || '') + '|' + (d.threadId || ''));
+        setEmailModal({
+          mode: d.mode,
+          caseId: selectedCase.timestamp,
+          to: selectedCase.email,
+          cc: d.cc || '',
+          bcc: d.bcc || '',
+          threadId: d.threadId || '',
+          subject: d.subject || '',
+          body: d.body || '',
+          tools: d.mode === 'initial' ? (d.tools || []) : undefined
+        });
+      };
+
+      // 下書き一覧から削除（draftCaseIds バッジも同期更新）
+      const deleteDraftFromList = async (d) => {
+        if (!selectedCase || !d) return;
+        try {
+          await Api.deleteDraft(selectedCase.timestamp, d.mode, d.threadId || '');
+          var remaining = await Api.listDraftsForCase(selectedCase.timestamp);
+          setCaseDrafts(remaining || []);
+          if (!remaining || remaining.length === 0) {
+            setDraftCaseIds(prev => prev.filter(id => id !== selectedCase.timestamp));
+          }
+          showToast('下書きを削除しました。', { type: 'success', title: '下書き削除' });
+        } catch (e) {
+          showToast(e.message || String(e), { type: 'error', title: '下書き削除エラー' });
+        }
+      };
+
       const [savingDraft, setSavingDraft] = useState(false);
       const handleSaveDraft = async () => {
         if (!emailModal || !user || savingDraft) return;
@@ -2058,7 +2114,8 @@
           };
           await Api.saveDraft(payload);
           setDraftCaseIds(prev => prev.includes(emailModal.caseId) ? prev : [...prev, emailModal.caseId]);
-          showToast('下書きを保存しました。次回モーダルを開くと読み込めます。', { type: 'success', title: '下書き保存' });
+          reloadCaseDrafts(emailModal.caseId); // v1.12.10: 案件詳細の下書き一覧へ反映
+          showToast('下書きを保存しました。案件詳細の「下書き一覧」からいつでも再編集・送信できます。', { type: 'success', title: '下書き保存' });
         } catch (e) {
           showToast(e.message || String(e), { type: 'error', title: '下書き保存エラー' });
         } finally {
@@ -2072,6 +2129,7 @@
           await Api.deleteDraft(caseId, mode, threadId || '');
           // この案件に他の下書きが残っているか確認し、無ければ draftCaseIds から除外
           var remaining = await Api.listDraftsForCase(caseId);
+          setCaseDrafts(remaining || []); // v1.12.10: 案件詳細の下書き一覧を同期
           if (!remaining || remaining.length === 0) {
             setDraftCaseIds(prev => prev.filter(id => id !== caseId));
           }
@@ -4205,6 +4263,53 @@
                       </div>
                     </section>
                     )}
+                    {/* v1.12.10: 下書き一覧（送信前メールの再編集・送信の入口） */}
+                    {caseDrafts.length > 0 && (
+                      <section className="space-y-3">
+                        <h3 className="text-[10px] font-black text-violet-600 uppercase tracking-widest flex items-center gap-2">
+                          <Save size={12} /> 下書き ({caseDrafts.length}件)
+                        </h3>
+                        <p className="text-[10px] text-slate-500 -mt-1">送信前に保存したメールです。「開く」で再編集・送信できます。</p>
+                        {caseDrafts.map((d, i) => {
+                          var snippet = (d.body || '').replace(/\n/g, ' ').trim();
+                          return (
+                            <div key={d.draftId || i} className="bg-white rounded-2xl border border-violet-100 shadow-sm p-4 flex items-center gap-3">
+                              <div className="w-9 h-9 rounded-full bg-violet-50 flex items-center justify-center shrink-0">
+                                <Save size={16} className="text-violet-500"/>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-0.5">
+                                  <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-violet-50 text-violet-600">{draftModeLabel(d.mode)}</span>
+                                  {d.updatedAt && (
+                                    <span className="text-[9px] font-black text-slate-500">
+                                      {new Date(d.updatedAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] font-black text-slate-700 truncate">{d.subject || '(件名なし)'}</p>
+                                <p className="text-[10px] text-slate-500 truncate mt-0.5">{snippet.slice(0, 60)}{snippet.length > 60 ? '...' : ''}</p>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <button
+                                  onClick={() => openDraftFromList(d)}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black text-violet-600 bg-violet-50 hover:bg-violet-100 rounded-lg transition-colors cursor-pointer"
+                                  title="この下書きを開いて再編集・送信する"
+                                >
+                                  <Pencil size={12}/> 開く
+                                </button>
+                                <button
+                                  onClick={() => deleteDraftFromList(d)}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-black text-rose-500 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors cursor-pointer"
+                                  title="この下書きを削除する"
+                                >
+                                  <Trash2 size={12}/> 削除
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </section>
+                    )}
                     {/* メールスレッド一覧 */}
                     {threadLoading && (
                       <section className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex items-center justify-center gap-2">
@@ -4967,7 +5072,7 @@
                       {emailModal.mode === 'initial' ? 'メール送信と同時に担当が確定します' : emailModal.mode === 'decline' ? '回数超過のメールを送信し、対応不可に設定します' : emailModal.mode === 'schedule' ? '日程確定の連絡メールを送信します（送信しない場合は×で閉じてください）' : emailModal.mode === 'reply' ? '既存スレッドに返信します' : '新しいスレッドでメールを送信します'}
                     </p>
                   </div>
-                  <button onClick={() => setEmailModal(null)}>
+                  <button onClick={() => setEmailModal(null)} aria-label="閉じる">
                     <X size={20} className="text-slate-500 hover:text-slate-600"/>
                   </button>
                 </div>

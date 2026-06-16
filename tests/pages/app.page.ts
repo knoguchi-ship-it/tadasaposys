@@ -238,4 +238,80 @@ export class AppPage {
   getCaseCountBadge(): Locator {
     return this.page.locator('button[title="クリックして上限を変更"]');
   }
+
+  // ── メールスレッド / 下書き一覧（v1.12.10） ────────
+
+  /** 案件詳細の最初のメールスレッドサマリーを展開する */
+  async expandFirstThread(): Promise<void> {
+    const summary = this.page
+      .locator('.max-w-3xl')
+      .getByRole('button')
+      .filter({ hasText: '最新:' })
+      .first();
+    await summary.click();
+  }
+
+  /** スレッド内の最初のメッセージを展開し、「返信する」を押して返信モーダルを開く */
+  async openThreadReply(): Promise<void> {
+    await this.expandFirstThread();
+    // スレッド内メッセージ（"送信"/"受信" バッジを含む）を1件展開。
+    // スレッドサマリーも "最新: 受信" を含むため hasNotText で除外する。
+    const msg = this.page
+      .locator('.max-w-3xl')
+      .getByRole('button')
+      .filter({ hasText: /受信|送信/, hasNotText: '最新:' })
+      .first();
+    await msg.click();
+    await this.page.getByRole('button', { name: '返信する' }).first().click();
+    await this.getEmailModalHeading().waitFor({ state: 'visible', timeout: 5_000 });
+  }
+
+  /** メールモーダル本体（z-[110] のオーバーレイ。見出しで一意特定） */
+  getEmailModal(): Locator {
+    return this.page.locator('div.fixed.inset-0').filter({ has: this.getEmailModalHeading() });
+  }
+
+  /** メールモーダルの見出し（スレッド返信 / 新規メール送信 等） */
+  getEmailModalHeading(): Locator {
+    return this.page.getByRole('heading', { name: /スレッド返信|新規メール送信|初回メール送信|日程確定メール送信|回数超過の連絡/ });
+  }
+
+  /** モーダル内の件名 input（CC/BCC/件名 の順で最後の text input） */
+  getEmailSubjectInput(): Locator {
+    return this.getEmailModal().locator('input[type="text"]').last();
+  }
+
+  /** モーダル内の送信実行ボタン（reply=返信する / new=送信する） */
+  getEmailSendButton(): Locator {
+    return this.getEmailModal().getByRole('button', { name: /返信する|送信する|送信して担当する/ });
+  }
+
+  async saveDraftInModal(): Promise<void> {
+    await this.getEmailModal().getByRole('button', { name: '下書き保存' }).click();
+    await this.getToast('下書きを保存しました').waitFor({ state: 'visible', timeout: 5_000 });
+  }
+
+  async closeEmailModal(): Promise<void> {
+    await this.getEmailModal().getByRole('button', { name: '閉じる' }).click();
+    await this.getEmailModalHeading().waitFor({ state: 'hidden', timeout: 5_000 });
+  }
+
+  /** 下書き一覧セクション（「下書き (N件)」見出しを持つ section） */
+  getDraftListSection(): Locator {
+    return this.page
+      .locator('section')
+      .filter({ has: this.page.getByRole('heading', { name: /下書き \(\d+件\)/ }) });
+  }
+
+  getDraftListHeading(): Locator {
+    return this.page.getByRole('heading', { name: /下書き \(\d+件\)/ });
+  }
+
+  getDraftOpenButton(): Locator {
+    return this.getDraftListSection().getByRole('button', { name: '開く' }).first();
+  }
+
+  getDraftDeleteButton(): Locator {
+    return this.getDraftListSection().getByRole('button', { name: '削除' }).first();
+  }
 }
