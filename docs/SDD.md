@@ -645,7 +645,7 @@ React 19系混在で `Minified React error #31` が発生するため固定。
 
 ## 付録A: 申込通知 bot（フォーム回答スプシに付いた GAS）
 
-別プロジェクト（スクリプトID `1CpAoEJR3zOYQhKjE0d0LnhrrNr74R9Xfk1uhTephnFWYzaS-9Ukj7CGG`、回答スプシ `1cvwtRJSK3gD1SLhG3TBD0uJFsR3ApIpZsYWaruDnJ5A` にバインド）。インストール型トリガー「フォーム送信時 → onFormSubmit」で動く。Webhook URL はスクリプトプロパティ `CHAT_WEBHOOK_URL`（**コード・ドキュメント・GitHub に書かない**）。変更・デプロイ手順は `docs/RUNBOOK.md`「申込通知 bot」。v1.12.13 時点のコード:
+別プロジェクト（スクリプトID `1CpAoEJR3zOYQhKjE0d0LnhrrNr74R9Xfk1uhTephnFWYzaS-9Ukj7CGG`、回答スプシ `1cvwtRJSK3gD1SLhG3TBD0uJFsR3ApIpZsYWaruDnJ5A` にバインド）。インストール型トリガー「フォーム送信時 → onFormSubmit」で動く。Webhook URL はスクリプトプロパティ `CHAT_WEBHOOK_URL`（**コード・ドキュメント・GitHub に書かない**）。変更・デプロイ手順は `docs/RUNBOOK.md`「申込通知 bot」。v1.12.13 時点のコード（同一申込でトリガーが複数動いても、行番号キー＋スクリプトロック＋スクリプトキャッシュで通知は1回だけ）:
 
 ```javascript
 /** @OnlyCurrentDoc スプレッドシート権限はこの回答スプシのみに限定する */
@@ -653,8 +653,10 @@ React 19系混在で `Minified React error #31` が発生するため固定。
 // - Webhook URL はスクリプトプロパティ CHAT_WEBHOOK_URL に保存する（コードに直書きしない）
 // - 投稿したスレッドを「チャット連携」シートへ記録し、タダサポ管理アプリが IMPORTRANGE で取り込んで
 //   案件詳細に「チャットを開く」リンクを表示する（タダサポ v1.12.13）
+// - 同じ申込に対してトリガーが複数動いても、通知は最初の1回だけ送る（重複防止）
 var CHAT_LINK_SHEET_NAME = 'チャット連携';
 var CHAT_LINK_HEADERS = ['申込日時', 'メールアドレス', 'スレッド名', 'メッセージ名', '記録日時'];
+var NOTIFIED_CACHE_SECONDS = 21600; // 重複防止の記憶期間（6時間・CacheService の上限）
 
 function onFormSubmit(e) {
   var responses = e.values;
@@ -662,44 +664,60 @@ function onFormSubmit(e) {
   if (!chatWebhookUrl) {
     throw new Error('スクリプトプロパティ CHAT_WEBHOOK_URL が未設定のため、チャット通知を送れません');
   }
-  var message = "新しいタダサポ依頼が届きました。対応いただける方は挙手をお願いいたします‍♀\n\n";
-  message += "以下はフォームの回答です:\n";
 
-  // フォームの質問項目に基づいてメッセージを構築
-  message += "【タイムスタンプ】  " + responses[0] + "\n";
-  message += "【メールアドレス】  " + responses[1] + "\n";
-  message += "【都道府県】  " + responses[7] + "\n";
-  message += "【介護事業所名】  " + responses[2] + "\n";
-  message += "【お名前】  " + responses[3] + "\n";
-  message += "【お困りの事や希望する内容】   " + responses[4] + "\n";
-  message += "【タダサポ利用同意書】  " + responses[5] + "\n";
-  message += "【他の希望者の参加について】 " + responses[6] + "\n";
-
-  // ここに追加するメッセージ
-  message += "\nタダサポ管理アプリはコチラ: https://script.google.com/a/macros/tadakayo.jp/s/AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ/exec";
-  message += "\n\nタダサポの対応マニュアルはコチラ: https://sites.google.com/tadakayo.jp/tadakayohome/%E6%A5%AD%E5%8B%99%E6%94%AF%E6%8F%B4%E3%83%A1%E3%83%8B%E3%83%A5%E3%83%BC/%E3%82%BF%E3%83%80%E3%82%B5%E3%83%9D?authuser=0";
-
-  var payload = JSON.stringify({ "text": message });
-
-  var options = {
-    "method" : "post",
-    "contentType" : "application/json",
-    "payload" : payload
-  };
-
-  var res = UrlFetchApp.fetch(chatWebhookUrl, options);
-
-  // 投稿先スレッドの記録（失敗してもチャット通知は送信済みのため、ログだけ残して止めない）
+  // 重複防止: 回答シートの行番号で申込を識別し、ロック内で「通知済み」かを確認・記録する
+  var notifiedKey = 'notified_' + e.range.getSheet().getSheetId() + '_' + e.range.getRow();
+  var cache = CacheService.getScriptCache();
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
   try {
-    recordChatLink_(e, res);
-  } catch (err) {
-    console.error('チャット連携の記録に失敗しました: ' + err.message);
+    if (cache.get(notifiedKey)) {
+      console.log('この申込は通知済みのためスキップしました: ' + notifiedKey);
+      return;
+    }
+
+    var message = "新しいタダサポ依頼が届きました。対応いただける方は挙手をお願いいたします‍♀\n\n";
+    message += "以下はフォームの回答です:\n";
+
+    // フォームの質問項目に基づいてメッセージを構築
+    message += "【タイムスタンプ】  " + responses[0] + "\n";
+    message += "【メールアドレス】  " + responses[1] + "\n";
+    message += "【都道府県】  " + responses[7] + "\n";
+    message += "【介護事業所名】  " + responses[2] + "\n";
+    message += "【お名前】  " + responses[3] + "\n";
+    message += "【お困りの事や希望する内容】   " + responses[4] + "\n";
+    message += "【タダサポ利用同意書】  " + responses[5] + "\n";
+    message += "【他の希望者の参加について】 " + responses[6] + "\n";
+
+    // ここに追加するメッセージ
+    message += "\nタダサポ管理アプリはコチラ: https://script.google.com/a/macros/tadakayo.jp/s/AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ/exec";
+    message += "\n\nタダサポの対応マニュアルはコチラ: https://sites.google.com/tadakayo.jp/tadakayohome/%E6%A5%AD%E5%8B%99%E6%94%AF%E6%8F%B4%E3%83%A1%E3%83%8B%E3%83%A5%E3%83%BC/%E3%82%BF%E3%83%80%E3%82%B5%E3%83%9D?authuser=0";
+
+    var payload = JSON.stringify({ "text": message });
+
+    var options = {
+      "method" : "post",
+      "contentType" : "application/json",
+      "payload" : payload
+    };
+
+    var res = UrlFetchApp.fetch(chatWebhookUrl, options);
+    cache.put(notifiedKey, '1', NOTIFIED_CACHE_SECONDS);
+
+    // 投稿先スレッドの記録（失敗してもチャット通知は送信済みのため、ログだけ残して止めない）
+    try {
+      recordChatLink_(e, res);
+    } catch (err) {
+      console.error('チャット連携の記録に失敗しました: ' + err.message);
+    }
+  } finally {
+    lock.releaseLock();
   }
 }
 
 // Webhook の応答（投稿したメッセージ）からスレッド名を取り出し、チャット連携シートへ1行追記する。
 // 申込日時は回答シートのセル値（Date）を回答スプシのタイムゾーンで 'yyyy/MM/dd HH:mm:ss' に整形する。
-// タダサポ側は同じ壁時計表記 + メールアドレスで案件と突合する。
+// タダサポ側は同じ壁時計表記 + メールアドレスで案件と突合する。※ onFormSubmit のロック内で呼ぶ
 function recordChatLink_(e, res) {
   var body = JSON.parse(res.getContentText());
   var threadName = body && body.thread && body.thread.name ? String(body.thread.name) : '';
@@ -711,22 +729,17 @@ function recordChatLink_(e, res) {
     ? Utilities.formatDate(submittedAt, ss.getSpreadsheetTimeZone(), 'yyyy/MM/dd HH:mm:ss')
     : String(e.values[0]);
 
-  var lock = LockService.getScriptLock();
-  lock.waitLock(30000);
-  try {
-    var sheet = ss.getSheetByName(CHAT_LINK_SHEET_NAME);
-    if (!sheet) {
-      sheet = ss.insertSheet(CHAT_LINK_SHEET_NAME);
-      sheet.getRange(1, 1, 1, CHAT_LINK_HEADERS.length).setValues([CHAT_LINK_HEADERS]);
-      sheet.setFrozenRows(1);
-    }
-    var row = sheet.getLastRow() + 1;
-    var range = sheet.getRange(row, 1, 1, CHAT_LINK_HEADERS.length);
-    // 申込日時〜メッセージ名は文字列のまま保存（日付への自動変換を防ぐ）
-    range.setNumberFormats([['@', '@', '@', '@', 'yyyy/MM/dd HH:mm:ss']]);
-    range.setValues([[submittedLabel, String(e.values[1]), threadName, String(body.name || ''), new Date()]]);
-  } finally {
-    lock.releaseLock();
+  var sheet = ss.getSheetByName(CHAT_LINK_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(CHAT_LINK_SHEET_NAME);
+    sheet.getRange(1, 1, 1, CHAT_LINK_HEADERS.length).setValues([CHAT_LINK_HEADERS]);
+    sheet.setFrozenRows(1);
   }
+  var row = sheet.getLastRow() + 1;
+  var range = sheet.getRange(row, 1, 1, CHAT_LINK_HEADERS.length);
+  // 申込日時〜メッセージ名は文字列のまま保存（日付への自動変換を防ぐ）
+  range.setNumberFormats([['@', '@', '@', '@', 'yyyy/MM/dd HH:mm:ss']]);
+  range.setValues([[submittedLabel, String(e.values[1]), threadName, String(body.name || ''), new Date()]]);
+  SpreadsheetApp.flush();
 }
 ```
