@@ -264,6 +264,34 @@ function planCaseKeyBackfill(cases, existingKeySet, usedCaseIds) {
   return { toCreate: toCreate, alreadyMapped: alreadyMapped, duplicateNaturalKeys: duplicateNaturalKeys, collisions: collisions };
 }
 
+// ── v1.12.13 申込通知チャットのスレッドリンク ──────────────────
+// コード.js: normalizeSubmittedAtLabel_()
+// 申込日時を 'yyyy/MM/dd HH:mm:ss' の壁時計文字列へ正規化する。解釈不能は ''。
+function normalizeSubmittedAtLabel(value, timeZone) {
+  if (value && typeof value.getTime === 'function') {
+    if (isNaN(value.getTime())) return '';
+    return Utilities.formatDate(value, timeZone, 'yyyy/MM/dd HH:mm:ss');
+  }
+  var m = String(value == null ? '' : value).trim()
+    .match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?$/);
+  if (!m) return '';
+  var pad = function(v) { return ('0' + v).slice(-2); };
+  return m[1] + '/' + pad(m[2]) + '/' + pad(m[3]) + ' ' + pad(m[4]) + ':' + pad(m[5]) + ':' + pad(m[6] || '0');
+}
+
+// コード.js: chatLinkKey_()
+function chatLinkKey(submittedAt, email, timeZone) {
+  var label = normalizeSubmittedAtLabel(submittedAt, timeZone);
+  return label ? label + '|' + normalizeEmail(email) : '';
+}
+
+// コード.js: buildChatThreadUrl_()
+function buildChatThreadUrl(threadName) {
+  var m = String(threadName == null ? '' : threadName).trim()
+    .match(/^spaces\/([A-Za-z0-9_-]+)\/threads\/([A-Za-z0-9_-]+)$/);
+  return m ? 'https://chat.google.com/room/' + m[1] + '/' + m[2] + '/' + m[2] : null;
+}
+
 module.exports = {
   getFiscalYear,
   caseFiscalYear,
@@ -285,4 +313,7 @@ module.exports = {
   buildRecordMapFirstWins,
   makeReentrantLock,
   planCaseKeyBackfill,
+  normalizeSubmittedAtLabel,
+  chatLinkKey,
+  buildChatThreadUrl,
 };

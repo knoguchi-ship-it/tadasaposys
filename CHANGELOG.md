@@ -4,6 +4,23 @@
 
 ---
 
+## [1.12.13] - 2026-10-10
+
+### Added (申込通知チャットへのリンク)
+- 案件詳細の「相談内容」見出し横に **「チャットを開く」リンク**を追加。フォーム申込時に「タダサポ来たよ」が投稿した Google Chat のスレッド（挙手・担当調整のやりとり）を新しいタブで開ける。
+- 申込通知 bot（回答スプシに付いた別 GAS）が、Webhook 投稿時に返るスレッド名を回答スプシの「チャット連携」シートへ記録するよう変更。タダサポのスプシは同名シートへ IMPORTRANGE で取り込み、参照のみ（SDD S-10）。
+- `getAllCasesJoined()` がフォーム案件に `chatThreadUrl` を付与。突合は「申込日時の壁時計表記 + 正規化メール」。手動追加案件・実装前の申込はリンクなし。
+
+### Security
+- スレッド名は `spaces/<id>/threads/<id>` 形式のみURL化（`buildChatThreadUrl_`）、フロントも `https://chat.google.com/` 始まりのみ表示。
+- bot の Webhook URL（鍵・トークン付き）をコード直書きからスクリプトプロパティ `CHAT_WEBHOOK_URL` へ移行。`@OnlyCurrentDoc` でスプレッドシート権限を回答スプシのみに限定。
+
+### Tests
+- 単体: `normalizeSubmittedAtLabel` / `chatLinkKey` / `buildChatThreadUrl` を追加（92→98件）。
+- E2E: `tests/e2e/12-chat-link.spec.ts`（3件）。リンクを描画しない壊れたコードで失敗・正しいコードで合格を確認。
+
+---
+
 ## [1.12.12] - 2026-06-16
 
 ### Changed (サポート終了メールを「送信前に編集」する方式へ)

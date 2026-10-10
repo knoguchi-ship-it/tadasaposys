@@ -26,6 +26,9 @@ const {
   makeReentrantLock,
   planCaseKeyBackfill,
   joinKeyForRead,
+  normalizeSubmittedAtLabel,
+  chatLinkKey,
+  buildChatThreadUrl,
 } = require('./src/pure-functions');
 
 // ============================================================
@@ -681,5 +684,58 @@ describe('S1 Stage4 joinKeyForRead', () => {
 
   test('viaMap=true: パース不能は String(raw) にフォールバック', () => {
     expect(joinKeyForRead('not-a-date', true)).toBe('not-a-date');
+  });
+});
+
+// ============================================================
+// v1.12.13 申込通知チャットのスレッドリンク
+// ============================================================
+describe('v1.12.13 チャットスレッドリンク', () => {
+  // Utilities.formatDate の最小モック（指定TZの壁時計で yyyy/MM/dd HH:mm:ss）
+  beforeAll(() => {
+    global.Utilities.formatDate = (d, tz) => {
+      const p = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).formatToParts(d)
+        .reduce((o, x) => { o[x.type] = x.value; return o; }, {});
+      return `${p.year}/${p.month}/${p.day} ${p.hour}:${p.minute}:${p.second}`;
+    };
+  });
+
+  test('文字列の表記ゆれ（ゼロ埋めなし・ハイフン・秒なし）を正規化する', () => {
+    expect(normalizeSubmittedAtLabel('2026/10/9 9:05:03')).toBe('2026/10/09 09:05:03');
+    expect(normalizeSubmittedAtLabel('2026-10-09 10:54:26')).toBe('2026/10/09 10:54:26');
+    expect(normalizeSubmittedAtLabel('2026/10/09 10:54')).toBe('2026/10/09 10:54:00');
+  });
+
+  test('解釈不能な値は空文字（突合しない）', () => {
+    expect(normalizeSubmittedAtLabel('')).toBe('');
+    expect(normalizeSubmittedAtLabel(null)).toBe('');
+    expect(normalizeSubmittedAtLabel('#REF!')).toBe('');
+    expect(normalizeSubmittedAtLabel(new Date(NaN), 'Asia/Tokyo')).toBe('');
+    expect(chatLinkKey('#N/A', 'a@b.jp', 'Asia/Tokyo')).toBe('');
+  });
+
+  test('★Date は指定TZの壁時計で整形し、bot 記録の文字列と同じキーになる', () => {
+    const pk = new Date('2026-10-09T01:54:26Z'); // = JST 10:54:26
+    expect(chatLinkKey(pk, ' 2288HR@example.jp ', 'Asia/Tokyo'))
+      .toBe(chatLinkKey('2026/10/09 10:54:26', '2288hr@example.jp', 'Asia/Tokyo'));
+  });
+
+  test('メールが違えば別キー', () => {
+    expect(chatLinkKey('2026/10/09 10:54:26', 'a@b.jp')).not.toBe(chatLinkKey('2026/10/09 10:54:26', 'c@d.jp'));
+  });
+
+  test('スレッド名から chat.google.com のURLを組み立てる', () => {
+    expect(buildChatThreadUrl('spaces/AAAARl82fUk/threads/Ab-c_123'))
+      .toBe('https://chat.google.com/room/AAAARl82fUk/Ab-c_123/Ab-c_123');
+  });
+
+  test('不正なスレッド名はURLにしない（URL注入防止）', () => {
+    expect(buildChatThreadUrl('')).toBeNull();
+    expect(buildChatThreadUrl(null)).toBeNull();
+    expect(buildChatThreadUrl('spaces/AAA/messages/xyz.xyz')).toBeNull();
+    expect(buildChatThreadUrl('javascript:alert(1)')).toBeNull();
+    expect(buildChatThreadUrl('spaces/AAA/threads/x"><script>')).toBeNull();
+    expect(buildChatThreadUrl('spaces/AAA/threads/x/../../evil')).toBeNull();
   });
 });

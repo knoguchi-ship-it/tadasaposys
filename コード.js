@@ -1,5 +1,5 @@
 /**
- * タダサポ管理システム - Backend Logic (v1.12.12)
+ * タダサポ管理システム - Backend Logic (v1.12.13)
  *
  * 概要:
  * - Google Spreadsheets をデータベースとして利用
@@ -29,7 +29,8 @@ const SHEET_NAMES = {
   EMAIL_SCHEDULED: '予約送信キュー',  // v1.12.1: 予約送信は廃止。既存キューの無効化確認用に参照のみ残す
   AUDIT_LOG: '監査ログ',
   ANNUAL_ADJUST: '年間利用補正',  // v1.12.4: 管理者による年度利用回数の手動補正（メール+年度ごとの補正量）
-  CASE_KEY_MAP: '案件キーマップ'  // S1 Stage1: 案件の不変サロゲートID(case_id)と自然キーの対応表（参照整合性をコードで強制）
+  CASE_KEY_MAP: '案件キーマップ',  // S1 Stage1: 案件の不変サロゲートID(case_id)と自然キーの対応表（参照整合性をコードで強制）
+  CHAT_LINKS: 'チャット連携'  // v1.12.13: 申込通知チャットのスレッド対応表（回答スプシから IMPORTRANGE・書き込み禁止）
 };
 
 // S1 Stage1: 案件キーマップシートの列定義（A:案件ID, B:種別, C:自然キー_正準化, D:正規化メール, E:作成日時）
@@ -47,7 +48,9 @@ const IDX = {
   // v1.12.1: 予約送信キューは廃止済み。既存行を disabled に更新する後方互換用
   SCHEDULED: { QUEUE_ID: 0, CASE_ID: 1, STAFF_EMAIL: 2, STAFF_NAME: 3, MODE: 4, THREAD_ID: 5, SUBJECT: 6, BODY: 7, CC: 8, BCC: 9, TOOLS: 10, SEND_AT: 11, STATUS: 12, ERROR: 13, CREATED_AT: 14, SENT_AT: 15 },
   // v1.12.4: 年間利用補正シート（メール+年度ごとの利用回数補正量。EMAILは正規化して保存）
-  ANNUAL_ADJUST: { EMAIL: 0, FISCAL_YEAR: 1, ADJUSTMENT: 2, UPDATED_BY: 3, UPDATED_AT: 4 }
+  ANNUAL_ADJUST: { EMAIL: 0, FISCAL_YEAR: 1, ADJUSTMENT: 2, UPDATED_BY: 3, UPDATED_AT: 4 },
+  // v1.12.13: チャット連携シート（申込通知 bot が回答スプシに記録 → IMPORTRANGE で取込。参照のみ）
+  CHAT_LINK: { SUBMITTED_AT: 0, EMAIL: 1, THREAD_NAME: 2, MESSAGE_NAME: 3, RECORDED_AT: 4 }
 };
 
 // ======================================================================
@@ -637,6 +640,62 @@ function joinKeyForRead_(raw, viaMap) {
 }
 
 // ======================================================================
+// v1.12.13: 申込通知チャットのスレッドリンク
+//   申込通知 bot（回答スプシの onFormSubmit）が Webhook 投稿時に返る
+//   スレッド名を「チャット連携」シートへ記録し、本スプシへ IMPORTRANGE で取り込む。
+//   案件とは「申込日時（壁時計・秒まで）+ 正規化メール」で突合する。
+//   ※壁時計で突合するのは、両スプシのタイムゾーンが異なっても一致させるため。
+//   ※テスト同期先: tests/unit/src/pure-functions.js
+// ======================================================================
+
+// 申込日時を 'yyyy/MM/dd HH:mm:ss' の壁時計文字列へ正規化する。
+// Date は指定タイムゾーンで整形、文字列は区切り・ゼロ埋めの表記ゆれを吸収する。解釈不能は ''。
+function normalizeSubmittedAtLabel_(value, timeZone) {
+  if (value && typeof value.getTime === 'function') {
+    if (isNaN(value.getTime())) return '';
+    return Utilities.formatDate(value, timeZone, 'yyyy/MM/dd HH:mm:ss');
+  }
+  let m = String(value == null ? '' : value).trim()
+    .match(/^(\d{4})[\/-](\d{1,2})[\/-](\d{1,2})[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?$/);
+  if (!m) return '';
+  let pad = function(v) { return ('0' + v).slice(-2); };
+  return m[1] + '/' + pad(m[2]) + '/' + pad(m[3]) + ' ' + pad(m[4]) + ':' + pad(m[5]) + ':' + pad(m[6] || '0');
+}
+
+// 突合キー（申込日時ラベル + '|' + 正規化メール）。日時が解釈不能なら ''（突合しない）。
+function chatLinkKey_(submittedAt, email, timeZone) {
+  let label = normalizeSubmittedAtLabel_(submittedAt, timeZone);
+  return label ? label + '|' + normalizeEmail_(email) : '';
+}
+
+// スレッド名 "spaces/<space>/threads/<thread>" から Google Chat のスレッドURLを組み立てる。
+// 形式が不正な値（シート改ざん・数式エラー等）は null を返し、リンクを出さない。
+function buildChatThreadUrl_(threadName) {
+  let m = String(threadName == null ? '' : threadName).trim()
+    .match(/^spaces\/([A-Za-z0-9_-]+)\/threads\/([A-Za-z0-9_-]+)$/);
+  return m ? 'https://chat.google.com/room/' + m[1] + '/' + m[2] + '/' + m[2] : null;
+}
+
+// チャット連携シートを読み、突合キー → スレッドURL のマップを返す。
+// シート未作成・IMPORTRANGE 未接続でも案件表示は止めない（空マップ）。同一キーは後勝ち。
+function getChatLinkMap_(ss, timeZone) {
+  let map = {};
+  try {
+    let sheet = ss.getSheetByName(SHEET_NAMES.CHAT_LINKS);
+    if (!sheet || sheet.getLastRow() < 2) return map;
+    let data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      let url = buildChatThreadUrl_(data[i][IDX.CHAT_LINK.THREAD_NAME]);
+      let key = chatLinkKey_(data[i][IDX.CHAT_LINK.SUBMITTED_AT], data[i][IDX.CHAT_LINK.EMAIL], timeZone);
+      if (url && key) map[key] = url;
+    }
+  } catch (e) {
+    console.warn('getChatLinkMap_ failed (non-fatal): ' + e.message);
+  }
+  return map;
+}
+
+// ======================================================================
 // データ結合取得
 // ======================================================================
 function getAllCasesJoined() {
@@ -679,6 +738,9 @@ function getAllCasesJoined() {
 
   // 年間利用補正マップ（管理者が手動修正した利用回数の補正量。キー=正規化メール+'_'+年度）— v1.12.4
   let annualAdjustMap = getAnnualAdjustmentMap_(ss);
+
+  // 申込通知チャットのスレッドリンク（v1.12.13。フォーム案件のみ・取得失敗時は空）
+  let chatLinkMap = getChatLinkMap_(ss, ssTimeZone);
 
   // メール履歴を読み込み
   let emailMap = {};
@@ -804,6 +866,9 @@ function getAllCasesJoined() {
       pkDate = new Date(pkRaw);
     }
     let dateLabel = isNaN(pkDate.getTime()) ? '' : Utilities.formatDate(pkDate, ssTimeZone, 'yyyy/MM/dd');
+    // bot はフォーム回答の生メールで記録するため、補正前のメールで突合する（手動追加案件は対象外）
+    let chatKey = (pkRaw && typeof pkRaw.getTime === 'function')
+      ? chatLinkKey_(pkRaw, c[IDX.CASES.EMAIL], ssTimeZone) : '';
 
     joinedCases.push({
       id: ts, timestamp: ts, dateLabel: dateLabel, email: email,
@@ -824,7 +889,8 @@ function getAllCasesJoined() {
       tools: record.tools || [],
       subStaff: record.subStaff || [],
       currentFiscalYearCount: count,
-      emails: emailMap[joinKey] || []
+      emails: emailMap[joinKey] || [],
+      chatThreadUrl: (chatKey && chatLinkMap[chatKey]) || null
     });
   }
 

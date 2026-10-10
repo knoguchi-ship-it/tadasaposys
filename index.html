@@ -217,13 +217,13 @@
 
     let mockCases = [
       // ── パターン1: 未対応（通常） ──
-      { id: '2026-01-15T10:30:00', timestamp: '2026-01-15T10:30:00', email: 'yamada@kaigo.jp', officeName: 'やまだ訪問介護ステーション', requesterName: '山田一郎', prefecture: '東京都', details: 'パソコンの操作方法について教えてほしい。利用者記録の入力方法がわからず困っている。', serviceType: '訪問介護', status: 'unhandled', staffEmail: null, staffName: null, scheduledDateTime: null, supportCount: 1, method: null, businessType: '訪問介護', content: null, remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 3, subStaff: [], supportHistory: [], emails: [] },
+      { id: '2026-01-15T10:30:00', timestamp: '2026-01-15T10:30:00', email: 'yamada@kaigo.jp', officeName: 'やまだ訪問介護ステーション', chatThreadUrl: 'https://chat.google.com/room/MOCKSPACE/mockThread001/mockThread001', requesterName: '山田一郎', prefecture: '東京都', details: 'パソコンの操作方法について教えてほしい。利用者記録の入力方法がわからず困っている。', serviceType: '訪問介護', status: 'unhandled', staffEmail: null, staffName: null, scheduledDateTime: null, supportCount: 1, method: null, businessType: '訪問介護', content: null, remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 3, subStaff: [], supportHistory: [], emails: [] },
       // ── パターン2: 未対応（新規） ──
       { id: '2026-01-10T09:00:00', timestamp: '2026-01-10T09:00:00', email: 'suzuki@daycare.jp', officeName: 'すずきデイサービスセンター', requesterName: '鈴木美咲', prefecture: '神奈川県', details: 'Wi-Fiの設定と、タブレットでのオンライン研修の受け方を教えてほしい。', serviceType: '通所介護', status: 'unhandled', staffEmail: null, staffName: null, scheduledDateTime: null, supportCount: 1, method: null, businessType: '通所介護', content: null, remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 1, subStaff: [], supportHistory: [], emails: [] },
       // ── パターン3: 未対応（年間上限超過 → 回数超過ボタン表示） ──
       { id: '2025-10-01T09:30:00', timestamp: '2025-10-01T09:30:00', email: 'limit@kaigo.jp', officeName: 'リミット介護サービス', requesterName: '制限太郎', prefecture: '愛知県', details: '請求ソフトの使い方を教えてほしい。', serviceType: '居宅介護支援', status: 'unhandled', staffEmail: null, staffName: null, scheduledDateTime: null, supportCount: 1, method: null, businessType: '居宅介護支援', content: null, remarks: null, eventId: null, meetUrl: null, currentFiscalYearCount: 10, subStaff: [], supportHistory: [], emails: [] },
       // ── パターン4: 対応中（1回目・日程決定済み） ──
-      { id: '2025-12-20T14:00:00', timestamp: '2025-12-20T14:00:00', email: 'tanaka@helper.jp', officeName: 'たなかヘルパーセンター', requesterName: '田中次郎', prefecture: '東京都', details: 'Excelでのシフト表作成を手伝ってほしい。マクロの使い方も知りたい。', serviceType: '訪問介護', status: 'inProgress', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: '2026-01-20T13:00:00', supportCount: 1, method: 'GoogleMeet', businessType: '訪問介護', content: null, remarks: null, eventId: 'evt001', meetUrl: 'https://meet.google.com/abc-defg-hij', currentFiscalYearCount: 5, subStaff: [{email:'tanaka@tadakayo.jp', name:'田中花子'}], supportHistory: [], threadIds: ['mock-thread-1'], threads: [
+      { id: '2025-12-20T14:00:00', timestamp: '2025-12-20T14:00:00', email: 'tanaka@helper.jp', officeName: 'たなかヘルパーセンター', chatThreadUrl: 'https://chat.google.com/room/MOCKSPACE/mockThread004/mockThread004', requesterName: '田中次郎', prefecture: '東京都', details: 'Excelでのシフト表作成を手伝ってほしい。マクロの使い方も知りたい。', serviceType: '訪問介護', status: 'inProgress', staffEmail: 'test@tadakayo.jp', staffName: 'テスト太郎', scheduledDateTime: '2026-01-20T13:00:00', supportCount: 1, method: 'GoogleMeet', businessType: '訪問介護', content: null, remarks: null, eventId: 'evt001', meetUrl: 'https://meet.google.com/abc-defg-hij', currentFiscalYearCount: 5, subStaff: [{email:'tanaka@tadakayo.jp', name:'田中花子'}], supportHistory: [], threadIds: ['mock-thread-1'], threads: [
         { threadId: 'mock-thread-1', subject: 'タダサポ｜ご相談を承りました', messages: [
           { sendDate: '2025-12-21T10:00:00', senderName: 'テスト太郎', subject: 'タダサポ｜ご相談を承りました', body: '田中次郎 様\n\nこの度はタダサポへご相談いただきありがとうございます。\n担当させていただきますテスト太郎と申します。', isStaff: true },
           { sendDate: '2025-12-22T14:30:00', senderName: '田中次郎', subject: 'Re: タダサポ｜ご相談を承りました', body: 'テスト太郎 様\n\nご連絡ありがとうございます。\n平日の午後であれば対応可能です。\n\n田中次郎', isStaff: false }
@@ -3984,7 +3984,16 @@
                       </div>
                     )}
                     <section className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-4">
-                      <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2"><MessageSquare size={12} /> 相談内容</h3>
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2"><MessageSquare size={12} /> 相談内容</h3>
+                        {/* v1.12.13: 申込通知チャット（挙手・担当調整のスレッド）へのリンク。サーバーで組み立てた chat.google.com のURLのみ表示 */}
+                        {typeof selectedCase.chatThreadUrl === 'string' && selectedCase.chatThreadUrl.indexOf('https://chat.google.com/') === 0 && (
+                          <a href={selectedCase.chatThreadUrl} target="_blank" rel="noopener noreferrer"
+                            className="shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-xl text-xs font-black text-emerald-700 bg-emerald-50 border border-emerald-100 hover:bg-emerald-100 transition-colors">
+                            <MessageSquare size={12} /> チャットを開く <ExternalLink size={10} />
+                          </a>
+                        )}
+                      </div>
                       <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap bg-slate-50 p-4 rounded-2xl border border-slate-50">{selectedCase.details}</div>
                     </section>
                     {selectedCase.status !== 'unhandled' && (

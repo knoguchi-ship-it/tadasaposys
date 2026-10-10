@@ -1,8 +1,16 @@
-# システム詳細設計書 (SDD) — タダサポ管理システム v1.12.12
+# システム詳細設計書 (SDD) — タダサポ管理システム v1.12.13
 
-**Version:** 1.12.12
-**Date:** 2026/06/16
+**Version:** 1.12.13
+**Date:** 2026/10/10
 **Status:** Released
+
+> **v1.12.13 追補（申込通知チャットへのリンク）**
+> - 申込通知 bot（フォーム回答スプシに付いた `onFormSubmit`。タダサポ本体とは別の GAS プロジェクト）が Webhook 投稿時の応答からスレッド名を取り出し、回答スプシの「チャット連携」シートへ記録する。タダサポのスプシは同名シートへ IMPORTRANGE で取り込み、**参照のみ**（書き込み禁止）。S-10 参照。
+> - `getAllCasesJoined()` がフォーム案件ごとに `chatThreadUrl`（`https://chat.google.com/room/<space>/<thread>/<thread>`。スレッド先頭メッセージのIDはスレッドIDと同じ、該当なしは `null`）を返す。突合キーは `chatLinkKey_()` =「申込日時の壁時計表記 `yyyy/MM/dd HH:mm:ss`（各スプシのTZで整形）+ `|` + 正規化メール」。メールは案件補正前の生値を使う。手動追加案件・実装前の申込は対象外。
+> - スレッド名は `buildChatThreadUrl_()` で `spaces/<英数_->/threads/<英数_->` 形式のみ受け付けてURL化（URL注入防止）。フロントも `https://chat.google.com/` 始まりのみ表示。シート未作成・IMPORTRANGE 未接続・読取失敗は空マップで非致死。
+> - 案件詳細「相談内容」見出し横に「チャットを開く」リンク（新規タブ）。新規 API・既存シート列・権限スコープの変更なし。
+> - bot 側: Webhook URL をコード直書きからスクリプトプロパティ `CHAT_WEBHOOK_URL` へ移行、`@OnlyCurrentDoc` で回答スプシのみに権限を限定。記録失敗は通知を止めない。コードは §付録A。
+> - テスト: 単体 +6（92→98）、E2E `tests/e2e/12-chat-link.spec.ts` +3。
 
 > **v1.12.12 追補（サポート終了メールを「送信前に編集」する方式へ・フロントのみ）**
 > - 完了報告時のサポート終了メールを、自動送信（v1.12.11）から **完了報告後にメール作成モーダルを開き、ログイン中メンバーが件名・本文をその場で編集して送信**する方式へ変更。既存スレッドへ返信／無ければ新規、×で閉じれば送信なし、下書き保存可。
@@ -91,6 +99,7 @@
 | 予約送信キュー | `EMAIL_SCHEDULED` | 予約送信は v1.12.1 で廃止。既存キュー履歴・無効化確認用に保持 |
 | 年間利用補正 | `ANNUAL_ADJUST` | 管理者による年度利用回数の手動補正（メール+年度→補正量。列: メールアドレス/年度/補正値/更新者/更新日時）（v1.12.4） |
 | 案件キーマップ | `CASE_KEY_MAP` | 案件の不変サロゲートID(case_id)と自然キーの対応表。S1 Stage1 で新設（Expand 基盤・未接続） |
+| チャット連携 | `CHAT_LINKS` | 申込通知チャットのスレッド対応表。回答スプシから IMPORTRANGE（**書き込み禁止**）（v1.12.13） |
 
 ---
 
@@ -337,6 +346,25 @@ pending/sending → disabled（予約送信機能廃止により未送信のま�
 
 ---
 
+### S-10: チャット連携 (Chat Links) ※v1.12.13追加
+
+**用途:** 申込通知 bot が Google Chat（スペース「タダサポ来たよ」通知先）へ投稿したスレッドと、フォーム申込を対応付ける。案件詳細の「チャットを開く」リンクに使う。
+**データの流れ:** 申込通知 bot（回答スプシの `onFormSubmit`）→ 回答スプシの「チャット連携」シートへ追記 → タダサポのスプシの「チャット連携」シート A1 に `=IMPORTRANGE("<回答スプシID>","チャット連携!A:E")`。
+**制約:** タダサポ側は**参照のみ（書き込み禁止）**。IMPORTRANGE 数式を壊さないため。シートが無い・未接続でも案件表示は止めない。
+**全 5 列（1行目は見出し）。**
+
+| 物理列 | IDX (`IDX.CHAT_LINK`) | 論理名 | 型 | 備考 |
+|--------|-----|-------|----|------|
+| A | `SUBMITTED_AT`: 0 | 申込日時 | String | 回答シートのタイムスタンプを回答スプシのTZで `yyyy/MM/dd HH:mm:ss` に整形（書式 `@`）。Date で読めた場合もタダサポのTZで同表記に整形して突合 |
+| B | `EMAIL`: 1 | メールアドレス | String | フォーム回答の生メール。突合時に正規化 |
+| C | `THREAD_NAME`: 2 | スレッド名 | String | `spaces/<space>/threads/<thread>`。URL化はこの形式のみ |
+| D | `MESSAGE_NAME`: 3 | メッセージ名 | String | `spaces/<space>/messages/<id>`（参考記録） |
+| E | `RECORDED_AT`: 4 | 記録日時 | Date | bot の記録時刻 |
+
+**突合:** `chatLinkKey_(申込日時, メール, TZ)` が一致するフォーム案件に `chatThreadUrl` を付与（同一キーは後勝ち）。壁時計で比べるのは、両スプシのタイムゾーンが異なってもずれないようにするため。
+
+---
+
 ## 2. 上限値の優先順位
 
 ```
@@ -355,7 +383,7 @@ HTML を返す Web App エントリポイント。`getInitialData()` の結果�
 起動時データ取得。`user` / `cases` / `masters` / `draftCaseIds` / `forcedCc` を返す。`ensureAttachmentSchema_()` でスキーマ自動マイグレーションを実行する。
 
 ### F-03: `getAllCasesJoined()`
-案件リスト + 案件手動追加 + 案件補正 + サポート記録 + メール履歴を結合し、削除済み案件を除外して返す。各案件に `currentFiscalYearCount`（今年度累計利用回数）を付与する。
+案件リスト + 案件手動追加 + 案件補正 + サポート記録 + メール履歴を結合し、削除済み案件を除外して返す。各案件に `currentFiscalYearCount`（今年度累計利用回数）を付与する。v1.12.13 からフォーム案件には「チャット連携」シートから `chatThreadUrl`（申込通知スレッドURL・なければ `null`）も付与する（S-10）。
 
 **年度計算:** 4月1日始まり。同一 `EMAIL`（正規化）かつ同一年度の `inProgress`/`completed` 案件の `supportCount` を合算。集計キーは `annualUsageKey_(email, pk)` = `normalizeEmail_(email) + '_' + caseFiscalYear_(pk)` で統一。`caseFiscalYear_()` は手動追加案件のPK `manual_<エポックミリ秒>` も申込日年度へ正しく解決するため、**Googleフォーム申込と管理者の手動追加案件が同一メール+年度で合算される**（v1.12.3）。
 
@@ -611,3 +639,94 @@ React 19系混在で `Minified React error #31` が発生するため固定。
 | v1.11.2 | 下書き保存・予約送信ボタンの押下フィードバック追加、MAIL_FORCE_CC を state に追加 |
 | **v1.11.3** | メール作成画面に自動CC（MAIL_FORCE_CC）の説明を追加 |
 | **v1.12.1** | 予約送信機能を廃止。旧トリガー互換は未送信キューを `disabled` 化し、即時送信・下書き保存は継続 |
+| **v1.12.13** | 申込通知チャットへのリンク（S-10 チャット連携・`chatThreadUrl`・案件詳細「チャットを開く」） |
+
+---
+
+## 付録A: 申込通知 bot（フォーム回答スプシに付いた GAS）
+
+別プロジェクト（スクリプトID `1CpAoEJR3zOYQhKjE0d0LnhrrNr74R9Xfk1uhTephnFWYzaS-9Ukj7CGG`、回答スプシ `1cvwtRJSK3gD1SLhG3TBD0uJFsR3ApIpZsYWaruDnJ5A` にバインド）。インストール型トリガー「フォーム送信時 → onFormSubmit」で動く。Webhook URL はスクリプトプロパティ `CHAT_WEBHOOK_URL`（**コード・ドキュメント・GitHub に書かない**）。変更・デプロイ手順は `docs/RUNBOOK.md`「申込通知 bot」。v1.12.13 時点のコード:
+
+```javascript
+/** @OnlyCurrentDoc スプレッドシート権限はこの回答スプシのみに限定する */
+// タダサポ申込のチャット通知（回答スプレッドシートの onFormSubmit インストール型トリガー）
+// - Webhook URL はスクリプトプロパティ CHAT_WEBHOOK_URL に保存する（コードに直書きしない）
+// - 投稿したスレッドを「チャット連携」シートへ記録し、タダサポ管理アプリが IMPORTRANGE で取り込んで
+//   案件詳細に「チャットを開く」リンクを表示する（タダサポ v1.12.13）
+var CHAT_LINK_SHEET_NAME = 'チャット連携';
+var CHAT_LINK_HEADERS = ['申込日時', 'メールアドレス', 'スレッド名', 'メッセージ名', '記録日時'];
+
+function onFormSubmit(e) {
+  var responses = e.values;
+  var chatWebhookUrl = PropertiesService.getScriptProperties().getProperty('CHAT_WEBHOOK_URL');
+  if (!chatWebhookUrl) {
+    throw new Error('スクリプトプロパティ CHAT_WEBHOOK_URL が未設定のため、チャット通知を送れません');
+  }
+  var message = "新しいタダサポ依頼が届きました。対応いただける方は挙手をお願いいたします‍♀\n\n";
+  message += "以下はフォームの回答です:\n";
+
+  // フォームの質問項目に基づいてメッセージを構築
+  message += "【タイムスタンプ】  " + responses[0] + "\n";
+  message += "【メールアドレス】  " + responses[1] + "\n";
+  message += "【都道府県】  " + responses[7] + "\n";
+  message += "【介護事業所名】  " + responses[2] + "\n";
+  message += "【お名前】  " + responses[3] + "\n";
+  message += "【お困りの事や希望する内容】   " + responses[4] + "\n";
+  message += "【タダサポ利用同意書】  " + responses[5] + "\n";
+  message += "【他の希望者の参加について】 " + responses[6] + "\n";
+
+  // ここに追加するメッセージ
+  message += "\nタダサポ管理アプリはコチラ: https://script.google.com/a/macros/tadakayo.jp/s/AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ/exec";
+  message += "\n\nタダサポの対応マニュアルはコチラ: https://sites.google.com/tadakayo.jp/tadakayohome/%E6%A5%AD%E5%8B%99%E6%94%AF%E6%8F%B4%E3%83%A1%E3%83%8B%E3%83%A5%E3%83%BC/%E3%82%BF%E3%83%80%E3%82%B5%E3%83%9D?authuser=0";
+
+  var payload = JSON.stringify({ "text": message });
+
+  var options = {
+    "method" : "post",
+    "contentType" : "application/json",
+    "payload" : payload
+  };
+
+  var res = UrlFetchApp.fetch(chatWebhookUrl, options);
+
+  // 投稿先スレッドの記録（失敗してもチャット通知は送信済みのため、ログだけ残して止めない）
+  try {
+    recordChatLink_(e, res);
+  } catch (err) {
+    console.error('チャット連携の記録に失敗しました: ' + err.message);
+  }
+}
+
+// Webhook の応答（投稿したメッセージ）からスレッド名を取り出し、チャット連携シートへ1行追記する。
+// 申込日時は回答シートのセル値（Date）を回答スプシのタイムゾーンで 'yyyy/MM/dd HH:mm:ss' に整形する。
+// タダサポ側は同じ壁時計表記 + メールアドレスで案件と突合する。
+function recordChatLink_(e, res) {
+  var body = JSON.parse(res.getContentText());
+  var threadName = body && body.thread && body.thread.name ? String(body.thread.name) : '';
+  if (!threadName) return;
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var submittedAt = e.range.getCell(1, 1).getValue();
+  var submittedLabel = (submittedAt instanceof Date)
+    ? Utilities.formatDate(submittedAt, ss.getSpreadsheetTimeZone(), 'yyyy/MM/dd HH:mm:ss')
+    : String(e.values[0]);
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var sheet = ss.getSheetByName(CHAT_LINK_SHEET_NAME);
+    if (!sheet) {
+      sheet = ss.insertSheet(CHAT_LINK_SHEET_NAME);
+      sheet.getRange(1, 1, 1, CHAT_LINK_HEADERS.length).setValues([CHAT_LINK_HEADERS]);
+      sheet.setFrozenRows(1);
+    }
+    var row = sheet.getLastRow() + 1;
+    var range = sheet.getRange(row, 1, 1, CHAT_LINK_HEADERS.length);
+    // 申込日時〜メッセージ名は文字列のまま保存（日付への自動変換を防ぐ）
+    range.setNumberFormats([['@', '@', '@', '@', 'yyyy/MM/dd HH:mm:ss']]);
+    range.setValues([[submittedLabel, String(e.values[1]), threadName, String(body.name || ''), new Date()]]);
+  } finally {
+    lock.releaseLock();
+  }
+}
+```
