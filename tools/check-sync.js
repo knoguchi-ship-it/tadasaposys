@@ -248,7 +248,7 @@ function checkMechanisms(r) {
   if (!exists('.claude/hooks/guard.js')) r.error('仕組み', '.claude/hooks/guard.js がない');
   if (!exists('.githooks/pre-commit')) r.error('仕組み', '.githooks/pre-commit がない');
   let hooksPath = '';
-  try { hooksPath = execFileSync('git', ['config', '--get', 'core.hooksPath'], { cwd: ROOT, encoding: 'utf8' }).trim(); } catch (e) { /* 未設定 */ }
+  try { hooksPath = execFileSync('git', ['config', '--get', 'core.hooksPath'], { cwd: ROOT, encoding: 'utf8' , stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch (e) { /* 未設定 */ }
   if (hooksPath !== '.githooks') r.warn('仕組み', `git の core.hooksPath が .githooks でない（pre-commit が動かない）。npm install で自動設定、または git config core.hooksPath .githooks`);
   const manifest = JSON.parse(read('appsscript.json'));
   if (manifest.webapp?.executeAs !== 'USER_ACCESSING' || manifest.webapp?.access !== 'DOMAIN') {
@@ -328,7 +328,7 @@ function scanIdentifiers(r, strict) {
 // ---------------------------------------------------------------- 8. origin との差
 function checkRemote(r) {
   try {
-    const out = execFileSync('git', ['rev-list', '--left-right', '--count', '@{u}...HEAD'], { cwd: ROOT, encoding: 'utf8' }).trim();
+    const out = execFileSync('git', ['rev-list', '--left-right', '--count', '@{u}...HEAD'], { cwd: ROOT, encoding: 'utf8' , stdio: ['ignore', 'pipe', 'ignore'] }).trim();
     const [behind, ahead] = out.split(/\s+/).map(Number);
     if (ahead || behind) r.warn('Git', `origin との差: 未 push ${ahead} / 未取込 ${behind}（最終 fetch 時点）`);
   } catch (e) {
