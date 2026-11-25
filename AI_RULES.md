@@ -45,6 +45,24 @@ CLAUDE.md / AGENTS.md — 各エージェントの入口（本ファイルを読
 - 見つけた矛盾は、今回の作業範囲外でも報告する（または直す）
 - レビューのみの依頼で本体を無断修正しない
 
+**照合項目（キャッチアップ・作業開始時に毎回すべて行う。「矛盾を確認する」の範囲はこれ以上・以下にしない）:**
+
+| # | 照合すること | 方法 |
+|---|---|---|
+| 1 | 版数が同期対象（グランドルール6）すべてで一致 | `npm run check` |
+| 2 | HANDOVER の現在地（版・@nn・単体/E2E 件数）と §1・§8 が、package.json・テストの実数と一致 | `npm run check` |
+| 3 | `コード.js` の `const IDX` が、本ファイルのデータモデル節と `docs/SDD.md` §1 の各シート表と一致 | `npm run check` |
+| 4 | ADR の件数が索引（`ADR-001〜NNN`）と一致 | `npm run check` |
+| 5 | 「仕組み」欄で導入済みの物が実在する（`.claspignore`・`.gitignore`・CI・`appsscript.json`） | `npm run check` |
+| 6 | 本番識別子・個人名の残存件数（移行中のため警告。件数の増減を報告する） | `npm run check` |
+| 7 | origin との差（未 push・未取込） | `npm run check`（必要なら先に `git fetch`） |
+| 8 | 単体テスト・E2E が実際に合格する | `npm run test:unit` / `npm test` |
+| 9 | 前回以降の差分（`git log` / `git diff`）が触れた仕様・権限・データ・画面について、SDD・ADR の記述と実装が食い違っていない | 差分を読んで目視 |
+
+- `npm run check`（`tools/check-sync.js`）の終了コードと、エラー・警告の要旨を報告する。エラーは今回の作業範囲外でも報告する
+- 9 は機械化できないため必ず目視し、何を確認したかを報告に書く
+- `npm run check` の検査項目は、本ファイルのルール（同期対象・IDX・仕組み欄）を変えたら合わせて直す
+
 ### 変更手順（必須）
 
 仕様・権限・業務ルール・画面・API・シート列を変える開発は、次の順で行う。実装を先に書いて後から文書を合わせない。
@@ -66,6 +84,8 @@ CLAUDE.md / AGENTS.md — 各エージェントの入口（本ファイルを読
 
 ```bash
 git status / git diff / git log / git show      # 読み取り
+git fetch / git branch / git blame など          # その他の読み取り専用 git（リモートへ書き込まないもの）
+npm run check                                    # ドキュメント同期チェック
 npm run test:unit / npm test                     # テスト
 npx serve -s . -l 3000                           # ローカルプレビュー
 git add / git commit                             # ローカルの記録（push しない限り外部に出ない）
@@ -89,6 +109,7 @@ git reset --hard / git clean -f             # 未コミット作業の消失
 clasp pull（未コミット差分がある状態で）      # ローカルの上書き
 ```
 
+- 上の2つのリストにないコマンドは、ローカルで完結する読み取りなら実行してよい。外部（本番 GAS・GitHub・Google リソース）へ書き込むものは確認を求める
 - 確認は「何を・どこへ・何が変わるか」を示して求める。一度の承認は、その操作1回分に限る（次のデプロイには改めて確認する）
 - Claude Code は確認省略モード（`bypassPermissions`）で起動するため、上記は**ルールとして守る**。機械的な拒否は「仕組み」欄の導入予定を参照
 
@@ -197,8 +218,9 @@ Webapp 設定は **`executeAs: USER_ACCESSING` / `access: DOMAIN` 固定**。ア
 - [ ] カレンダーへの書込処理を追加・変更した場合、書込先が一般公開カレンダーにならないことを確認した
 
 仕組み:
-- 導入済み: `.gitignore`（`.clasp.json`・`.clasp.*.json`・認証情報ファイル）
-- 導入予定: コミット前検査で、既知の本番識別子パターンの混入を検出する
+- 導入済み: `.gitignore`（`.clasp.json`・`.clasp.*.json`・認証情報ファイル・`.private-terms.local.txt`）
+- 導入済み: `npm run check` が本番識別子の形式と、ローカルの `.clasp.json`・`.clasp.deploy.json`・`.private-terms.local.txt`（個人名など1行1語。Git 対象外）に書かれた実値の混入を検出する（移行中は警告、`--strict` でエラー）
+- 導入予定: 上記をコミット前検査で自動実行し、残存ゼロ達成後は `--strict` にする
 
 ### 4. 実装品質
 
@@ -238,25 +260,30 @@ DRY原則を守り、共通化できる処理を重複実装しない。新設�
 
 コード更新時は毎回、コード・ドキュメント・テスト・モックデータの整合性を確認する。ER図・テーブル設計書は HTML で `docs/` 配下に保存する。AI向け指示だけでなく、人間が読める Markdown/HTML も維持する。文字化けは放置せず UTF-8 として読める状態に修正する。
 
-**バージョン同期対象:** `コード.js` 先頭コメント・`index.html`・`package.json`・`CHANGELOG.md`・本ファイル（`AI_RULES.md`）・`docs/SDD.md`・`docs/HANDOVER.md`・`docs/Manual.md`
+**バージョン同期対象:** `コード.js` 先頭コメント・`index.html`（`<meta name="app-version">`）・`package.json`・`CHANGELOG.md`・本ファイル（`AI_RULES.md`）・`docs/SDD.md`・`docs/HANDOVER.md`・`docs/Manual.md`
 
-**デプロイ記録:** 本番へ反映したら `docs/HANDOVER.md` の現在地（版・デプロイ番号 @nn・テスト件数）を、冒頭だけでなく本文の該当箇所（§1 本番デプロイバージョン・§2 ファイル構成・§8 テスト・§10 現行版）まで更新する。
+**HANDOVER の現在地:** 版・本番デプロイ番号・テスト件数は、`docs/HANDOVER.md` 冒頭の1行「**現在地:** vX.Y.Z / 本番 @nn / 単体 N件 / E2E N件」だけに書く（DRY）。本文の他の箇所に件数・現行版を書き写さず「冒頭の現在地を参照」とする。例外として §1「本番デプロイバージョン: @nn（vX.Y.Z）」と §8 のスペック別件数一覧は維持し、`npm run check` が現在地・実テストと照合する。
+
+**デプロイ記録:** 本番へ反映したら、現在地の行と §1 本番デプロイバージョンを更新する。テストを追加・削除したら、現在地の件数と §8 のスペック一覧を更新する。
 
 作業チェック:
 - [ ] バージョン同期対象と CHANGELOG / HANDOVER / Manual の必要箇所を同期
+- [ ] `npm run check` がエラー0（警告は内容を報告）
 - [ ] ER図・テーブル設計書の作成/更新が必要な場合は HTML で保存
 - [ ] 人間向けドキュメントも更新
 - [ ] ルールを変えたときは本ファイルだけを編集した（CLAUDE.md / AGENTS.md / RUNBOOK に書き写していない）
 - [ ] 文字化けがないことを確認
 
 仕組み:
-- 導入予定: ドキュメント同期チェック（版数の不一致・コード変更時の CHANGELOG / テスト未更新を検出）を git の pre-commit と Claude Code の Stop フックで実行する
+- 導入済み: `npm run check`（`tools/check-sync.js`。版数・HANDOVER 現在地・IDX・ADR 件数・仕組みの実在・識別子の残存・origin との差を検査。手動実行）
+- 導入予定: `npm run check` を git の pre-commit・Claude Code の Stop フック・CI で自動実行する
+- 導入予定: コード変更時の CHANGELOG / テスト未更新の検出
 
 ---
 
-## データモデル（コード.js 約30行目の IDX 定数）
+## データモデル（`コード.js` の `const IDX`）
 
-全シート左詰め、ギャップなし。変更時は `docs/SDD.md` §1 も更新すること。
+全シート左詰め、ギャップなし。IDX を変更したら、`docs/SDD.md` §1 と本節の両方を同じコミットで更新する（`npm run check` が照合する。行番号ではなく定義名で指す）。
 
 ```javascript
 RECORDS: { FK:0, STATUS:1, STAFF_EMAIL:2, STAFF_NAME:3, DATE:4, COUNT:5,
@@ -274,8 +301,13 @@ SCHEDULED: { QUEUE_ID:0, CASE_ID:1, STAFF_EMAIL:2, STAFF_NAME:3, MODE:4,
 
 STAFF:     { NAME:1, EMAIL:2, ROLE:3, IS_ACTIVE:4 }
 CASES:     { PK:0, EMAIL:1, OFFICE:2, NAME:3, DETAILS:4, PREFECTURE:5, SERVICE:6 }
+CASES_OVERRIDE: { PK:0, EMAIL:1, OFFICE:2, NAME:3, DETAILS:4, PREFECTURE:5, SERVICE:6 }  // 案件補正（CASES と同一列構造。空欄=補正なし）
+
+EMAIL:     { CASE_ID:0, SEND_DATE:1, SENDER_EMAIL:2, SENDER_NAME:3,
+             RECIPIENT_EMAIL:4, SUBJECT:5, BODY:6 }  // メール履歴 7列
 
 ANNUAL_ADJUST: { EMAIL:0, FISCAL_YEAR:1, ADJUSTMENT:2, UPDATED_BY:3, UPDATED_AT:4 }  // v1.12.4 年間利用補正（メール+年度→補正量）
+CHAT_LINK: { SUBMITTED_AT:0, EMAIL:1, THREAD_NAME:2, MESSAGE_NAME:3, RECORDED_AT:4 }  // v1.12.13 チャット連携（IMPORTRANGE・参照のみ）
 ```
 
 詳細（各シートの全列定義・制約）: `docs/SDD.md` §1
@@ -303,6 +335,7 @@ npx serve -s . -l 3000          # → http://localhost:3000（モックデータ
                                  # 代替: python -m http.server 3000 --directory .
 npm run test:unit                # Jest 単体テスト
 npm test                         # Playwright E2E
+npm run check                    # ドキュメント同期チェック
 ```
 
 ---

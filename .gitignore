@@ -36,3 +36,6 @@ test*.png
 
 # Local backup/stub files (never track or deploy)
 temp/
+
+# 同期チェック用の照合語（個人名など。Git 対象外）
+.private-terms.local.txt

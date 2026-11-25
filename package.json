@@ -12,7 +12,9 @@
     "test:a11y":     "playwright test tests/e2e/07-a11y.spec.ts",
     "test:unit":     "jest",
     "test:unit:cov": "jest --coverage",
-    "test:all":      "jest && playwright test"
+    "test:all":      "jest && playwright test",
+    "check":         "node tools/check-sync.js",
+    "check:strict":  "node tools/check-sync.js --strict"
   },
   "devDependencies": {
     "@playwright/test":    "^1.52.0",

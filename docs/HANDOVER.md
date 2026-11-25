@@ -2,20 +2,23 @@
 
 **Project:** タダサポ管理システム
 **Version:** 1.12.13（現行リリース）
-**Date:** 2026/10/10
+**Date:** 2026/11/25
 **Author:** Development Team
 
 ---
 
 ## 📌 次の担当者へ（最初にこの節だけ読めば現状が掴めます）
 
-> **最終更新: 2026/06/16 / v1.12.12 を本番 @158 にデプロイ済み・GitHub master に push 済み（E2E 65件・単体 92件 全PASS）。**
-> 本番・master・GitHub の3者は一致しています。安心して続きから着手できます。固定 deploymentId / URL 不変（新規デプロイなし）。
+> **現在地:** v1.12.13 / 本番 @159 / 単体 110件 / E2E 68件
+>
+> 版・本番デプロイ番号・テスト件数は**この1行だけ**に書く（本文に書き写さない。AI_RULES.md グランドルール6）。`npm run check` がこの行を package.json・実テスト・§1・§8 と照合する。最終確認 2026/11/25（単体・E2E 全合格、`npm run check` エラー0）。
 > ⚠️ デプロイ直後の運用確認として、GAS デプロイ管理画面で Webapp 設定（実行＝アクセスしているユーザー／アクセス＝NPO法人タダカヨ内の全員）をブラウザで目視確認すること（CLIでは確認不可）。
 
-> **2026/10/10 追記: v1.12.13（申込通知チャットへのリンク）を本番 @159 にデプロイ済み（固定 deploymentId / URL 不変）。** bot 側も反映済み（2026/10/10: CHAT_WEBHOOK_URL 設定・コード push・吉崎アカウントでトリガー新規作成）。タダサポのスプシの「チャット連携」シートと IMPORTRANGE も設定済み。**実申込で、通知が1回だけ届くこと・リンクが表示されスレッドが開くことを確認済み**（2026/10/10）。旧トリガーにも権限があり、切替時に通知が二重化したため、bot に重複防止を追加済み。**残り: 旧トリガー（別メンバー作成）の削除のみ**（重複防止があるため急ぎではない）。
+> **2026/10/10 追記: v1.12.13（申込通知チャットへのリンク）を本番 @159 にデプロイ済み（固定 deploymentId / URL 不変）。** bot 側も反映済み（2026/10/10: CHAT_WEBHOOK_URL 設定・コード push・bot 担当メンバーのアカウントでトリガー新規作成）。タダサポのスプシの「チャット連携」シートと IMPORTRANGE も設定済み。**実申込で、通知が1回だけ届くこと・リンクが表示されスレッドが開くことを確認済み**（2026/10/10）。旧トリガーにも権限があり、切替時に通知が二重化したため、bot に重複防止を追加済み。**残り: 旧トリガー（別メンバー作成）の削除のみ**（重複防止があるため急ぎではない）。
 
-> **2026/11/25 追記: グランドルールを改訂（G2・文書のみ・コード変更なし）。** ルールの正本を `AI_RULES.md` に一本化し、`CLAUDE.md`/`AGENTS.md` は入口だけ、RUNBOOK は参照だけにした（それまで三重記載で内容がずれていた）。追加: 作業前レビュー・変更手順・コマンド実行ポリシー（`clasp push`/`clasp deploy`/`git push` はユーザー確認必須、`git add`/`commit` は可、force push・`--no-verify`・`-i` なし deploy は禁止）・本番識別子/個人名を公開リポジトリに書かない方針・各ルールの「仕組み（導入済み／導入予定）」欄・`executionApi=MYSELF`。ステージング環境は設けない。deploymentId の実値はローカルの `.clasp.deploy.json`（Git 対象外）へ。**続く作業（導入予定）:** 共有設定の確認（ユーザー）→ PreToolUse フック・ブランチ保護・CI に Jest → 同期チェック → デプロイ用スクリプト → 既存文書・コード・テストからの本番識別子/個人名の除去。
+> **2026/11/25 追記: グランドルールを改訂（G2・文書のみ・コード変更なし）。** ルールの正本を `AI_RULES.md` に一本化し、`CLAUDE.md`/`AGENTS.md` は入口だけ、RUNBOOK は参照だけにした（それまで三重記載で内容がずれていた）。追加: 作業前レビュー・変更手順・コマンド実行ポリシー（`clasp push`/`clasp deploy`/`git push` はユーザー確認必須、`git add`/`commit` は可、force push・`--no-verify`・`-i` なし deploy は禁止）・本番識別子/個人名を公開リポジトリに書かない方針・各ルールの「仕組み（導入済み／導入予定）」欄・`executionApi=MYSELF`。ステージング環境は設けない。deploymentId の実値はローカルの `.clasp.deploy.json`（Git 対象外）へ。**続く作業（導入予定）:** 共有設定の確認（ユーザー）→ PreToolUse フック・ブランチ保護・CI に Jest → 同期チェックの自動実行 → デプロイ用スクリプト → 既存文書・コード・テストからの本番識別子/個人名の除去。
+
+> **2026/11/25 追記（G3・ルール補強＋同期チェック導入・アプリの挙動変更なし）:** キャッチアップで照合が浅くなった反省から、AI_RULES.md「作業前レビュー」に**照合項目9つ**を明記し、うち機械化できるものを **`npm run check`（`tools/check-sync.js`）** に実装。版数（8ファイル）・この「現在地」行と §1/§8・`const IDX` と AI_RULES/SDD・ADR 件数・仕組みの実在・本番識別子/個人名の残存・origin との差を検査する（識別子は移行中のため警告、`npm run check:strict` でエラー）。個人名は Git 対象外の `.private-terms.local.txt`（1行1語）に登録して照合。`index.html` に版数 `<meta name="app-version">` を追加（同期対象なのに版数表記がなかったため）。AI_RULES の IDX 節に欠けていた `CASES_OVERRIDE`/`EMAIL`/`CHAT_LINK` を追加。**次:** `npm run check` を pre-commit・Stop フック・CI で自動実行。
 
 ### 直近セッションで完了したこと（v1.12.13）
 - **案件詳細に「チャットを開く」リンク**: フォーム申込時に「タダサポ来たよ」が Google Chat に投稿したスレッド（挙手・担当調整）へ飛べる。
@@ -30,7 +33,7 @@
   - **E2E 更新**: `tests/e2e/11-closing-email.spec.ts` を新フローへ（ON で終了メール作成モーダルが開き編集→送信／OFF で開かない）。「モーダル非表示の壊れたコードで失敗・正しいコードで合格」を確認。E2E 65件・単体92件 全PASS・回帰なし。
 
 ### 🔴 まずやること（運用・確認系。コードは触らず数分で完了）
-1. **GASデプロイ管理画面で @158 の Webapp 設定を目視確認**（実行＝アクセスしているユーザー／アクセス＝NPO法人タダカヨ内の全員）。
+1. **GASデプロイ管理画面で @159 の Webapp 設定を目視確認**（実行＝アクセスしているユーザー／アクセス＝NPO法人タダカヨ内の全員）。
 2. **本番URLで v1.12.12 を確認**：完了報告で「サポート終了メールを送信する」ON→完了後にメール作成画面が開き、本文を編集して送信できればOK（OFF なら開かない）。
 3. **（前リリース残）本番URLで R3 を確認**：日程確定→方法「対面」等＋「カレンダーに登録」ON で「**この方法ではカレンダーへの予定登録は行われません（対応記録のみ保存されます）**」と出ればOK。
 4. **R4（任意・無害）**：GASエディタで `temp/index`・`temp/コード` を手動削除（手順 RUNBOOK §2-4）。
@@ -44,7 +47,7 @@
 | 任意 | R2残 | サーバ権限ガードの自動テスト整備（現harnessはGAS Session依存で未対応＝モック設計が必要） |
 
 ### 読む順番
-1. 本節（現状把握）→ 2. §11（残タスク詳細）→ 3. §9（既知の制約）→ 4. §12（v1.12.12 までの版数履歴）→ 5. `CLAUDE.md`/`AGENTS.md`（開発ルール）
+1. 本節（現状把握）→ 2. §11（残タスク詳細）→ 3. §9（既知の制約）→ 4. §12（版数履歴）→ 5. `AI_RULES.md`（開発ルールの正本）
 
 ---
 
@@ -52,8 +55,8 @@
 
 ### 本番稼働中
 
-- **URL**: `https://script.google.com/a/macros/tadakayo.jp/s/AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ/exec`
-- **本番デプロイバージョン**: @158（v1.12.12、2026/06/16 デプロイ。固定 deploymentId / URL 不変。サポート終了メールを送信前に編集する方式へ＝フロントのみ）。前版 @157（v1.12.11）はサポート終了メール機能の追加、@156（v1.12.10）はメール下書き一覧の追加、@155（v1.12.9）は R3 虚偽UI文言の修正、@154（v1.12.8）で S1 Stage4＝Read切替トグル `CASE_KEY_READ_VIA_MAP` 公開・Backfill 実行済（既存136案件に case_id 付与・診断クリア）
+- **URL**: `<WEBAPP_URL>`（実値は GAS デプロイ管理画面、または Git 対象外の `.clasp.deploy.json`。公開リポジトリに書かない）
+- **本番デプロイバージョン**: @159（v1.12.13、2026/10/10 デプロイ。固定 deploymentId / URL 不変。申込通知チャットへのリンク）。前版 @158（v1.12.12）はサポート終了メールを送信前に編集する方式へ（フロントのみ）、@157（v1.12.11）はサポート終了メール機能の追加、@156（v1.12.10）はメール下書き一覧の追加、@155（v1.12.9）は R3 虚偽UI文言の修正、@154（v1.12.8）で S1 Stage4＝Read切替トグル `CASE_KEY_READ_VIA_MAP` 公開・Backfill 実行済（既存136案件に case_id 付与・診断クリア）
 - **Webapp 設定**: `executeAs: USER_ACCESSING` / `access: DOMAIN`（tadakayo.jp ドメインのみ）
 - **認証**: タダメンマスタ（B列=氏名, C列=メール, D列=ROLE）で認証
 
@@ -90,8 +93,9 @@
 | **管理機能ステータス遷移の完全修正** | ✅ | **v1.11.6** |
 | **メール下書き一覧（案件詳細から再編集・送信・削除）** | ✅ | **v1.12.10** |
 | **サポート終了メール（完了報告時に送信・送信前にメンバーが文面編集可・本文初期値は設定で編集可）** | ✅ | **v1.12.11〜v1.12.12** |
-| **Playwright E2E テストスイート（65テスト）** | ✅ | **v1.11.5〜（T1/T2/R3 +10、下書き一覧 +2、終了メール +2）** |
-| **Jest 単体テスト（92テスト）** | ✅ | **v1.12.0〜** |
+| **Playwright E2E テストスイート（件数は冒頭の現在地・内訳は §8）** | ✅ | **v1.11.5〜** |
+| **Jest 単体テスト（件数は冒頭の現在地）** | ✅ | **v1.12.0〜** |
+| **ドキュメント同期チェック `npm run check`** | ✅ | **2026/11/25（G3）** |
 | **S1 案件キーのサロゲート化（Stage1-4＋Backfill・根治）** | ✅ | **v1.12.6〜v1.12.8** |
 | **WCAG 2.1 AA color-contrast 全違反修正** | ✅ | **v1.11.5** |
 | **日程の重複検知（バッファ込み・Zoom時のみ）** | ✅ | **v1.12.0** |
@@ -125,20 +129,23 @@ tadasaposys/
 ├── jest.config.js          ← 単体テスト設定
 ├── .claspignore            ← GASプッシュ除外設定（node_modules等を除外）
 ├── .clasp.json             ← clasp設定（.gitignore対象）
+├── .clasp.deploy.json      ← 固定 deploymentId（.gitignore対象）
+├── .private-terms.local.txt ← 同期チェックが照合する個人名など（.gitignore対象・1行1語）
+├── tools/check-sync.js     ← ドキュメント同期チェック（npm run check）
 ├── .codex/config.toml      ← Codex 起動方針（GitHub共有用）
 ├── codex-tadasaposys.ps1   ← Codex プロジェクト起動ランチャー
 ├── tests/
-│   ├── e2e/                ← Playwright E2E テスト（9スペック、61テスト）
+│   ├── e2e/                ← Playwright E2E テスト（スペック一覧は §8）
 │   ├── pages/app.page.ts   ← Page Object Model
 │   ├── fixtures/           ← カスタム Fixture
-│   ├── unit/               ← Jest 単体テスト（92テスト）
+│   ├── unit/               ← Jest 単体テスト（業務ロジック・同期チェック）
 │   └── manual/             ← 検証ハーネス（case-key-migration-harness.html・Playwright MCP用）
 └── docs/
-    ├── SDD.md              ← 設計書 v1.12.12
+    ├── SDD.md              ← 設計書
     ├── HANDOVER.md         ← 本ドキュメント
     ├── ADR.md              ← アーキテクチャ判断記録（ADR-001〜012）
     ├── RUNBOOK.md          ← 運用手順書
-    ├── Manual.md           ← 操作マニュアル v1.12.12
+    ├── Manual.md           ← 操作マニュアル
     ├── RD.md               ← 要件定義
     ├── playwright-guide.html ← テスト導入・実行ガイド（HTML）
     └── test-criteria.html  ← テスト品質基準チェックリスト（HTML）
@@ -204,17 +211,9 @@ tadasaposys/
 | 予約送信キュー | v1.12.1で予約送信廃止。既存キュー履歴・無効化確認用（16列） |
 | 年間利用補正 | 管理者による年度利用回数の手動補正（メール+年度→補正量。5列）（v1.12.4） |
 
-### IDX定数（コード.js 約30行目）
+### IDX定数（`コード.js` の `const IDX`）
 
-詳細: `docs/SDD.md` §1 参照
-
-```javascript
-RECORDS: { FK:0, STATUS:1, STAFF_EMAIL:2, STAFF_NAME:3, DATE:4, COUNT:5,
-           METHOD:6, BUSINESS:7, CONTENT:8, REMARKS:9, HISTORY:10,
-           EVENT_ID:11, MEET_URL:12, THREAD_ID:13, ATTACHMENTS:14,
-           CASE_LIMIT_OVERRIDE:15, ANNUAL_LIMIT_OVERRIDE:16,
-           TOOLS:17, SUB_STAFF:18 }  // 19列
-```
+一覧は `AI_RULES.md` データモデル節、列の詳細は `docs/SDD.md` §1（本書には書き写さない。`npm run check` がコードと両文書を照合する）。
 
 ### ステータス遷移
 
@@ -337,7 +336,7 @@ v1.11.6 以降は全ての管理者 STATUS 変更が `adminTransitionStatus_()` 
 ### E2E テスト（Playwright）
 
 ```bash
-# 全テスト実行（61テスト / 約3分）
+# 全テスト実行（件数は冒頭の現在地 / 約3分）
 npm test
 
 # UIモード（デバッグ用）
@@ -349,14 +348,17 @@ npm run test:report
 
 スペック一覧:
 - `01-app-load`: アプリ初期化（7件）
-- `02-case-list`: ケースリスト表示（9件）
+- `02-case-list`: ケースリスト表示（10件）
 - `03-mode-switching`: 表示モード切替（5件）
 - `04-search-filter`: 検索・フィルタ（6件）
 - `05-case-detail`: ケース詳細パネル（7件）
-- `06-admin-features`: 管理者機能（6件）
+- `06-admin-features`: 管理者機能（8件）
 - `07-a11y`: WCAG 2.1 AA アクセシビリティ（8件）
 - `08-scheduling`: 日程確定モーダル（重複検知・Zoom強制登録警告・URL発行モード・FullCalendar・非Meet/Zoom時のカレンダー文言）（7件 / **T1** + **R3ガード**）
 - `09-admin-status-transition`: 管理者ステータス遷移（再開で回数+1・リセット・単純遷移）（3件 / **T2**、v1.11.6 回帰ガード）
+- `10-draft-list`: メール下書き一覧（開いて送信・削除）（2件）
+- `11-closing-email`: サポート終了メール（送信前に編集・OFF で開かない）（2件）
+- `12-chat-link`: 申込通知チャットへのリンク（3件）
 
 > **モック整備（T1）**: ローカル/E2E で Zoom 機能を再現するため、`index.html` の `MOCK_MASTERS.methods` に `Zoom` を追加（本番 `getMasters` の `zoomEnabled` 時と同形状＝index1 に挿入）。モックは `IS_LOCAL` 専用で本番挙動に影響なし。
 
@@ -365,10 +367,19 @@ npm run test:report
 ### 単体テスト（Jest）
 
 ```bash
-npm run test:unit  # 92テスト / 約0.2秒
+npm run test:unit  # 件数は冒頭の現在地 / 約1秒
 ```
 
-対象: `getFiscalYear` / `sanitizeForSheet_` / `parseNullablePositiveInteger_` / `normalizeEmail_` / `parseBoolean_` 等の純粋関数
+対象: `getFiscalYear` / `sanitizeForSheet_` / `parseNullablePositiveInteger_` / `normalizeEmail_` / `parseBoolean_` 等の純粋関数（`business-logic.test.js`）と、同期チェックの検査ロジック（`check-sync.test.js`）
+
+### ドキュメント同期チェック
+
+```bash
+npm run check         # 不一致があれば終了コード 1（本番識別子・個人名の残存は警告）
+npm run check:strict  # 識別子・個人名の残存もエラーにする（残存ゼロ達成後の運用）
+```
+
+検査項目と運用は `AI_RULES.md`「作業前レビュー」の照合項目を参照。
 
 ---
 
@@ -416,7 +427,7 @@ git add <files> && git commit -m "feat: vX.X.X - 説明"
 clasp push --force
 
 # 3. デプロイ更新
-clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ -d "vX.X.X"
+clasp deploy -i <DEPLOYMENT_ID> -d "vX.X.X"
 ```
 
 ### 設計変更時の更新対象
@@ -432,14 +443,14 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 ### バージョン管理ルール
 
 - `コード.js` 先頭コメント・`index.html`・SDD・HANDOVER・Manual・CHANGELOG・AI_RULES.md・package.json のバージョンは常に一致させること
-- 現行: **v1.12.12**
+- 現行: 冒頭の「現在地」を参照（`npm run check` が全対象の一致を検査）
 
 ### 🔒 デプロイ時の絶対グランドルール（正本は AI_RULES.md）
 
 1. **Webapp 設定固定**: `executeAs: USER_ACCESSING` / `access: DOMAIN`（NPO法人タダカヨ内）
    - ❌ 禁止: 実行=自分（`USER_DEPLOYING`） / アクセス=Googleアカウント全員（`ANYONE_WITH_GOOGLE_ACCOUNT`）
    - 過去にこの誤設定でセキュリティホールが発生。介護事業所の個人情報を扱うため再発禁止
-2. **既存 deploymentId へのバージョンアップのみ**: `clasp deploy -i AKfycbw...nuq0ZJHhhUQ -d "vX.X.X"`
+2. **既存 deploymentId へのバージョンアップのみ**: `clasp deploy -i <DEPLOYMENT_ID> -d "vX.X.X"`
    - ❌ 禁止: `-i` 省略コマンド / GAS の「新しいデプロイ」ボタン
    - 新規デプロイは URL が変わり、案内済みのブックマーク・QR・メールリンクが全失効する
 3. デプロイ前に `appsscript.json` の `webapp` 設定を git diff で確認、デプロイ後は GAS デプロイ管理画面で目視確認
@@ -630,8 +641,9 @@ npx serve -s . -l 3000  # → http://localhost:3000
 ### 3. テスト走行（5分）
 
 ```bash
-npm run test:unit  # Jest 92件
-npm test           # Playwright E2E 61件
+npm run test:unit  # Jest（件数は冒頭の現在地）
+npm test           # Playwright E2E（同上）
+npm run check      # ドキュメント同期チェック
 ```
 
 ### 4. 本番デプロイ（変更がある場合）
@@ -639,7 +651,7 @@ npm test           # Playwright E2E 61件
 **絶対グランドルール（§10「バージョン管理ルール」参照）を厳守**:
 1. `appsscript.json` の `webapp` 設定が `USER_ACCESSING` / `DOMAIN` であることを確認
 2. `git commit` してから `clasp push --force`
-3. `clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ -d "vX.X.X"`
+3. `clasp deploy -i <DEPLOYMENT_ID> -d "vX.X.X"`
 4. デプロイ後、ブラウザの GAS デプロイ管理画面で設定を目視確認
 
 ### 4-1. v1.12.1 デプロイ後の残作業
@@ -661,7 +673,7 @@ backup ブランチの3修正を本番ラインへ統合し、リポジトリを
 実施コマンド:
 ```bash
 clasp push --force   # appsscript.json / index.html / コード.js の3ファイル
-clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ -d "v1.12.2"
+clasp deploy -i <DEPLOYMENT_ID> -d "v1.12.2"
 # → @148。clasp deployments で固定IDのみ(新規なし)を確認済み
 ```
 
@@ -694,10 +706,12 @@ G1（グランドルール見直し）は 2026/05/28 に完了。**2026/11/25 �
 
 ### 7. 連絡先・関連リソース
 
-- **本番URL（不変）**: https://script.google.com/a/macros/tadakayo.jp/s/AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ/exec
-- **GAS プロジェクト**: ID `1UMg3CaTlbZW0YfjzgqbOwd-XOYdIsVELmGpsP7O-MrwFSiAJdS-ySLvP`
-- **タダサポDB**: ID `1hllLdETiK0sk0xW_y0V6vOmnlK7kIkHBjntYiCTom4w`
-- **フォーム回答シート**: ID `1cvwtRJSK3gD1SLhG3TBD0uJFsR3ApIpZsYWaruDnJ5A`（IMPORTRANGE で案件リスト生成）
+実値は公開リポジトリに書かない（AI_RULES.md グランドルール3）。置き場所:
+- **本番URL（不変）**: `<WEBAPP_URL>` — GAS デプロイ管理画面
+- **固定 deploymentId**: `<DEPLOYMENT_ID>` — `.clasp.deploy.json`（Git 対象外）・`clasp deployments`
+- **GAS プロジェクト**: `<SCRIPT_ID>` — `.clasp.json`（Git 対象外）
+- **タダサポDB**: `<SPREADSHEET_ID>` — `コード.js` の定数（PropertiesService へ移行予定）
+- **フォーム回答シート**: `<FORM_SHEET_ID>` — タダサポDB の案件リストの IMPORTRANGE 数式（案件リスト生成元）
 
 ---
 

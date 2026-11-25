@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Tooling / Docs（ルール補強 G3・2026-11-25。アプリの挙動変更なし）
+- **ドキュメント同期チェック `npm run check`（`tools/check-sync.js`）を追加。** 版数（同期対象8ファイル）・HANDOVER 冒頭「現在地」行と §1/§8・`const IDX` と AI_RULES/SDD・ADR 件数・仕組みの実在（`.claspignore`/`.gitignore`/CI/`appsscript.json`）・本番識別子/個人名の残存・origin との差を検査。不一致は終了コード1、識別子の残存は警告（`npm run check:strict` でエラー）。本番の実値はスクリプトに書かず、Git 対象外の `.clasp.json`/`.clasp.deploy.json`/`.private-terms.local.txt` から読んで照合。
+- AI_RULES.md「作業前レビュー」に**照合項目9つ**（うち7つは `npm run check`、テスト実行、差分の目視）を明記。コマンド実行ポリシーに読み取り専用の git（fetch 等）と `npm run check` を追加し、リストにないコマンドの扱いを明記。
+- AI_RULES.md データモデル節に欠けていた `CASES_OVERRIDE`/`EMAIL`/`CHAT_LINK` を追加し、「約30行目」を定義名 `const IDX` 参照に変更。
+- `index.html` に版数 `<meta name="app-version">` を追加（同期対象なのに版数表記がなかったため。表示・動作への影響なし）。
+- HANDOVER: 版・@nn・テスト件数を冒頭「現在地」の1行に集約（DRY）。@158→@159・テスト件数・§8 スペック一覧（02/06 の件数、10〜12 の欠落）を実物に合わせて訂正。本番 URL・deploymentId・各種 ID・個人名をプレースホルダ/役割名に置換。
+- 単体テスト `tests/unit/check-sync.test.js`（12件）を追加（98→110件）。
+
 ### Docs（グランドルール改訂 G2・2026-11-25。コード変更なし）
 - ルールの正本を `AI_RULES.md` に一本化。`CLAUDE.md`（`@AI_RULES.md` 取り込み）/ `AGENTS.md` は入口のみ、`docs/RUNBOOK.md` は参照のみに変更（三重記載による内容のずれを解消）。
 - 追加: 作業前レビュー、変更手順（合意→SDD→文書→実装→テスト→同期→検査→報告）、コマンド実行ポリシー（`clasp push`/`clasp deploy`/`git push` はユーザー確認必須、force push・`--no-verify`・`-i` なし deploy 等は禁止）、各グランドルールの「仕組み（導入済み／導入予定）」欄。
