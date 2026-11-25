@@ -1,85 +1,19 @@
-# 運用手順書 (RUNBOOK) — タダサポ管理システム v1.12.4
+# 運用手順書 (RUNBOOK) — タダサポ管理システム v1.12.13
 
 **対象者:** 開発者・システム管理者
-**最終更新:** 2026/06/03
+**最終更新:** 2026/11/25
 
 ---
 
 ## 🔒 グランドルール（絶対厳守）
 
-グランドルールは「判断基準」と「作業チェック」を一体で扱う。チェックだけで判断せず、本文の禁止事項・理由・例外条件を読む。
+グランドルール（本番安全・データ保全・セキュリティ・実装品質・既存機能保護・ドキュメント）と、コマンド実行ポリシー・作業前レビュー・変更手順の**正本はリポジトリ直下の `AI_RULES.md`**。本書には書き写さない（二重管理によるずれを防ぐため。2026-11-25 一本化）。
 
-### 1. 本番安全
-
-`appsscript.json` の Webapp 設定は `executeAs: USER_ACCESSING` / `access: DOMAIN` に固定する。実行=自分（`USER_DEPLOYING`）やアクセス=Googleアカウント全員（`ANYONE_WITH_GOOGLE_ACCOUNT`）はセキュリティホールになるため禁止。
-
-デプロイは新規作成せず、固定 deploymentId へ `-i` 付きでバージョンアップする。新規デプロイは Webapp URL を変え、案内済みブックマーク・QR・メールリンクを失効させる。
-
-- 固定 deploymentId: `AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ`
-- 正: `clasp deploy -i AKfycbw...nuq0ZJHhhUQ -d "vX.X.X"`
-- 禁止: `-i` 省略、`clasp deploy` 単体、GASエディタの「新しいデプロイ」
-
-作業チェック:
-- [ ] `appsscript.json` の `webapp` が `USER_ACCESSING` / `DOMAIN`
-- [ ] デプロイ時は固定 deploymentId に `-i` 付き
-- [ ] デプロイ前後で Webapp 設定を確認
-
-### 2. データ保全
-
-`案件リスト` は IMPORTRANGE 保護のため直接書き込み禁止。管理者補正は `案件補正` 経由で行う。IDX/シート列は左詰め・ギャップなし。`temp/` はローカルバックアップ・GAS上の残存スタブ確認用であり、Git追跡・GAS配布・レビュー対象に含めない。
-
-ドライランテストで作成・更新したテストデータは、テスト完了後に必ず削除または復元し、ドライラン実施前の状態へ戻す。削除・復元できないドライランは実施しない。
-
-作業チェック:
-- [ ] `案件リスト` に直接書き込んでいない
-- [ ] IDX/列変更時に `docs/SDD.md` と関連文書を同期
-- [ ] `temp/` を差分・デプロイ対象に含めていない
-- [ ] ドライランテストで作成/更新したテストデータを削除または復元した
-
-### 3. セキュリティ
-
-セキュアコーディングは、認証・認可、入力検証/出力無害化、機密情報管理、データ保護/最小権限、監査性/エラー処理の5視点で行う。ハードコーディングは原則禁止。機密情報は操作者の許可があってもコード・ドキュメント・GitHubに置かず、設定シート・PropertiesService・環境変数等で安全に扱う。
-
-作業チェック:
-- [ ] UI制御だけでなくサーバー側権限チェックがある
-- [ ] 外部入力・シート値・HTML出力・GAS書き込み値を検証/無害化している
-- [ ] 機密情報をコード・ドキュメント・GitHubに入れていない
-- [ ] 固定値は設定化できないか確認した
-- [ ] 管理操作の監査性と失敗時の安全停止を確認した
-
-### 4. 実装品質
-
-DRY原則を守り、共通化できる処理を重複実装しない。新設処理も既存ヘルパー・既存パターンを確認してから追加する。React は 18.2.0 固定、日付フォーマットは UTC ずれを避ける。
-
-作業チェック:
-- [ ] 既存ヘルパー・既存パターンを確認した
-- [ ] 重複実装ではなく共通化を検討した
-- [ ] React 18.2.0 固定と importmap の依存指定を壊していない
-- [ ] 日付処理で `toISOString()` による日付ずれを起こしていない
-
-### 5. 既存機能保護
-
-既存機能への影響範囲を必ず確認し、破壊しないことを関連コード確認・差分確認・テストで保証する。
-
-ユーザーからの依頼・情報が不明瞭、抽象的、掘り下げが必要、または想像に任せないと作業できない場合は、実装や変更に入る前に必ずユーザーへ質問し、前提を明らかにしてから進める。
-
-作業チェック:
-- [ ] 依頼内容・前提・期待結果に曖昧さがない
-- [ ] 曖昧な点は作業前にユーザーへ質問して明確化した
-- [ ] 影響する画面/API/シート/モック/テストを洗い出した
-- [ ] 既存フローの回帰リスクを確認した
-- [ ] リスクに応じて単体テスト/E2E/手動確認を実施した
-- [ ] ドライランテスト後に本番/検証データが実施前状態へ戻っている
-
-### 6. ドキュメント・文字コード
-
-コード更新時は毎回、コード・ドキュメント・テスト・モックデータの整合性を確認する。バージョン同期対象には `index.html` を含める。ER図・テーブル設計書は HTML で `docs/` 配下に保存する。AI向け指示だけでなく、人間が読める Markdown/HTML も維持する。文字化けは放置せず UTF-8 として読める状態に修正する。
-
-作業チェック:
-- [ ] SDD/HANDOVER/Manual/CHANGELOG/AGENTS/CLAUDE/package/index.html の必要箇所を同期
-- [ ] ER図・テーブル設計書の作成/更新が必要な場合は HTML で保存
-- [ ] 人間向けドキュメントも更新
-- [ ] 文字化けがないことを確認
+運用者が特に押さえる点（詳細・理由は `AI_RULES.md`）:
+- Webapp は `executeAs: USER_ACCESSING` / `access: DOMAIN` 固定。デプロイは固定 deploymentId への `-i` 付き更新のみ
+- `clasp push` / `clasp deploy` / `git push` は、AI が実行する場合もユーザーの確認を得てから
+- 本番の識別子・認証情報・個人名は、公開リポジトリ（文書・コード・テスト）に書かない
+- ステージング環境は設けない。検証はローカル＋テストで行い、反映後に本番URLで確認する
 
 ---
 
@@ -127,7 +61,7 @@ clasp login
 `.clasp.json` の形式:
 ```json
 {
-  "scriptId": "1UMg3CaTlbZW0YfjzgqbOwd-XOYdIsVELmGpsP7O-MrwFSiAJdS-ySLvP",
+  "scriptId": "<SCRIPT_ID>",
   "rootDir": "."
 }
 ```
@@ -196,7 +130,7 @@ getScheduledEmailTriggerStatus()
 > ⚠️ **`clasp push` では消えない**: `clasp push` は既存リモートファイルを削除しない（追加・更新のみ）。さらにローカルは `.gitignore`(`temp/`)・`.claspignore`(`temp/**`) で push 対象外のため、push 操作では一切変化しない。**削除は GAS エディタからの手動操作が必須**。
 
 手順:
-1. GAS エディタを開く（プロジェクト ID `1UMg3CaTlbZW0YfjzgqbOwd-XOYdIsVELmGpsP7O-MrwFSiAJdS-ySLvP`）。
+1. GAS エディタを開く（プロジェクト ID `<SCRIPT_ID>`）。
 2. 左のファイル一覧で `temp/index` と `temp/コード`（拡張子なし表示）を探す。
 3. 各ファイルの「︙」メニュー →「削除」。
 4. **削除後に再デプロイは不要**（本番の動作には無関係なスタブのため）。念のため Web アプリ URL を開き、通常どおり起動することだけ確認する。
@@ -219,7 +153,7 @@ clasp push --force
 
 # Step 3: デプロイを更新
 clasp deploy \
-  -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ \
+  -i <DEPLOYMENT_ID> \
   -d "vX.X.X"
 
 # Step 4: 動作確認
@@ -239,12 +173,12 @@ clasp deploy \
 
 ### 3-4. 申込通知 bot（チャット連携）の変更・初期設定（v1.12.13〜）
 
-申込通知 bot はタダサポ本体とは**別の GAS プロジェクト**（回答スプシ `1cvwtRJSK3gD1SLhG3TBD0uJFsR3ApIpZsYWaruDnJ5A` の「拡張機能 → Apps Script」、スクリプトID `1CpAoEJR3zOYQhKjE0d0LnhrrNr74R9Xfk1uhTephnFWYzaS-9Ukj7CGG`）。コードは SDD 付録A。Webapp デプロイはなく、インストール型トリガー「フォーム送信時 → onFormSubmit」で動く。
+申込通知 bot はタダサポ本体とは**別の GAS プロジェクト**（回答スプシ `<FORM_SHEET_ID>` の「拡張機能 → Apps Script」、スクリプトID `<BOT_SCRIPT_ID>`）。コードは SDD 付録A。Webapp デプロイはなく、インストール型トリガー「フォーム送信時 → onFormSubmit」で動く。
 
 1. **Webhook URL をスクリプトプロパティへ**: GAS エディタ「プロジェクトの設定 → スクリプト プロパティ」に `CHAT_WEBHOOK_URL` = Google Chat の Webhook URL（スペースの「アプリと統合 → Webhook」）。**コード・ドキュメント・GitHub・チャットに貼らない。** 未設定だと通知が止まる。
 2. **コード反映**: GAS エディタに貼り替えて保存（または `clasp --user <bot用アカウント> push --force`）。
 3. **再承認（必須）**: トリガーの作成者アカウントでエディタから任意の関数を一度実行し、追加された権限（このスプレッドシート・スクリプトプロパティ）を許可する。**作成者以外が承認しても効かない。** 未承認のままだとトリガー自体が失敗し、チャット通知が止まる。作成者は「トリガー」画面の「作成者」列で確認。手順1〜3は間を空けずに行う。
-4. **タダサポ側の取込**: タダサポのスプシに「チャット連携」シートを作り、A1 に `=IMPORTRANGE("1cvwtRJSK3gD1SLhG3TBD0uJFsR3ApIpZsYWaruDnJ5A","チャット連携!A:E")` を入れて「アクセスを許可」。回答スプシ側の「チャット連携」シートは最初の申込時に bot が自動作成するため、それまでは `#REF!` 表示で問題ない（案件表示は止まらない）。**タダサポ側のこのシートには書き込まない。**
+4. **タダサポ側の取込**: タダサポのスプシに「チャット連携」シートを作り、A1 に `=IMPORTRANGE("<FORM_SHEET_ID>","チャット連携!A:E")` を入れて「アクセスを許可」。回答スプシ側の「チャット連携」シートは最初の申込時に bot が自動作成するため、それまでは `#REF!` 表示で問題ない（案件表示は止まらない）。**タダサポ側のこのシートには書き込まない。**
 5. **確認**: 次の実申込のあと、回答スプシ「チャット連携」に1行増え、タダサポの該当案件に「チャットを開く」が出て、押すと通知スレッドが開くこと。動作確認のためのテスト申込はしない（案件リストに実データが残るため）。
 
 **トリガーの重複について**: 作成者の異なるトリガーが同時に残っていても、bot は同じ申込（回答シートの行）への通知を1回だけ送る（2回目以降は実行ログに「通知済みのためスキップ」）。ただし不要なトリガーは削除しておくこと（v1.12.13 の切替時、旧トリガーにも権限があり通知が二重化した実績あり）。
@@ -277,7 +211,7 @@ clasp push --force
 
 # デプロイ更新（ロールバック用のバージョン説明を付ける）
 clasp deploy \
-  -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ \
+  -i <DEPLOYMENT_ID> \
   -d "rollback to vX.X.X"
 
 # ロールバック後、作業ブランチを元に戻す
@@ -339,12 +273,16 @@ git checkout HEAD -- index.html コード.js
 
 ## 6. 本番環境情報
 
-| 項目 | 値 |
+実値は公開リポジトリに書かない（`AI_RULES.md` グランドルール3）。下表は値の置き場所。
+
+| 項目 | 値の置き場所 |
 |-----|----|
-| Webapp URL | `https://script.google.com/a/macros/tadakayo.jp/s/AKfycby.../exec` |
-| GAS プロジェクト ID | `1UMg3CaTlbZW0YfjzgqbOwd-XOYdIsVELmGpsP7O-MrwFSiAJdS-ySLvP` |
-| スプレッドシート ID | `1hllLdETiK0sk0xW_y0V6vOmnlK7kIkHBjntYiCTom4w` |
-| デプロイ ID | `AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ` |
+| Webapp URL `<WEBAPP_URL>` | GAS デプロイ管理画面 |
+| GAS プロジェクト ID `<SCRIPT_ID>` | `.clasp.json`（Git 対象外） |
+| スプレッドシート ID `<SPREADSHEET_ID>` | `コード.js` の定数（PropertiesService へ移行予定） |
+| デプロイ ID `<DEPLOYMENT_ID>` | `.clasp.deploy.json` の `production`（Git 対象外）・`clasp deployments` |
+| フォーム回答シート ID `<FORM_SHEET_ID>` | 案件リストの IMPORTRANGE 数式 |
+| 申込通知 bot スクリプト ID `<BOT_SCRIPT_ID>` | 回答スプシの「拡張機能 → Apps Script」 |
 | Webapp 設定 | `executeAs: USER_ACCESSING` / `access: DOMAIN` |
 | タイムゾーン | `Etc/GMT-9`（JST） |
 | 予約送信トリガ間隔 | 廃止（v1.12.1以降は作成しない） |

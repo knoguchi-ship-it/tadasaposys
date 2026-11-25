@@ -10,7 +10,8 @@ jobs:
   test:
     name: E2E Tests (Chromium)
     timeout-minutes: 20
-    runs-on: ubuntu-latest
+    # ubuntu-latest は Ubuntu 26.04 に移行済みで、Playwright 1.52 の chromium が未対応のため固定する
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout
@@ -24,6 +25,12 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Run unit tests (Jest)
+        run: npm run test:unit
+
+      - name: Document sync check
+        run: npm run check
 
       - name: Install Playwright browsers
         run: npx playwright install chromium --with-deps

@@ -645,7 +645,7 @@ React 19系混在で `Minified React error #31` が発生するため固定。
 
 ## 付録A: 申込通知 bot（フォーム回答スプシに付いた GAS）
 
-別プロジェクト（スクリプトID `1CpAoEJR3zOYQhKjE0d0LnhrrNr74R9Xfk1uhTephnFWYzaS-9Ukj7CGG`、回答スプシ `1cvwtRJSK3gD1SLhG3TBD0uJFsR3ApIpZsYWaruDnJ5A` にバインド）。インストール型トリガー「フォーム送信時 → onFormSubmit」で動く。Webhook URL はスクリプトプロパティ `CHAT_WEBHOOK_URL`（**コード・ドキュメント・GitHub に書かない**）。変更・デプロイ手順は `docs/RUNBOOK.md`「申込通知 bot」。v1.12.13 時点のコード（同一申込でトリガーが複数動いても、行番号キー＋スクリプトロック＋スクリプトキャッシュで通知は1回だけ）:
+別プロジェクト（スクリプトID `<BOT_SCRIPT_ID>`、回答スプシ `<FORM_SHEET_ID>` にバインド）。インストール型トリガー「フォーム送信時 → onFormSubmit」で動く。Webhook URL はスクリプトプロパティ `CHAT_WEBHOOK_URL`（**コード・ドキュメント・GitHub に書かない**）。変更・デプロイ手順は `docs/RUNBOOK.md`「申込通知 bot」。v1.12.13 時点のコード（同一申込でトリガーが複数動いても、行番号キー＋スクリプトロック＋スクリプトキャッシュで通知は1回だけ）:
 
 ```javascript
 /** @OnlyCurrentDoc スプレッドシート権限はこの回答スプシのみに限定する */
@@ -690,7 +690,8 @@ function onFormSubmit(e) {
     message += "【他の希望者の参加について】 " + responses[6] + "\n";
 
     // ここに追加するメッセージ
-    message += "\nタダサポ管理アプリはコチラ: https://script.google.com/a/macros/tadakayo.jp/s/AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ/exec";
+    // <WEBAPP_URL> は bot へ貼り付ける際に本番の Webapp URL へ置き換える（公開リポジトリには実値を書かない）
+    message += "\nタダサポ管理アプリはコチラ: <WEBAPP_URL>";
     message += "\n\nタダサポの対応マニュアルはコチラ: https://sites.google.com/tadakayo.jp/tadakayohome/%E6%A5%AD%E5%8B%99%E6%94%AF%E6%8F%B4%E3%83%A1%E3%83%8B%E3%83%A5%E3%83%BC/%E3%82%BF%E3%83%80%E3%82%B5%E3%83%9D?authuser=0";
 
     var payload = JSON.stringify({ "text": message });

@@ -3,6 +3,7 @@ node_modules/
 
 # clasp credentials (sensitive — 絶対にコミット/push しない)
 .clasp.json
+.clasp.*.json
 .clasprc.json
 creds.json
 client_secret*.json
@@ -23,15 +24,21 @@ Thumbs.db
 !.claude/
 .claude/*
 !.claude/settings.json
+!.claude/hooks/
 
 # Playwright MCP (local dev tool logs)
 .playwright-mcp/
 .mcp.json
 
-# Test output
+# Test output（自動生成物。Git で追跡しない）
 output/
+playwright-report/
+test-results/
 temp_testfiles/
 test*.png
 
 # Local backup/stub files (never track or deploy)
 temp/
+
+# 同期チェック用の照合語（個人名など。Git 対象外）
+.private-terms.local.txt

@@ -1,0 +1,2 @@
+# シェルスクリプト（git フック）は Windows でも LF で保つ（CRLF だと sh が失敗する）
+.githooks/* text eol=lf
