@@ -292,6 +292,36 @@ function buildChatThreadUrl(threadName) {
   return m ? 'https://chat.google.com/room/' + m[1] + '/' + m[2] + '/' + m[2] : null;
 }
 
+/**
+ * コード.js: redactAuditCell_()
+ * 監査ログの JSON セル1つから秘密情報を伏せ字にする（v1.13.0）。純粋関数。
+ * - JSON オブジェクトなら、秘密情報キーの値だけを '[REDACTED]' にする（'(設定済み)' 等の状態表記は残す）
+ * - JSON でない・オブジェクトでない場合は、既知の秘密値（8文字以上）を部分一致で伏せる
+ * 返り値は書き換え後の文字列（変化なしなら元の文字列）。
+ */
+function redactAuditCell(cell, secretKeys, secretValues) {
+  var text = String(cell == null ? '' : cell);
+  if (!text) return text;
+  var obj = null;
+  try { obj = JSON.parse(text); } catch (e) { obj = null; }
+  if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+    var changed = false;
+    secretKeys.forEach(function(k) {
+      if (!Object.prototype.hasOwnProperty.call(obj, k)) return;
+      var v = obj[k];
+      if (v === '' || v === null || v === '[REDACTED]' || /^\(.*\)$/.test(String(v))) return;
+      obj[k] = '[REDACTED]';
+      changed = true;
+    });
+    return changed ? JSON.stringify(obj) : text;
+  }
+  var next = text;
+  (secretValues || []).forEach(function(v) {
+    if (v && String(v).length >= 8) next = next.split(String(v)).join('[REDACTED]');
+  });
+  return next;
+}
+
 module.exports = {
   getFiscalYear,
   caseFiscalYear,
@@ -316,4 +346,5 @@ module.exports = {
   normalizeSubmittedAtLabel,
   chatLinkKey,
   buildChatThreadUrl,
+  redactAuditCell,
 };

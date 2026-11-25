@@ -1,7 +1,7 @@
 # 開発者向け引継ぎ資料 (HANDOVER.md)
 
 **Project:** タダサポ管理システム
-**Version:** 1.12.13（現行リリース）
+**Version:** 1.13.0（本番未反映。本番は v1.12.13 @159）
 **Date:** 2026/11/25
 **Author:** Development Team
 
@@ -9,7 +9,7 @@
 
 ## 📌 次の担当者へ（最初にこの節だけ読めば現状が掴めます）
 
-> **現在地:** v1.12.13 / 本番 @159 / 単体 116件 / E2E 68件
+> **現在地:** v1.13.0 / 本番 @159（v1.12.13） / 単体 127件 / E2E 71件
 >
 > 版・本番デプロイ番号・テスト件数は**この1行だけ**に書く（本文に書き写さない。AI_RULES.md グランドルール6）。`npm run check` がこの行を package.json・実テスト・§1・§8 と照合する。最終確認 2026/11/25（単体・E2E 全合格、`npm run check` エラー0）。
 > ⚠️ デプロイ直後の運用確認として、GAS デプロイ管理画面で Webapp 設定（実行＝アクセスしているユーザー／アクセス＝NPO法人タダカヨ内の全員）をブラウザで目視確認すること（CLIでは確認不可）。
@@ -20,7 +20,28 @@
 
 > **2026/11/25 追記（G3・ルール補強＋同期チェック導入・アプリの挙動変更なし）:** キャッチアップで照合が浅くなった反省から、AI_RULES.md「作業前レビュー」に**照合項目9つ**を明記し、うち機械化できるものを **`npm run check`（`tools/check-sync.js`）** に実装。版数（8ファイル）・この「現在地」行と §1/§8・`const IDX` と AI_RULES/SDD・ADR 件数・仕組みの実在・本番識別子/個人名の残存・origin との差を検査する（識別子は移行中のため警告、`npm run check:strict` でエラー）。個人名は Git 対象外の `.private-terms.local.txt`（1行1語）に登録して照合。`index.html` に版数 `<meta name="app-version">` を追加（同期対象なのに版数表記がなかったため）。AI_RULES の IDX 節に欠けていた `CASES_OVERRIDE`/`EMAIL`/`CHAT_LINK` を追加。同日、**フックを必要最小限で導入**: PreToolUse（禁止コマンドを拒否・push/deploy は確認）、SessionStart（`npm run check` の結果を文脈へ）、git pre-commit（`npm run check` エラーでコミット停止）、CI に Jest と `npm run check` を追加。Stop フックは重くなるため採用しない。あわせて文書の本番識別子を除去（残りは `コード.js` の `SPREADSHEET_ID` のみ）、SECURITY.md の共有設定の記述を AI_RULES の基準表に合わせて訂正、自動生成物（`playwright-report/`・`test-results/`）を Git 追跡から外し、古い `docs/RESTART_CHECKLIST.md`（v1.8.1）を削除。
 
-### 直近セッションで完了したこと（v1.12.13）
+### 直近セッションで完了したこと（v1.13.0・本番未反映）
+
+> **読込速度とセキュリティの改善（ADR-013・ADR-014）。PR で `feat/v1.13.0-perf-security`（PR #4 の上）。デプロイは担当メンバーが `npm run deploy` で行う。**
+
+- **本番ビルド方式**: 原本 `index.html` は単一ファイルのまま、`npm run build`（`tools/build.js`）で `dist/` を生成。JSX 事前変換・React 18.2.0 同梱・Tailwind を CSS 化。clasp は `dist/` を push（`.clasp.json` の `rootDir: "dist"`）。ローカル実測で初回表示 2,341ms → 629ms（-73%）、転送 約5.1MB → 約0.76MB（-85%）。
+- **起動の並列化**: `doGet` は HTML を即返し、ページ先頭で `getInitialData` を先行発行。`[perf] initial data` を画面コンソールと実行ログに出す（本番で区間ごとの ms を確認できる）。
+- **読込量の削減**: 未使用だったメール履歴（本文つき）の全件読込・送信を廃止。タダメンマスタは1実行1回。FullCalendar は SRI 付き遅延読込。Babel の二重ダウンロードも解消。
+- **秘密情報**: `SPREADSHEET_ID` と Zoom の秘密5項目をスクリプトプロパティへ（秘密は書込専用・監査ログに値を残さない）。移行ボタンで既存の平文をシートと監査ログから消去。Zoom トークンを50分キャッシュ。
+- **その他**: 埋め込み許可（ALLOWALL）廃止、`executionApi=MYSELF`、ひな形にあった実在風の固定 Zoom 会議ID・パスコード例をダミー化。
+- **デプロイ**: `npm run deploy`（`tools/deploy.js`）に一本化。検査（Webapp 設定・rootDir・クリーン）→ テスト → ビルド → 手入力確認 → `clasp push --force` → `clasp deploy -i`。
+
+**v1.13.0 のデプロイ手順（担当メンバー向け・順番厳守）:**
+1. PR #4 → v1.13.0 の PR の順にマージ（CI 緑を確認）
+2. 手元で `git switch master && git pull && npm ci`
+3. `.clasp.json` の `rootDir` を `"dist"` に、`.clasp.deploy.json` に `{"production": "<DEPLOYMENT_ID>"}`
+4. GAS「プロジェクトの設定 → スクリプト プロパティ」に `SPREADSHEET_ID` を追加（**これを忘れると起動しない**）
+5. `npm run deploy`
+6. GAS デプロイ管理画面で Webapp 設定を目視確認 → 本番で起動・案件表示・日程確定（Zoom）を確認
+7. 管理者で「設定管理 → 連携 → 秘密情報をプロパティへ移行」→ Zoom の Client Secret を再発行して入力（RUNBOOK §2-3-1）
+8. 付いた @nn を報告 → 本節の「現在地」と §1 を更新
+
+### 前々回完了したこと（v1.12.13）
 - **案件詳細に「チャットを開く」リンク**: フォーム申込時に「タダサポ来たよ」が Google Chat に投稿したスレッド（挙手・担当調整）へ飛べる。
   - 申込通知 bot（回答スプシに付いた**別 GAS**・SDD 付録A）が Webhook 応答のスレッド名を回答スプシ「チャット連携」シートへ記録 → タダサポのスプシへ IMPORTRANGE（参照のみ・SDD S-10）→ `getAllCasesJoined()` が「申込日時の壁時計表記 + 正規化メール」で突合して `chatThreadUrl` を付与。
   - bot の Webhook URL はスクリプトプロパティ `CHAT_WEBHOOK_URL` へ移行（コード直書きを解消）。
@@ -33,6 +54,7 @@
   - **E2E 更新**: `tests/e2e/11-closing-email.spec.ts` を新フローへ（ON で終了メール作成モーダルが開き編集→送信／OFF で開かない）。「モーダル非表示の壊れたコードで失敗・正しいコードで合格」を確認。E2E 65件・単体92件 全PASS・回帰なし。
 
 ### 🔴 まずやること（運用・確認系。コードは触らず数分で完了）
+0. **v1.13.0 のデプロイ**（上の手順。スクリプトプロパティ `SPREADSHEET_ID` を先に設定）
 1. **GASデプロイ管理画面で @159 の Webapp 設定を目視確認**（実行＝アクセスしているユーザー／アクセス＝NPO法人タダカヨ内の全員）。
 2. **本番URLで v1.12.12 を確認**：完了報告で「サポート終了メールを送信する」ON→完了後にメール作成画面が開き、本文を編集して送信できればOK（OFF なら開かない）。
 3. **（前リリース残）本番URLで R3 を確認**：日程確定→方法「対面」等＋「カレンダーに登録」ON で「**この方法ではカレンダーへの予定登録は行われません（対応記録のみ保存されます）**」と出ればOK。
@@ -114,8 +136,9 @@
 
 ```
 tadasaposys/
-├── index.html              ← フロントエンド（React SPA、5100行超）
-├── コード.js               ← バックエンド（GAS、4200行超）
+├── index.html              ← フロントエンドの原本（React SPA、5700行超。開発時はブラウザ内 Babel）
+├── コード.js               ← バックエンド（GAS、5200行超）
+├── dist/                   ← 本番ビルド成果物（npm run build。Git 対象外。clasp はここを push）
 ├── appsscript.json         ← GASマニフェスト
 ├── AI_RULES.md             ← AI エージェント共通の開発指示（グランドルールの正本）
 ├── CLAUDE.md               ← Claude Code の入口（@AI_RULES.md を読込むだけ）
@@ -132,6 +155,8 @@ tadasaposys/
 ├── .clasp.deploy.json      ← 固定 deploymentId（.gitignore対象）
 ├── .private-terms.local.txt ← 同期チェックが照合する個人名など（.gitignore対象・1行1語）
 ├── tools/check-sync.js     ← ドキュメント同期チェック（npm run check）
+├── tools/build.js          ← 本番ビルド（npm run build。ADR-013）
+├── tools/deploy.js         ← 検査付きデプロイ（npm run deploy。人が端末で実行）
 ├── .claude/hooks/guard.js  ← Claude Code PreToolUse フック（禁止コマンドの拒否）
 ├── .githooks/pre-commit    ← git pre-commit（npm run check。npm install で core.hooksPath を自動設定）
 ├── .codex/config.toml      ← Codex 起動方針（GitHub共有用）
@@ -145,7 +170,7 @@ tadasaposys/
 └── docs/
     ├── SDD.md              ← 設計書
     ├── HANDOVER.md         ← 本ドキュメント
-    ├── ADR.md              ← アーキテクチャ判断記録（ADR-001〜012）
+    ├── ADR.md              ← アーキテクチャ判断記録（ADR-001〜014）
     ├── RUNBOOK.md          ← 運用手順書
     ├── Manual.md           ← 操作マニュアル
     ├── RD.md               ← 要件定義
@@ -159,15 +184,16 @@ tadasaposys/
 
 | 項目 | 技術 |
 |------|------|
-| フロントエンド | React 18.2.0 + Babel standalone（CDN、importmap） |
-| アイコン | lucide-react 0.330.0（`?deps=react@18.2.0` 必須） |
-| CSS | Tailwind CSS（CDN） |
+| フロントエンド | React 18.2.0（本番はビルドで同梱。原本は Babel standalone＋importmap。ADR-013） |
+| アイコン | lucide-react 0.330.0（同上。原本の importmap は `?deps=react@18.2.0` 必須） |
+| CSS | Tailwind CSS v3（本番はビルド時に CSS 生成。原本は CDN） |
+| ビルド | esbuild（`npm run build` → `dist/`） |
 | バックエンド | Google Apps Script (V8) |
 | データストア | Google スプレッドシート |
 | メール | Gmail Advanced Service (API v1) |
 | カレンダー | Calendar Advanced Service + CalendarApp |
 | 会議URL | Google Meet（Calendar API）/ Zoom API |
-| デプロイ | clasp（`clasp push --force` 必須） |
+| デプロイ | `npm run deploy`（検査付き。内部で `clasp push --force` → `clasp deploy -i`） |
 | E2E テスト | Playwright 1.52.0 + TypeScript |
 | 単体テスト | Jest 29 |
 | アクセシビリティ | axe-core（WCAG 2.1 AA 準拠確認済み） |
@@ -177,7 +203,7 @@ tadasaposys/
 詳細な判断基準・作業チェック・仕組みは `AI_RULES.md`（正本）の「グランドルール実行チェック」を参照する。以下は要約。
 
 - **React 18.2.0 固定**: React 19系混在で `Minified React error #31` クラッシュ
-- **clasp push --force**: `--force` なしだとサイレントにスキップされる場合がある
+- **デプロイは `npm run deploy` のみ**: `.clasp.json` の `rootDir` は `dist`。`clasp push` を手で打たない（原本を push する事故・`-i` 付け忘れを防ぐ）
 - **clasp pull 前に git commit**: ローカルファイルが上書きされる
 - **案件リストシートへの書き込み禁止**: IMPORTRANGE 数式を破壊する
 - **.claspignore の確認**: `node_modules/` 等が除外されていることを確認してから push
@@ -361,6 +387,9 @@ npm run test:report
 - `10-draft-list`: メール下書き一覧（開いて送信・削除）（2件）
 - `11-closing-email`: サポート終了メール（送信前に編集・OFF で開かない）（2件）
 - `12-chat-link`: 申込通知チャットへのリンク（3件）
+- `13-secret-settings`: 秘密情報の書込専用設定（password 表示・移行・保存後に値を返さない）（3件）
+
+E2E は既定で `dist/`（本番ビルド）を検証する。原本を検証するときは `E2E_TARGET=src npm test`。
 
 > **モック整備（T1）**: ローカル/E2E で Zoom 機能を再現するため、`index.html` の `MOCK_MASTERS.methods` に `Zoom` を追加（本番 `getMasters` の `zoomEnabled` 時と同形状＝index1 に挿入）。モックは `IS_LOCAL` 専用で本番挙動に影響なし。
 
@@ -372,7 +401,7 @@ npm run test:report
 npm run test:unit  # 件数は冒頭の現在地 / 約1秒
 ```
 
-対象: `getFiscalYear` / `sanitizeForSheet_` / `parseNullablePositiveInteger_` / `normalizeEmail_` / `parseBoolean_` 等の純粋関数（`business-logic.test.js`）と、同期チェックの検査ロジック（`check-sync.test.js`）、PreToolUse フックの判定（`guard.test.js`）。件数照合のため `test.each` は使わず1件ずつ `test()` で書く
+対象: `getFiscalYear` / `sanitizeForSheet_` / `parseNullablePositiveInteger_` / `normalizeEmail_` / `parseBoolean_` 等の純粋関数（`business-logic.test.js`）と、同期チェックの検査ロジック（`check-sync.test.js`）、PreToolUse フックの判定（`guard.test.js`）、本番ビルドとデプロイ事前検査（`build-deploy.test.js`）。件数照合のため `test.each` は使わず1件ずつ `test()` で書く
 
 ### ドキュメント同期チェック
 
@@ -419,17 +448,11 @@ npx serve -s . -l 3000
 
 ### デプロイ手順
 
-詳細: `docs/RUNBOOK.md` §3
+詳細: `docs/RUNBOOK.md` §3（正本は `AI_RULES.md`「デプロイ」）
 
 ```bash
-# 1. 必ず先に git commit（clasp pull でローカルが上書きされる対策）
-git add <files> && git commit -m "feat: vX.X.X - 説明"
-
-# 2. GASにプッシュ（--force 必須）
-clasp push --force
-
-# 3. デプロイ更新
-clasp deploy -i <DEPLOYMENT_ID> -d "vX.X.X"
+git switch master && git pull && npm ci
+npm run deploy   # 検査 → テスト → ビルド → 確認入力 → clasp push --force → clasp deploy -i
 ```
 
 ### 設計変更時の更新対象
@@ -620,7 +643,7 @@ v1.12.1 デプロイ後、次担当者が安全に作業へ入れるよう、開
 1. **本ファイル `docs/HANDOVER.md`** §1〜§13（現状把握）
 2. **`AI_RULES.md`**（開発ルールの正本。AI 開発支援を使う場合は CLAUDE.md / AGENTS.md から自動で読まれる）
 3. **`docs/SDD.md`** §1（データモデルと IDX 定数）
-4. **`docs/ADR.md`**（12件の設計判断）
+4. **`docs/ADR.md`**（14件の設計判断）
 
 AIツール起動:
 
@@ -634,8 +657,9 @@ AIツール起動:
 ```bash
 git clone <repo>
 cd tadasaposys
-npm install
-npx serve -s . -l 3000  # → http://localhost:3000
+npm ci                       # 依存を入れる（git の pre-commit も自動設定）
+npx serve -s . -l 3000       # → http://localhost:3000（原本）
+npm run build && npx serve -s dist -l 3000   # 本番ビルドの確認
 ```
 
 モックデータ14パターンで全機能の UI を確認できる（GAS API は IS_LOCAL モックでスタブ化）。
@@ -651,10 +675,9 @@ npm run check      # ドキュメント同期チェック
 ### 4. 本番デプロイ（変更がある場合）
 
 **絶対グランドルール（§10「バージョン管理ルール」参照）を厳守**:
-1. `appsscript.json` の `webapp` 設定が `USER_ACCESSING` / `DOMAIN` であることを確認
-2. `git commit` してから `clasp push --force`
-3. `clasp deploy -i <DEPLOYMENT_ID> -d "vX.X.X"`
-4. デプロイ後、ブラウザの GAS デプロイ管理画面で設定を目視確認
+1. 変更は PR で master にマージ済みであること
+2. `git switch master && git pull && npm ci` → `npm run deploy`（Webapp 設定・rootDir・テストを自動検査）
+3. デプロイ後、ブラウザの GAS デプロイ管理画面で設定を目視確認
 
 ### 4-1. v1.12.1 デプロイ後の残作業
 
@@ -701,7 +724,7 @@ G1（グランドルール見直し）は 2026/05/28 に完了。**2026/11/25 �
 
 ### 6. 困ったとき
 
-- **設計の意図を知りたい**: `docs/ADR.md`（ADR-001〜012）
+- **設計の意図を知りたい**: `docs/ADR.md`（ADR-001〜014）
 - **データモデルの詳細**: `docs/SDD.md` §1
 - **デプロイ事故対応**: `docs/RUNBOOK.md` §4-5
 - **コードの場所を探す**: `コード.js` は約4500行・1ファイル / `index.html` は約5400行・1ファイル（モックデータも含む）。`docs/HANDOVER.md` §5 にバックエンド関数一覧あり

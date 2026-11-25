@@ -29,6 +29,7 @@ const {
   normalizeSubmittedAtLabel,
   chatLinkKey,
   buildChatThreadUrl,
+  redactAuditCell,
 } = require('./src/pure-functions');
 
 // ============================================================
@@ -737,5 +738,31 @@ describe('v1.12.13 チャットスレッドリンク', () => {
     expect(buildChatThreadUrl('javascript:alert(1)')).toBeNull();
     expect(buildChatThreadUrl('spaces/AAA/threads/x"><script>')).toBeNull();
     expect(buildChatThreadUrl('spaces/AAA/threads/x/../../evil')).toBeNull();
+  });
+});
+
+// ── v1.13.0: 監査ログの秘密情報の伏せ字化（ADR-014） ──
+describe('redactAuditCell（監査ログの秘密情報を伏せる）', () => {
+  const KEYS = ['ZOOM_CLIENT_SECRET', 'ZOOM_FIXED_PASS'];
+
+  test('JSON の秘密情報キーの値だけを伏せ、他のキーと状態表記は残す', () => {
+    const cell = JSON.stringify({ ZOOM_CLIENT_SECRET: 'abcSECRETxyz', MAIL_FORCE_CC: 'a@b.jp', ZOOM_FIXED_PASS: '(設定済み)' });
+    const out = JSON.parse(redactAuditCell(cell, KEYS, []));
+    expect(out).toEqual({ ZOOM_CLIENT_SECRET: '[REDACTED]', MAIL_FORCE_CC: 'a@b.jp', ZOOM_FIXED_PASS: '(設定済み)' });
+  });
+
+  test('短いパスコードでも、キー指定なので無関係な数字は伏せない', () => {
+    const cell = JSON.stringify({ ZOOM_FIXED_PASS: '1234', ANNUAL_USAGE_LIMIT: '1234' });
+    expect(JSON.parse(redactAuditCell(cell, KEYS, ['1234']))).toEqual({ ZOOM_FIXED_PASS: '[REDACTED]', ANNUAL_USAGE_LIMIT: '1234' });
+  });
+
+  test('JSON でないセルは既知の秘密値（8文字以上）を部分一致で伏せる', () => {
+    expect(redactAuditCell('old=abcSECRETxyz;', KEYS, ['abcSECRETxyz', 'short'])).toBe('old=[REDACTED];');
+  });
+
+  test('変化がなければ元の文字列をそのまま返す', () => {
+    const cell = JSON.stringify({ MAIL_FORCE_CC: 'a@b.jp' });
+    expect(redactAuditCell(cell, KEYS, [])).toBe(cell);
+    expect(redactAuditCell('', KEYS, [])).toBe('');
   });
 });

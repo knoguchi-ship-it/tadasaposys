@@ -42,6 +42,7 @@ describe('本番・公開に影響するコマンドは確認を求める', () =
     ['clasp deploy -i <DEPLOYMENT_ID> -d "v1.2.3"'],
     ['git push origin feat/x'],
     ['git push -u origin feat/x'],
+    ['npm run deploy'],
     ].map((r) => r[0]);
     for (const cmd of cmds) expect([cmd, decision(cmd)]).toEqual([cmd, 'ask']); // 失敗時にどのコマンドか分かる形
   });

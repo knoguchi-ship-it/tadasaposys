@@ -181,20 +181,23 @@ function countTests(readFile = read, listDir = (d) => fs.readdirSync(path.join(R
 // ---------------------------------------------------------------- 4. HANDOVER 現在地
 function checkHandover(r, version, counts, readFile = read) {
   const md = readFile('docs/HANDOVER.md');
-  const cur = md.match(/\*\*現在地:\*\* v(\d+\.\d+\.\d+) \/ 本番 @(\d+) \/ 単体 (\d+)件 \/ E2E (\d+)件/);
+  // 書式: **現在地:** vX.Y.Z / 本番 @nn / 単体 N件 / E2E N件
+  //   リポジトリの版が本番より新しい（未反映）ときは「本番 @nn（vA.B.C）」と本番の版を併記する
+  const cur = md.match(/\*\*現在地:\*\* v(\d+\.\d+\.\d+) \/ 本番 @(\d+)(?:（v(\d+\.\d+\.\d+)）)? \/ 単体 (\d+)件 \/ E2E (\d+)件/);
   if (!cur) {
     r.error('HANDOVER', '冒頭の「**現在地:** vX.Y.Z / 本番 @nn / 単体 N件 / E2E N件」行が見つからない');
     return;
   }
-  const [, v, at, unit, e2e] = cur;
+  const [, v, at, prodV, unit, e2e] = cur;
+  const deployedV = prodV || v; // 本番に出ている版
   if (v !== version) r.error('HANDOVER', `現在地の版 v${v} が package.json v${version} と不一致`);
   if (Number(unit) !== counts.unit) r.error('HANDOVER', `現在地の単体 ${unit}件 ≠ 実テスト ${counts.unit}件`);
   if (Number(e2e) !== counts.e2e) r.error('HANDOVER', `現在地の E2E ${e2e}件 ≠ 実テスト ${counts.e2e}件`);
 
   const dep = md.match(/\*\*本番デプロイバージョン\*\*: @(\d+)（v(\d+\.\d+\.\d+)/);
   if (!dep) r.error('HANDOVER', '§1「本番デプロイバージョン: @nn（vX.Y.Z」が見つからない');
-  else if (dep[1] !== at || dep[2] !== v) {
-    r.error('HANDOVER', `§1 本番デプロイバージョン @${dep[1]}（v${dep[2]}）が現在地 @${at}（v${v}）と不一致`);
+  else if (dep[1] !== at || dep[2] !== deployedV) {
+    r.error('HANDOVER', `§1 本番デプロイバージョン @${dep[1]}（v${dep[2]}）が現在地の本番 @${at}（v${deployedV}）と不一致`);
   }
 
   // §8 のスペック一覧（- `NN-name`: 説明（N件 ...）
@@ -225,11 +228,11 @@ function checkAdr(r, readFile = read) {
 // ---------------------------------------------------------------- 6. 仕組みの実在
 function checkMechanisms(r) {
   const ignore = exists('.claspignore') ? read('.claspignore').split(/\r?\n/) : [];
-  for (const p of ['temp/**', 'tests/**', 'docs/**', 'tools/**']) {
+  for (const p of ['temp/**', 'tests/**', 'docs/**', 'tools/**', 'dist/**']) {
     if (!ignore.includes(p)) r.error('仕組み', `.claspignore に ${p} がない`);
   }
   const gi = exists('.gitignore') ? read('.gitignore') : '';
-  for (const p of ['.clasp.json', '.clasp.*.json', 'temp/', '.private-terms.local.txt']) {
+  for (const p of ['.clasp.json', '.clasp.*.json', 'temp/', '.private-terms.local.txt', 'dist/']) {
     if (!gi.split(/\r?\n/).includes(p)) r.error('仕組み', `.gitignore に ${p} がない`);
   }
   if (!exists('.github/workflows/playwright.yml')) r.error('仕組み', 'CI（.github/workflows/playwright.yml）がない');
@@ -247,6 +250,22 @@ function checkMechanisms(r) {
   if (!hookCmds('SessionStart').some((c) => c.includes('check-sync.js'))) r.error('仕組み', '.claude/settings.json に SessionStart フック（check-sync.js --session）がない');
   if (!exists('.claude/hooks/guard.js')) r.error('仕組み', '.claude/hooks/guard.js がない');
   if (!exists('.githooks/pre-commit')) r.error('仕組み', '.githooks/pre-commit がない');
+  // 本番ビルド・デプロイ（ADR-013）
+  for (const f of ['tools/build.js', 'tools/deploy.js']) {
+    if (!exists(f)) r.error('仕組み', f + ' がない');
+  }
+  const scripts = JSON.parse(read('package.json')).scripts || {};
+  for (const k of ['build', 'deploy', 'check']) {
+    if (!scripts[k]) r.error('仕組み', `package.json に npm run ${k} がない`);
+  }
+  // ローカルの clasp 設定（Git 対象外。存在する人だけ確認）
+  if (exists('.clasp.json')) {
+    let rootDir = '';
+    try { rootDir = String(JSON.parse(read('.clasp.json')).rootDir || ''); } catch (e) { /* 壊れていれば下で警告 */ }
+    if (rootDir.replace(/[\\/]+$/, '') !== 'dist') {
+      r.warn('仕組み', '.clasp.json の rootDir が "dist" でない（v1.13.0〜 clasp はビルド成果物を push する。RUNBOOK §1-2）');
+    }
+  }
   let hooksPath = '';
   try { hooksPath = execFileSync('git', ['config', '--get', 'core.hooksPath'], { cwd: ROOT, encoding: 'utf8' , stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch (e) { /* 未設定 */ }
   if (hooksPath !== '.githooks') r.warn('仕組み', `git の core.hooksPath が .githooks でない（pre-commit が動かない）。npm install で自動設定、または git config core.hooksPath .githooks`);

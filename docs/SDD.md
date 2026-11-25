@@ -1,8 +1,16 @@
-# システム詳細設計書 (SDD) — タダサポ管理システム v1.12.13
+# システム詳細設計書 (SDD) — タダサポ管理システム v1.13.0
 
-**Version:** 1.12.13
-**Date:** 2026/10/10
-**Status:** Released
+**Version:** 1.13.0
+**Date:** 2026/11/25
+**Status:** Released（本番反映待ち）
+
+> **v1.13.0 追補（読込速度とセキュリティ。ADR-013・ADR-014）**
+> - **本番ビルド**: 原本 `index.html` から `npm run build`（`tools/build.js`）で `dist/` を生成し、clasp は `dist/` を push する。JSX は事前変換、React 18.2.0・lucide-react 0.330.0 は同梱、Tailwind は使用クラスのみの CSS を埋め込み。本番は esm.sh・unpkg・Tailwind CDN を使わない（TC-01・TC-03）。デプロイは `npm run deploy`（`tools/deploy.js`）に一本化。
+> - **起動の並列化**: `doGet` はシートを読まずに HTML を即返す（F-01）。ページ先頭の script が `getInitialData()` を先行発行し、シート読込と画面資源の読込・初期化を並行させる。`getInitialData` は区間ごとの処理時間 `_perf` を返し、実行ログと画面コンソール（`[perf] initial data`）に出す（F-02）。
+> - **読込量の削減**: `getAllCasesJoined` はメール履歴シート（本文つき）を読まず、案件に `emails` を付けない（フロントで未使用だった。案件ごとのメールは F-13 `getThreadMessages`）。タダメンマスタは1実行1回だけ読む（`getStaffRows_`）。FullCalendar は日程確定モーダルで SRI 付き遅延読込（アイドル時に先読み）。
+> - **秘密情報の書込専用化**: `SPREADSHEET_ID` と Zoom 連携の秘密情報（`ZOOM_ACCOUNT_ID`・`ZOOM_CLIENT_ID`・`ZOOM_CLIENT_SECRET`・`ZOOM_FIXED_URL`・`ZOOM_FIXED_PASS`）はスクリプトプロパティに保存（S-00）。管理画面に値を返さず状態のみ（F-16・F-19）。移行は F-19b `migrateSecretsToProperties()`。Zoom トークンは ScriptCache に最長50分。
+> - **その他**: Webapp の埋め込み許可（`XFrameOptionsMode.ALLOWALL`）をやめ既定に。`appsscript.json` の `executionApi.access` を `MYSELF` に。
+
 
 > **v1.12.13 追補（申込通知チャットへのリンク）**
 > - 申込通知 bot（フォーム回答スプシに付いた `onFormSubmit`。タダサポ本体とは別の GAS プロジェクト）が Webhook 投稿時の応答からスレッド名を取り出し、回答スプシの「チャット連携」シートへ記録する。タダサポのスプシは同名シートへ IMPORTRANGE で取り込み、**参照のみ**（書き込み禁止）。S-10 参照。
@@ -109,10 +117,22 @@
 **制約:** A 列の設定キーは変更不可。C 列の設定値のみ編集可能。
 **シート構造:** A=設定キー, B=項目名, C=設定値, D=入力例, E=説明
 
+**スクリプトプロパティ（v1.13.0〜・ADR-014）:** 次はシートではなく GAS の「プロジェクトの設定 → スクリプト プロパティ」に保存する。シートは組織内の誰でも読めるため。
+
+| プロパティ | 必須 | 設定方法 | 説明 |
+|---|---|---|---|
+| `SPREADSHEET_ID` | YES | GAS エディタで手入力（デプロイ前） | タダサポDB の ID。未設定なら全 API が明示エラーで止まる |
+| `ZOOM_ACCOUNT_ID` / `ZOOM_CLIENT_ID` / `ZOOM_CLIENT_SECRET` | NO* | 管理画面の設定管理「連携」（書込専用） | Zoom Server-to-Server OAuth |
+| `ZOOM_FIXED_URL` / `ZOOM_FIXED_PASS` | NO | 同上 | 「いつものタダスクID」の URL（`?pwd=` を含む）とパスコード |
+
+- 取得は `getSetting_` が自動で振り分ける（`SECRET_SETTING_KEYS_`）。未移行の間はシートの旧値を読む（後方互換）。
+- 管理画面は値を表示せず状態（`property` / `sheet` / `property+sheet` / `none`）のみ表示。空欄で保存=変更なし、「削除」=プロパティ削除。
+- 保存・移行時にシートの該当セルを空にし、入力例・説明を「シートに入力しない」案内へ書き換える。
+
 | 設定キー | 必須 | 説明 |
 |---------|------|------|
 | `ADMIN_EMAILS` | YES | 管理者メールアドレス（後方互換。現在は STAFF シートの `ROLE=admin` を優先） |
-| `ZOOM_ACCOUNT_ID` / `ZOOM_CLIENT_ID` / `ZOOM_CLIENT_SECRET` | NO* | Zoom Server-to-Server OAuth 認証情報 |
+| `ZOOM_ACCOUNT_ID` / `ZOOM_CLIENT_ID` / `ZOOM_CLIENT_SECRET` | NO* | Zoom Server-to-Server OAuth 認証情報。**v1.13.0〜 スクリプトプロパティ（書込専用）。シートには入力しない**（下記「スクリプトプロパティ」） |
 | `SHARED_CALENDAR_ID` | NO | 共有カレンダーID（空欄=デフォルトカレンダー） |
 | `ATTACHMENT_FOLDER_ID` | YES* | 添付ファイル保存先 DriveフォルダID |
 | `MAIL_FORCE_CC` | NO | 全メールに自動付与する CC（カンマ区切り） |
@@ -377,13 +397,13 @@ pending/sending → disabled（予約送信機能廃止により未送信のま�
 ## 3. インターフェース仕様 (Function Specifications)
 
 ### F-01: `doGet()`
-HTML を返す Web App エントリポイント。`getInitialData()` の結果を `window.__INITIAL_DATA__` として HTML に埋め込み、初回通信往復を削減する。
+HTML を返す Web App エントリポイント。v1.13.0〜 シートを読まずに `createHtmlOutputFromFile('index')` を即返す（ADR-013）。`XFrameOptionsMode` は既定（他サイトへの埋め込み不可）。初期データはページ先頭の script が `google.script.run.getInitialData()` を先行発行し、`window.__INITIAL_DATA_PROMISE__` としてアプリへ渡す（v1.12.x までの `window.__INITIAL_DATA__` 埋め込みは廃止）。
 
 ### F-02: `getInitialData()`
-起動時データ取得。`user` / `cases` / `masters` / `draftCaseIds` / `forcedCc` を返す。`ensureAttachmentSchema_()` でスキーマ自動マイグレーションを実行する。
+起動時データ取得。`user` / `cases` / `masters` / `draftCaseIds` / `forcedCc` / `_perf` を返す。`ensureAttachmentSchema_()` でスキーマ自動マイグレーションを実行する。`_perf` は区間ごとの処理時間（ms: `schema` / `auth` / `cases` / `masters` / `drafts`）で、実行ログにも JSON で出力する（v1.13.0）。
 
 ### F-03: `getAllCasesJoined()`
-案件リスト + 案件手動追加 + 案件補正 + サポート記録 + メール履歴を結合し、削除済み案件を除外して返す。各案件に `currentFiscalYearCount`（今年度累計利用回数）を付与する。v1.12.13 からフォーム案件には「チャット連携」シートから `chatThreadUrl`（申込通知スレッドURL・なければ `null`）も付与する（S-10）。
+案件リスト + 案件手動追加 + 案件補正 + サポート記録を結合し、削除済み案件を除外して返す（v1.13.0〜 メール履歴は結合しない。案件の `emails` は廃止）。各案件に `currentFiscalYearCount`（今年度累計利用回数）を付与する。v1.12.13 からフォーム案件には「チャット連携」シートから `chatThreadUrl`（申込通知スレッドURL・なければ `null`）も付与する（S-10）。
 
 **年度計算:** 4月1日始まり。同一 `EMAIL`（正規化）かつ同一年度の `inProgress`/`completed` 案件の `supportCount` を合算。集計キーは `annualUsageKey_(email, pk)` = `normalizeEmail_(email) + '_' + caseFiscalYear_(pk)` で統一。`caseFiscalYear_()` は手動追加案件のPK `manual_<エポックミリ秒>` も申込日年度へ正しく解決するため、**Googleフォーム申込と管理者の手動追加案件が同一メール+年度で合算される**（v1.12.3）。
 
@@ -425,7 +445,7 @@ HTML を返す Web App エントリポイント。`getInitialData()` の結果�
 メールアドレスからスタッフ情報を取得。
 
 ### F-16: `getAdminPanelData()`
-管理パネル用初期データ（スタッフ一覧・編集可能設定・監査ログ）。管理者のみ実行可能。
+管理パネル用初期データ（スタッフ一覧・編集可能設定・`secretStatus`・監査ログ）。管理者のみ実行可能。秘密情報（S-00 スクリプトプロパティ）の値は常に空文字で返し、`secretStatus` に保存場所のみ返す（v1.13.0）。
 
 ### F-17: `upsertStaffMember(payload)`
 既存スタッフのロール更新。`{ email, role }` を受け取る。管理者のみ。新規追加は不可（タダメンマスタは外部管理）。
@@ -434,7 +454,10 @@ HTML を返す Web App エントリポイント。`getInitialData()` の結果�
 スタッフを論理無効化（`IS_ACTIVE=false`）。管理者のみ。
 
 ### F-19: `updateSettingsAdmin(patch)`
-許可された設定キーのみ更新。ホワイトリスト外のキーは拒否。管理者のみ。
+許可された設定キーのみ更新。ホワイトリスト外のキーは拒否。管理者のみ。v1.13.0〜 秘密情報はスクリプトプロパティへ保存（空文字=変更なし、`null`=削除）し、監査ログには値を残さない。戻り値は `{ settings, secretStatus }`（秘密は空文字）。
+
+### F-19b: `migrateSecretsToProperties()`（v1.13.0）
+管理者のみ。設定シートに平文で残る秘密情報をスクリプトプロパティへ移し（プロパティ設定済みならプロパティ優先）、シートのセルを空にし、過去の監査ログ（beforeJson / afterJson）に残った平文を `[REDACTED]` に置換する。監査ログには移したキー名と件数のみ記録。冪等。戻り値 `{ moved, blanked, auditCellsRedacted, status }`。
 
 ### F-20: `reassignCaseAdmin(caseId, staffEmail)`
 管理者による再アサイン。有効なスタッフのみ指定可能。
@@ -526,6 +549,14 @@ CC 設定のドライラン検証。`MAIL_DRY_RUN=true` が前提。
 ### SEC-06: スレッド操作権限
 `ensureCaseEditableByActor_()` により、担当者・サブ担当・管理者以外による更新を拒否する。
 
+### SEC-07: 秘密情報・本番識別子（v1.13.0・ADR-014）
+`SPREADSHEET_ID` と Zoom 連携の秘密情報はスクリプトプロパティに保存し、コード・シート・画面・監査ログに値を出さない（S-00）。移行後は Zoom の Client Secret を再発行する。
+
+### SEC-08: 埋め込み・供給網（v1.13.0・ADR-013）
+- Webapp は他サイトへの iframe 埋め込みを許可しない（`XFrameOptionsMode` 既定）。
+- 本番は React・Tailwind を同梱し、実行時に esm.sh・unpkg・Tailwind CDN を読まない。外部から読むのは FullCalendar（SRI 付き）と Google Fonts のみ。
+- `appsscript.json` の `executionApi.access` は `MYSELF`。
+
 ---
 
 ## 5. UI仕様 (UI Specifications)
@@ -595,6 +626,8 @@ CC 設定のドライラン検証。`MAIL_DRY_RUN=true` が前提。
 
 ### TC-01: ライブラリバージョン固定（ADR-004）
 
+React 19系混在で `Minified React error #31` が発生するため固定。v1.13.0〜 本番は `package.json` の版固定（`react@18.2.0`・`react-dom@18.2.0`・`lucide-react@0.330.0`、`--save-exact`）でビルドに同梱する。開発用の原本は従来どおり importmap で同じ版を読む:
+
 ```json
 {
   "react": "https://esm.sh/react@18.2.0",
@@ -602,8 +635,6 @@ CC 設定のドライラン検証。`MAIL_DRY_RUN=true` が前提。
   "lucide-react": "https://esm.sh/lucide-react@0.330.0?deps=react@18.2.0"
 }
 ```
-
-React 19系混在で `Minified React error #31` が発生するため固定。
 
 ### TC-02: GAS 実行環境
 
@@ -613,11 +644,13 @@ React 19系混在で `Minified React error #31` が発生するため固定。
 - Webapp: `executeAs: USER_ACCESSING` / `access: DOMAIN`
 - OAuth スコープ: mail / calendar / drive / spreadsheets / userinfo.email / script.external_request / script.scriptapp
 
-### TC-03: Babel in-browser
+### TC-03: 原本（開発）とビルド（本番）— ADR-013
 
-- JSX を Babel standalone でブラウザ内トランスパイル
-- ESM import は importmap 経由
-- `type="text/babel" data-type="module" data-presets="react"`
+- 原本 `index.html`（開発・ローカル確認用）: JSX を Babel standalone でブラウザ内トランスパイル、ESM import は importmap 経由（`type="text/babel" data-type="module" data-presets="react"`）
+- 本番 `dist/index.html`: `npm run build` で JSX を esbuild で事前変換・依存を同梱（IIFE）、Tailwind v3 で CSS を生成して埋め込む。原本の目印 `build:dev-only`（除去）・`build:css`（CSS 埋め込み位置）・`build:app`（アプリ本体）に従う
+- Tailwind のクラス名は静的走査されるため、文字列連結で動的に組み立てない（完全なクラス名を書く）
+- E2E は既定で `dist/` を検証（`E2E_TARGET=src` で原本）
+- clasp は `.clasp.json` の `rootDir: "dist"` で `dist/` を push。デプロイは `npm run deploy`
 
 ---
 
@@ -640,6 +673,7 @@ React 19系混在で `Minified React error #31` が発生するため固定。
 | **v1.11.3** | メール作成画面に自動CC（MAIL_FORCE_CC）の説明を追加 |
 | **v1.12.1** | 予約送信機能を廃止。旧トリガー互換は未送信キューを `disabled` 化し、即時送信・下書き保存は継続 |
 | **v1.12.13** | 申込通知チャットへのリンク（S-10 チャット連携・`chatThreadUrl`・案件詳細「チャットを開く」） |
+| **v1.13.0** | 本番ビルド方式・起動の並列化・読込量削減（ADR-013）、秘密情報と `SPREADSHEET_ID` のスクリプトプロパティ化（ADR-014）、埋め込み禁止・`executionApi=MYSELF` |
 
 ---
 

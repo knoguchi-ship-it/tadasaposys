@@ -4,7 +4,7 @@
  *
  * - 禁止（必ず拒否・exit 2）: -i なしの clasp deploy / clasp create-deployment / force push /
  *   --no-verify / git reset --hard / git clean -f / 未コミット差分がある状態の clasp pull
- * - 要確認（ask）: clasp push / clasp deploy -i / git push
+ * - 要確認（ask）: clasp push / clasp deploy -i / git push / npm run deploy
  *   ※ 確認省略モード（bypassPermissions）で ask が確認を出すかはドキュメント上の保証がない。
  *     出ない場合も「ユーザー確認なしに実行しない」ルールは AI が守る。
  *
@@ -42,6 +42,10 @@ function judgeSegment(seg, opts = {}) {
       return null;
     }
     if (has(/\bpush\b/)) return { decision: 'ask', reason: 'clasp push は本番 GAS のコードを書き換える。ユーザーの確認が必要' };
+  }
+  // v1.13.0: デプロイ用スクリプト（中で clasp push / deploy を実行する）
+  if (has(/\bnpm\s+run\s+deploy\b|\btools[\\/]deploy\.js\b/)) {
+    return { decision: 'ask', reason: 'npm run deploy は本番 GAS へ push・デプロイする。ユーザーの確認が必要（人が端末で実行する想定）' };
   }
   if (has(/\bgit\b/)) {
     if (has(/--no-verify\b/) || (has(/\bcommit\b/) && has(/\s-[a-zA-Z]*n[a-zA-Z]*(\s|$)/))) {

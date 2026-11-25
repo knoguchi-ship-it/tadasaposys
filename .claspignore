@@ -20,3 +20,4 @@ SECURITY.md
 README.md
 .githooks/**
 .private-terms.local.txt
+dist/**

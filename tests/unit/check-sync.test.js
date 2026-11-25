@@ -110,6 +110,14 @@ describe('HANDOVER の現在地', () => {
     expect(errorsOf(r)).toEqual([]);
   });
 
+  test('本番未反映のときは「本番 @nn（vA.B.C）」の本番の版で §1 と照合する', () => {
+    const md = handover('> **現在地:** v1.3.0 / 本番 @20（v1.2.3） / 単体 10件 / E2E 5件',
+      ['- `01-app-load`: 初期化（3件）', '- `02-case-list`: 一覧（2件）']);
+    const r = createReport();
+    checkHandover(r, '1.3.0', counts, reader({ 'docs/HANDOVER.md': md }));
+    expect(errorsOf(r)).toEqual([]);
+  });
+
   test('件数の書き忘れ・§8 のスペック漏れ・§1 の @ ずれをエラーにする', () => {
     const md = handover('> **現在地:** v1.2.3 / 本番 @21 / 単体 9件 / E2E 5件',
       ['- `01-app-load`: 初期化（2件）']);
