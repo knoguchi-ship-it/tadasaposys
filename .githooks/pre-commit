@@ -1,0 +1,10 @@
+#!/bin/sh
+# git pre-commit: ドキュメント同期チェック（AI_RULES.md グランドルール6「仕組み」）
+# 版数・HANDOVER 現在地・IDX・ADR 件数などに不一致があるとコミットを止める（1秒程度）。
+# 回避（--no-verify）は禁止。不一致を直してからコミットする。
+# 注: 検査対象はステージ内容ではなく作業ツリー。
+if ! node tools/check-sync.js; then
+  echo ""
+  echo "pre-commit: npm run check にエラーがあります。上の ✗ を直してからコミットしてください。"
+  exit 1
+fi

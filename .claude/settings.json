@@ -1,3 +1,27 @@
 {
-  "permissionMode": "bypassPermissions"
+  "permissionMode": "bypassPermissions",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell|mcp__git__git_push|mcp__git__git_reset|mcp__git__git_clean|mcp__git__git_commit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard.js\""
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/tools/check-sync.js\" --session"
+          }
+        ]
+      }
+    ]
+  }
 }

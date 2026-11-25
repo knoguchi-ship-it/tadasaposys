@@ -47,6 +47,8 @@ CLAUDE.md / AGENTS.md — 各エージェントの入口（本ファイルを読
 
 **照合項目（キャッチアップ・作業開始時に毎回すべて行う。「矛盾を確認する」の範囲はこれ以上・以下にしない）:**
 
+Claude Code では、1〜7 の結果がセッション開始時に SessionStart フックで自動的に文脈へ渡される（`npm run check --session`）。その結果を最初の報告に含める。Codex など他のエージェントは自分で `npm run check` を実行する。
+
 | # | 照合すること | 方法 |
 |---|---|---|
 | 1 | 版数が同期対象（グランドルール6）すべてで一致 | `npm run check` |
@@ -111,7 +113,7 @@ clasp pull（未コミット差分がある状態で）      # ローカルの�
 
 - 上の2つのリストにないコマンドは、ローカルで完結する読み取りなら実行してよい。外部（本番 GAS・GitHub・Google リソース）へ書き込むものは確認を求める
 - 確認は「何を・どこへ・何が変わるか」を示して求める。一度の承認は、その操作1回分に限る（次のデプロイには改めて確認する）
-- Claude Code は確認省略モード（`bypassPermissions`）で起動するため、上記は**ルールとして守る**。機械的な拒否は「仕組み」欄の導入予定を参照
+- Claude Code は確認省略モード（`bypassPermissions`）で起動するため、上記は**ルールとして守る**。禁止リストは PreToolUse フックが機械的に拒否する（グランドルール1「仕組み」）。要確認リストはフックが確認（ask）を求めるが、確認省略モードで確認画面が出る保証はないため、AI 自身が確認を取ってから実行する
 
 ---
 
@@ -160,7 +162,7 @@ Webapp 設定は **`executeAs: USER_ACCESSING` / `access: DOMAIN` 固定**。ア
 - [ ] デプロイ前に `appsscript.json` の差分を確認、デプロイ後に GAS デプロイ管理画面で Webapp 設定を目視確認（CLI では確認不可）
 
 仕組み:
-- 導入予定: Claude Code の PreToolUse フックで `-i <固定ID>` なしの `clasp deploy`・`git push --force`・`--no-verify` を拒否する
+- 導入済み: Claude Code の PreToolUse フック（`.claude/hooks/guard.js`。Bash・PowerShell・MCP の git ツールが対象）。禁止リスト（`-i` なしの `clasp deploy`・`clasp create-deployment`・force push・`--no-verify`・`git reset --hard`・`git clean -f`・未コミット差分がある状態の `clasp pull`）を拒否（exit 2）し、要確認リスト（`clasp push`・`clasp deploy -i`・`git push`）は確認（ask）を求める。文字列照合だけの軽量な判定で、引用符内・ヒアドキュメント本文は対象外。判定は単体テスト `tests/unit/guard.test.js` で保証する
 - 導入予定: デプロイ用スクリプト（`webapp`=USER_ACCESSING/DOMAIN・`executionApi`=MYSELF・作業ツリーがクリーン・テスト合格を検査し、deploymentId はローカルファイルから読んで必ず `-i` 付きで実行。確認省略オプションは設けない）
 - 導入予定: GitHub `master` のブランチ保護（CI 合格を必須にする）
 
@@ -220,7 +222,8 @@ Webapp 設定は **`executeAs: USER_ACCESSING` / `access: DOMAIN` 固定**。ア
 仕組み:
 - 導入済み: `.gitignore`（`.clasp.json`・`.clasp.*.json`・認証情報ファイル・`.private-terms.local.txt`）
 - 導入済み: `npm run check` が本番識別子の形式と、ローカルの `.clasp.json`・`.clasp.deploy.json`・`.private-terms.local.txt`（個人名など1行1語。Git 対象外）に書かれた実値の混入を検出する（移行中は警告、`--strict` でエラー）
-- 導入予定: 上記をコミット前検査で自動実行し、残存ゼロ達成後は `--strict` にする
+- 導入済み: 上記はコミット前検査（pre-commit）でも実行される（移行中は警告のみ）
+- 導入予定: 残存ゼロ達成後は pre-commit・CI を `--strict` にする（残りは `コード.js` の `SPREADSHEET_ID` 定数のみ。PropertiesService 移行で解消）
 
 ### 4. 実装品質
 
@@ -234,7 +237,7 @@ DRY原則を守り、共通化できる処理を重複実装しない。新設�
 
 仕組み:
 - 導入済み: 単体テスト（Jest）・E2E（Playwright）
-- 導入予定: CI で Jest も実行する
+- 導入済み: CI で Jest も実行する
 
 ### 5. 既存機能保護
 
@@ -253,8 +256,8 @@ DRY原則を守り、共通化できる処理を重複実装しない。新設�
 - [ ] ドライランテスト後に本番データが実施前状態へ戻っている
 
 仕組み:
-- 導入済み: GitHub Actions（`.github/workflows/playwright.yml`）が push / PR で E2E を実行
-- 導入予定: CI に Jest を追加、`master` のブランチ保護で CI 合格を必須にする
+- 導入済み: GitHub Actions（`.github/workflows/playwright.yml`）が push / PR で単体テスト・`npm run check`・E2E を実行
+- 導入予定: `master` のブランチ保護で CI 合格を必須にする
 
 ### 6. ドキュメント・文字コード
 
@@ -275,8 +278,9 @@ DRY原則を守り、共通化できる処理を重複実装しない。新設�
 - [ ] 文字化けがないことを確認
 
 仕組み:
-- 導入済み: `npm run check`（`tools/check-sync.js`。版数・HANDOVER 現在地・IDX・ADR 件数・仕組みの実在・識別子の残存・origin との差を検査。手動実行）
-- 導入予定: `npm run check` を git の pre-commit・Claude Code の Stop フック・CI で自動実行する
+- 導入済み: `npm run check`（`tools/check-sync.js`。版数・HANDOVER 現在地・IDX・ADR 件数・仕組みの実在・識別子の残存・origin との差を検査）
+- 導入済み: 自動実行は3か所に限る — git の pre-commit（`.githooks/pre-commit`。エラーでコミットを止める。`npm install` 時に `core.hooksPath` を自動設定）、Claude Code の SessionStart フック（`startup`/`clear` 時に結果を文脈へ渡すだけで止めない）、CI
+- 採用しない: Stop フック（応答のたびに走り重くなる。pre-commit と SessionStart で足りる）。フックは「強制が必要な場面に必要最小限」とし、追加するときは実行頻度と所要時間を確認して本欄に理由を書く
 - 導入予定: コード変更時の CHANGELOG / テスト未更新の検出
 
 ---

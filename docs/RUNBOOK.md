@@ -61,7 +61,7 @@ clasp login
 `.clasp.json` の形式:
 ```json
 {
-  "scriptId": "1UMg3CaTlbZW0YfjzgqbOwd-XOYdIsVELmGpsP7O-MrwFSiAJdS-ySLvP",
+  "scriptId": "<SCRIPT_ID>",
   "rootDir": "."
 }
 ```
@@ -130,7 +130,7 @@ getScheduledEmailTriggerStatus()
 > ⚠️ **`clasp push` では消えない**: `clasp push` は既存リモートファイルを削除しない（追加・更新のみ）。さらにローカルは `.gitignore`(`temp/`)・`.claspignore`(`temp/**`) で push 対象外のため、push 操作では一切変化しない。**削除は GAS エディタからの手動操作が必須**。
 
 手順:
-1. GAS エディタを開く（プロジェクト ID `1UMg3CaTlbZW0YfjzgqbOwd-XOYdIsVELmGpsP7O-MrwFSiAJdS-ySLvP`）。
+1. GAS エディタを開く（プロジェクト ID `<SCRIPT_ID>`）。
 2. 左のファイル一覧で `temp/index` と `temp/コード`（拡張子なし表示）を探す。
 3. 各ファイルの「︙」メニュー →「削除」。
 4. **削除後に再デプロイは不要**（本番の動作には無関係なスタブのため）。念のため Web アプリ URL を開き、通常どおり起動することだけ確認する。
@@ -153,7 +153,7 @@ clasp push --force
 
 # Step 3: デプロイを更新
 clasp deploy \
-  -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ \
+  -i <DEPLOYMENT_ID> \
   -d "vX.X.X"
 
 # Step 4: 動作確認
@@ -173,12 +173,12 @@ clasp deploy \
 
 ### 3-4. 申込通知 bot（チャット連携）の変更・初期設定（v1.12.13〜）
 
-申込通知 bot はタダサポ本体とは**別の GAS プロジェクト**（回答スプシ `1cvwtRJSK3gD1SLhG3TBD0uJFsR3ApIpZsYWaruDnJ5A` の「拡張機能 → Apps Script」、スクリプトID `1CpAoEJR3zOYQhKjE0d0LnhrrNr74R9Xfk1uhTephnFWYzaS-9Ukj7CGG`）。コードは SDD 付録A。Webapp デプロイはなく、インストール型トリガー「フォーム送信時 → onFormSubmit」で動く。
+申込通知 bot はタダサポ本体とは**別の GAS プロジェクト**（回答スプシ `<FORM_SHEET_ID>` の「拡張機能 → Apps Script」、スクリプトID `<BOT_SCRIPT_ID>`）。コードは SDD 付録A。Webapp デプロイはなく、インストール型トリガー「フォーム送信時 → onFormSubmit」で動く。
 
 1. **Webhook URL をスクリプトプロパティへ**: GAS エディタ「プロジェクトの設定 → スクリプト プロパティ」に `CHAT_WEBHOOK_URL` = Google Chat の Webhook URL（スペースの「アプリと統合 → Webhook」）。**コード・ドキュメント・GitHub・チャットに貼らない。** 未設定だと通知が止まる。
 2. **コード反映**: GAS エディタに貼り替えて保存（または `clasp --user <bot用アカウント> push --force`）。
 3. **再承認（必須）**: トリガーの作成者アカウントでエディタから任意の関数を一度実行し、追加された権限（このスプレッドシート・スクリプトプロパティ）を許可する。**作成者以外が承認しても効かない。** 未承認のままだとトリガー自体が失敗し、チャット通知が止まる。作成者は「トリガー」画面の「作成者」列で確認。手順1〜3は間を空けずに行う。
-4. **タダサポ側の取込**: タダサポのスプシに「チャット連携」シートを作り、A1 に `=IMPORTRANGE("1cvwtRJSK3gD1SLhG3TBD0uJFsR3ApIpZsYWaruDnJ5A","チャット連携!A:E")` を入れて「アクセスを許可」。回答スプシ側の「チャット連携」シートは最初の申込時に bot が自動作成するため、それまでは `#REF!` 表示で問題ない（案件表示は止まらない）。**タダサポ側のこのシートには書き込まない。**
+4. **タダサポ側の取込**: タダサポのスプシに「チャット連携」シートを作り、A1 に `=IMPORTRANGE("<FORM_SHEET_ID>","チャット連携!A:E")` を入れて「アクセスを許可」。回答スプシ側の「チャット連携」シートは最初の申込時に bot が自動作成するため、それまでは `#REF!` 表示で問題ない（案件表示は止まらない）。**タダサポ側のこのシートには書き込まない。**
 5. **確認**: 次の実申込のあと、回答スプシ「チャット連携」に1行増え、タダサポの該当案件に「チャットを開く」が出て、押すと通知スレッドが開くこと。動作確認のためのテスト申込はしない（案件リストに実データが残るため）。
 
 **トリガーの重複について**: 作成者の異なるトリガーが同時に残っていても、bot は同じ申込（回答シートの行）への通知を1回だけ送る（2回目以降は実行ログに「通知済みのためスキップ」）。ただし不要なトリガーは削除しておくこと（v1.12.13 の切替時、旧トリガーにも権限があり通知が二重化した実績あり）。
@@ -211,7 +211,7 @@ clasp push --force
 
 # デプロイ更新（ロールバック用のバージョン説明を付ける）
 clasp deploy \
-  -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ \
+  -i <DEPLOYMENT_ID> \
   -d "rollback to vX.X.X"
 
 # ロールバック後、作業ブランチを元に戻す
@@ -273,12 +273,16 @@ git checkout HEAD -- index.html コード.js
 
 ## 6. 本番環境情報
 
-| 項目 | 値 |
+実値は公開リポジトリに書かない（`AI_RULES.md` グランドルール3）。下表は値の置き場所。
+
+| 項目 | 値の置き場所 |
 |-----|----|
-| Webapp URL | `https://script.google.com/a/macros/tadakayo.jp/s/AKfycby.../exec` |
-| GAS プロジェクト ID | `1UMg3CaTlbZW0YfjzgqbOwd-XOYdIsVELmGpsP7O-MrwFSiAJdS-ySLvP` |
-| スプレッドシート ID | `1hllLdETiK0sk0xW_y0V6vOmnlK7kIkHBjntYiCTom4w` |
-| デプロイ ID | `AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65nuq0ZJHhhUQ` |
+| Webapp URL `<WEBAPP_URL>` | GAS デプロイ管理画面 |
+| GAS プロジェクト ID `<SCRIPT_ID>` | `.clasp.json`（Git 対象外） |
+| スプレッドシート ID `<SPREADSHEET_ID>` | `コード.js` の定数（PropertiesService へ移行予定） |
+| デプロイ ID `<DEPLOYMENT_ID>` | `.clasp.deploy.json` の `production`（Git 対象外）・`clasp deployments` |
+| フォーム回答シート ID `<FORM_SHEET_ID>` | 案件リストの IMPORTRANGE 数式 |
+| 申込通知 bot スクリプト ID `<BOT_SCRIPT_ID>` | 回答スプシの「拡張機能 → Apps Script」 |
 | Webapp 設定 | `executeAs: USER_ACCESSING` / `access: DOMAIN` |
 | タイムゾーン | `Etc/GMT-9`（JST） |
 | 予約送信トリガ間隔 | 廃止（v1.12.1以降は作成しない） |

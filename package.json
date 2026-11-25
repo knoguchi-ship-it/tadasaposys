@@ -14,7 +14,8 @@
     "test:unit:cov": "jest --coverage",
     "test:all":      "jest && playwright test",
     "check":         "node tools/check-sync.js",
-    "check:strict":  "node tools/check-sync.js --strict"
+    "check:strict":  "node tools/check-sync.js --strict",
+    "prepare":       "git config core.hooksPath .githooks || true"
   },
   "devDependencies": {
     "@playwright/test":    "^1.52.0",

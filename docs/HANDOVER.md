@@ -9,7 +9,7 @@
 
 ## 📌 次の担当者へ（最初にこの節だけ読めば現状が掴めます）
 
-> **現在地:** v1.12.13 / 本番 @159 / 単体 110件 / E2E 68件
+> **現在地:** v1.12.13 / 本番 @159 / 単体 116件 / E2E 68件
 >
 > 版・本番デプロイ番号・テスト件数は**この1行だけ**に書く（本文に書き写さない。AI_RULES.md グランドルール6）。`npm run check` がこの行を package.json・実テスト・§1・§8 と照合する。最終確認 2026/11/25（単体・E2E 全合格、`npm run check` エラー0）。
 > ⚠️ デプロイ直後の運用確認として、GAS デプロイ管理画面で Webapp 設定（実行＝アクセスしているユーザー／アクセス＝NPO法人タダカヨ内の全員）をブラウザで目視確認すること（CLIでは確認不可）。
@@ -18,7 +18,7 @@
 
 > **2026/11/25 追記: グランドルールを改訂（G2・文書のみ・コード変更なし）。** ルールの正本を `AI_RULES.md` に一本化し、`CLAUDE.md`/`AGENTS.md` は入口だけ、RUNBOOK は参照だけにした（それまで三重記載で内容がずれていた）。追加: 作業前レビュー・変更手順・コマンド実行ポリシー（`clasp push`/`clasp deploy`/`git push` はユーザー確認必須、`git add`/`commit` は可、force push・`--no-verify`・`-i` なし deploy は禁止）・本番識別子/個人名を公開リポジトリに書かない方針・各ルールの「仕組み（導入済み／導入予定）」欄・`executionApi=MYSELF`。ステージング環境は設けない。deploymentId の実値はローカルの `.clasp.deploy.json`（Git 対象外）へ。**続く作業（導入予定）:** 共有設定の確認（ユーザー）→ PreToolUse フック・ブランチ保護・CI に Jest → 同期チェックの自動実行 → デプロイ用スクリプト → 既存文書・コード・テストからの本番識別子/個人名の除去。
 
-> **2026/11/25 追記（G3・ルール補強＋同期チェック導入・アプリの挙動変更なし）:** キャッチアップで照合が浅くなった反省から、AI_RULES.md「作業前レビュー」に**照合項目9つ**を明記し、うち機械化できるものを **`npm run check`（`tools/check-sync.js`）** に実装。版数（8ファイル）・この「現在地」行と §1/§8・`const IDX` と AI_RULES/SDD・ADR 件数・仕組みの実在・本番識別子/個人名の残存・origin との差を検査する（識別子は移行中のため警告、`npm run check:strict` でエラー）。個人名は Git 対象外の `.private-terms.local.txt`（1行1語）に登録して照合。`index.html` に版数 `<meta name="app-version">` を追加（同期対象なのに版数表記がなかったため）。AI_RULES の IDX 節に欠けていた `CASES_OVERRIDE`/`EMAIL`/`CHAT_LINK` を追加。**次:** `npm run check` を pre-commit・Stop フック・CI で自動実行。
+> **2026/11/25 追記（G3・ルール補強＋同期チェック導入・アプリの挙動変更なし）:** キャッチアップで照合が浅くなった反省から、AI_RULES.md「作業前レビュー」に**照合項目9つ**を明記し、うち機械化できるものを **`npm run check`（`tools/check-sync.js`）** に実装。版数（8ファイル）・この「現在地」行と §1/§8・`const IDX` と AI_RULES/SDD・ADR 件数・仕組みの実在・本番識別子/個人名の残存・origin との差を検査する（識別子は移行中のため警告、`npm run check:strict` でエラー）。個人名は Git 対象外の `.private-terms.local.txt`（1行1語）に登録して照合。`index.html` に版数 `<meta name="app-version">` を追加（同期対象なのに版数表記がなかったため）。AI_RULES の IDX 節に欠けていた `CASES_OVERRIDE`/`EMAIL`/`CHAT_LINK` を追加。同日、**フックを必要最小限で導入**: PreToolUse（禁止コマンドを拒否・push/deploy は確認）、SessionStart（`npm run check` の結果を文脈へ）、git pre-commit（`npm run check` エラーでコミット停止）、CI に Jest と `npm run check` を追加。Stop フックは重くなるため採用しない。あわせて文書の本番識別子を除去（残りは `コード.js` の `SPREADSHEET_ID` のみ）、SECURITY.md の共有設定の記述を AI_RULES の基準表に合わせて訂正、自動生成物（`playwright-report/`・`test-results/`）を Git 追跡から外し、古い `docs/RESTART_CHECKLIST.md`（v1.8.1）を削除。
 
 ### 直近セッションで完了したこと（v1.12.13）
 - **案件詳細に「チャットを開く」リンク**: フォーム申込時に「タダサポ来たよ」が Google Chat に投稿したスレッド（挙手・担当調整）へ飛べる。
@@ -132,6 +132,8 @@ tadasaposys/
 ├── .clasp.deploy.json      ← 固定 deploymentId（.gitignore対象）
 ├── .private-terms.local.txt ← 同期チェックが照合する個人名など（.gitignore対象・1行1語）
 ├── tools/check-sync.js     ← ドキュメント同期チェック（npm run check）
+├── .claude/hooks/guard.js  ← Claude Code PreToolUse フック（禁止コマンドの拒否）
+├── .githooks/pre-commit    ← git pre-commit（npm run check。npm install で core.hooksPath を自動設定）
 ├── .codex/config.toml      ← Codex 起動方針（GitHub共有用）
 ├── codex-tadasaposys.ps1   ← Codex プロジェクト起動ランチャー
 ├── tests/
@@ -370,7 +372,7 @@ npm run test:report
 npm run test:unit  # 件数は冒頭の現在地 / 約1秒
 ```
 
-対象: `getFiscalYear` / `sanitizeForSheet_` / `parseNullablePositiveInteger_` / `normalizeEmail_` / `parseBoolean_` 等の純粋関数（`business-logic.test.js`）と、同期チェックの検査ロジック（`check-sync.test.js`）
+対象: `getFiscalYear` / `sanitizeForSheet_` / `parseNullablePositiveInteger_` / `normalizeEmail_` / `parseBoolean_` 等の純粋関数（`business-logic.test.js`）と、同期チェックの検査ロジック（`check-sync.test.js`）、PreToolUse フックの判定（`guard.test.js`）。件数照合のため `test.each` は使わず1件ずつ `test()` で書く
 
 ### ドキュメント同期チェック
 

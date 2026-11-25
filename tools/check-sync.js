@@ -7,6 +7,7 @@
  *
  *   node tools/check-sync.js           ... 不一致があれば終了コード 1
  *   node tools/check-sync.js --strict  ... 本番識別子・個人情報の残存も失敗扱い
+ *   node tools/check-sync.js --session ... Claude Code SessionStart フック用（結果を文脈に渡し、常に終了コード 0）
  *
  * 本番の識別子は、このスクリプトに書かない。ローカル（Git 対象外）の
  * .clasp.json / .clasp.deploy.json / .private-terms.local.txt から実値を読んで照合する。
@@ -165,10 +166,16 @@ function countTests(readFile = read, listDir = (d) => fs.readdirSync(path.join(R
     e2e += n;
   }
   let unit = 0;
+  const dynamic = [];
   for (const f of listDir('tests/unit').filter((f) => f.endsWith('.test.js'))) {
-    unit += (readFile(`tests/unit/${f}`).match(TEST_RE) || []).length;
+    const src = readFile(`tests/unit/${f}`);
+    unit += (src.match(TEST_RE) || []).length;
+    if (/\b(?:test|it)\.each\b/.test(src)) dynamic.push(`tests/unit/${f}`);
   }
-  return { unit, e2e, perSpec };
+  for (const f of Object.keys(perSpec)) {
+    if (/\btest\.each\b/.test(readFile(`tests/e2e/${f}.spec.ts`))) dynamic.push(`tests/e2e/${f}.spec.ts`);
+  }
+  return { unit, e2e, perSpec, dynamic };
 }
 
 // ---------------------------------------------------------------- 4. HANDOVER 現在地
@@ -226,6 +233,23 @@ function checkMechanisms(r) {
     if (!gi.split(/\r?\n/).includes(p)) r.error('仕組み', `.gitignore に ${p} がない`);
   }
   if (!exists('.github/workflows/playwright.yml')) r.error('仕組み', 'CI（.github/workflows/playwright.yml）がない');
+  else {
+    const ci = read('.github/workflows/playwright.yml');
+    for (const step of ['npm run test:unit', 'npm run check']) {
+      if (!ci.includes(step)) r.error('仕組み', `CI に ${step} がない`);
+    }
+  }
+  // フック（AI_RULES.md 各グランドルールの「仕組み」欄）
+  let hooks = {};
+  try { hooks = JSON.parse(read('.claude/settings.json')).hooks || {}; } catch (e) { /* 下で検出 */ }
+  const hookCmds = (ev) => (hooks[ev] || []).flatMap((h) => (h.hooks || []).map((x) => x.command || ''));
+  if (!hookCmds('PreToolUse').some((c) => c.includes('.claude/hooks/guard.js'))) r.error('仕組み', '.claude/settings.json に PreToolUse フック（guard.js）がない');
+  if (!hookCmds('SessionStart').some((c) => c.includes('check-sync.js'))) r.error('仕組み', '.claude/settings.json に SessionStart フック（check-sync.js --session）がない');
+  if (!exists('.claude/hooks/guard.js')) r.error('仕組み', '.claude/hooks/guard.js がない');
+  if (!exists('.githooks/pre-commit')) r.error('仕組み', '.githooks/pre-commit がない');
+  let hooksPath = '';
+  try { hooksPath = execFileSync('git', ['config', '--get', 'core.hooksPath'], { cwd: ROOT, encoding: 'utf8' }).trim(); } catch (e) { /* 未設定 */ }
+  if (hooksPath !== '.githooks') r.warn('仕組み', `git の core.hooksPath が .githooks でない（pre-commit が動かない）。npm install で自動設定、または git config core.hooksPath .githooks`);
   const manifest = JSON.parse(read('appsscript.json'));
   if (manifest.webapp?.executeAs !== 'USER_ACCESSING' || manifest.webapp?.access !== 'DOMAIN') {
     r.error('本番安全', `appsscript.json webapp が USER_ACCESSING/DOMAIN でない: ${JSON.stringify(manifest.webapp)}`);
@@ -262,7 +286,7 @@ function loadSecretTerms() {
  */
 const ID_PATTERNS = [
   { label: 'GAS deploymentId/スクリプトURL', re: /AKfycb[A-Za-z0-9_-]{30,}/g },
-  { label: 'Google ファイルID形式', re: /(?<![A-Za-z0-9_-])1[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/g },
+  { label: 'Google ファイル/スクリプトID形式', re: /(?<![A-Za-z0-9_-])1[A-Za-z0-9_-]{40,70}(?![A-Za-z0-9_-])/g }, // ファイルIDは44桁・スクリプトIDは57桁
   { label: 'Chat Webhook URL', re: /chat\.googleapis\.com\/v1\/spaces\/[^\s'"`]*key=/g },
 ];
 
@@ -315,6 +339,7 @@ function checkRemote(r) {
 // ---------------------------------------------------------------- 実行
 function main() {
   const strict = process.argv.includes('--strict');
+  const session = process.argv.includes('--session');
   const r = createReport();
   const run = (name, fn) => {
     try { return fn(); } catch (e) { r.error(name, `検査自体が失敗: ${e.message}`); return undefined; }
@@ -324,6 +349,7 @@ function main() {
   const counts = run('テスト件数', () => countTests());
   if (counts) {
     r.ok('テスト件数', `単体 ${counts.unit}件 / E2E ${counts.e2e}件（静的集計）`);
+    for (const f of counts.dynamic || []) r.error('テスト件数', `${f}: test.each 等で件数が静的に数えられない。1件ずつ test() で書く（件数照合のため）`);
     run('HANDOVER', () => checkHandover(r, version, counts));
   }
   run('ADR', () => checkAdr(r));
@@ -333,12 +359,16 @@ function main() {
 
   const errors = r.items.filter((i) => i.level === 'error');
   const warns = r.items.filter((i) => i.level === 'warn');
+  if (session) {
+    console.log('【セッション開始時の自動チェック（npm run check）】AI_RULES.md「作業前レビュー」照合項目1〜7の結果。'
+      + 'エラーは作業前にユーザーへ報告すること。照合項目8（テスト実行）・9（差分の目視）は別途行う。');
+  }
   for (const i of r.items) {
     const mark = { ok: '✓', warn: '⚠', error: '✗' }[i.level];
     console.log(`${mark} [${i.section}] ${i.msg}`);
   }
   console.log(`\n版数 v${version} / エラー ${errors.length} / 警告 ${warns.length} / 識別子・個人情報の残存 ${idHits ?? '-'}件`);
-  process.exitCode = errors.length ? 1 : 0;
+  process.exitCode = errors.length && !session ? 1 : 0;
 }
 
 if (require.main === module) main();

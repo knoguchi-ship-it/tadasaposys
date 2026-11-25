@@ -9,6 +9,9 @@
 - `index.html` に版数 `<meta name="app-version">` を追加（同期対象なのに版数表記がなかったため。表示・動作への影響なし）。
 - HANDOVER: 版・@nn・テスト件数を冒頭「現在地」の1行に集約（DRY）。@158→@159・テスト件数・§8 スペック一覧（02/06 の件数、10〜12 の欠落）を実物に合わせて訂正。本番 URL・deploymentId・各種 ID・個人名をプレースホルダ/役割名に置換。
 - 単体テスト `tests/unit/check-sync.test.js`（12件）を追加（98→110件）。
+- **フックを必要最小限で導入。** Claude Code の PreToolUse（`.claude/hooks/guard.js`：禁止コマンドを拒否、`clasp push`/`clasp deploy -i`/`git push` は確認を要求）、SessionStart（`npm run check --session` の結果を文脈へ渡す）、git pre-commit（`.githooks/pre-commit`：`npm run check` エラーでコミット停止。`npm install` の `prepare` で `core.hooksPath` を設定）。Stop フックは毎応答で重くなるため不採用。CI に Jest と `npm run check` を追加。単体テスト `guard.test.js`（5件）を追加（110→116件。同期チェックの test.each 検出テスト1件を含む）。
+- 本番識別子の除去: RUNBOOK・SDD・SECURITY・`index.html` モックの実値をプレースホルダ／ダミーへ（残りは `コード.js` の `SPREADSHEET_ID` のみ）。SECURITY.md のタダサポDB共有設定の記述（「制限付き」）が AI_RULES の基準表（組織内で編集者）と矛盾していたため基準表参照に訂正。
+- 整理: 自動生成物 `playwright-report/`・`test-results/` を Git 追跡から外し `.gitignore` へ。古い `docs/RESTART_CHECKLIST.md`（v1.8.1・参照なし・本番IDを含む）を削除。`.githooks/*` を LF 固定（`.gitattributes`）。
 
 ### Docs（グランドルール改訂 G2・2026-11-25。コード変更なし）
 - ルールの正本を `AI_RULES.md` に一本化。`CLAUDE.md`（`@AI_RULES.md` 取り込み）/ `AGENTS.md` は入口のみ、`docs/RUNBOOK.md` は参照のみに変更（三重記載による内容のずれを解消）。

@@ -24,13 +24,16 @@ Thumbs.db
 !.claude/
 .claude/*
 !.claude/settings.json
+!.claude/hooks/
 
 # Playwright MCP (local dev tool logs)
 .playwright-mcp/
 .mcp.json
 
-# Test output
+# Test output（自動生成物。Git で追跡しない）
 output/
+playwright-report/
+test-results/
 temp_testfiles/
 test*.png
 

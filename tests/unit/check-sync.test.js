@@ -129,7 +129,17 @@ describe('HANDOVER の現在地', () => {
       'tests/unit/a.test.js': "describe('x', () => {\n  it('a', () => {});\n  test('b', () => {});\n});",
     };
     const list = (d) => Object.keys(files).filter((f) => f.startsWith(d + '/')).map((f) => f.slice(d.length + 1));
-    expect(countTests(reader(files), list)).toEqual({ unit: 2, e2e: 2, perSpec: { '01-a': 2 } });
+    expect(countTests(reader(files), list)).toEqual({ unit: 2, e2e: 2, perSpec: { '01-a': 2 }, dynamic: [] });
+  });
+
+  test('パラメータ化（each）を使うファイルは静的に数えられないため報告対象にする', () => {
+    const files = {
+      'tests/e2e/01-a.spec.ts': "test('a', () => {});",
+      // 本ファイル自体が検出されないよう、実行時に組み立てる
+      'tests/unit/a.test.js': 'test' + ".each([[1], [2]])('%s', () => {});",
+    };
+    const list = (d) => Object.keys(files).filter((f) => f.startsWith(d + '/')).map((f) => f.slice(d.length + 1));
+    expect(countTests(reader(files), list).dynamic).toEqual(['tests/unit/a.test.js']);
   });
 });
 

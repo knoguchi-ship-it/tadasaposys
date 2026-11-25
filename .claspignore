@@ -18,3 +18,5 @@ AGENTS.md
 CHANGELOG.md
 SECURITY.md
 README.md
+.githooks/**
+.private-terms.local.txt
