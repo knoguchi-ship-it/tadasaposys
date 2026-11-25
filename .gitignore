@@ -3,6 +3,7 @@ node_modules/
 
 # clasp credentials (sensitive — 絶対にコミット/push しない)
 .clasp.json
+.clasp.*.json
 .clasprc.json
 creds.json
 client_secret*.json

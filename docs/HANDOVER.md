@@ -15,6 +15,8 @@
 
 > **2026/10/10 追記: v1.12.13（申込通知チャットへのリンク）を本番 @159 にデプロイ済み（固定 deploymentId / URL 不変）。** bot 側も反映済み（2026/10/10: CHAT_WEBHOOK_URL 設定・コード push・吉崎アカウントでトリガー新規作成）。タダサポのスプシの「チャット連携」シートと IMPORTRANGE も設定済み。**実申込で、通知が1回だけ届くこと・リンクが表示されスレッドが開くことを確認済み**（2026/10/10）。旧トリガーにも権限があり、切替時に通知が二重化したため、bot に重複防止を追加済み。**残り: 旧トリガー（別メンバー作成）の削除のみ**（重複防止があるため急ぎではない）。
 
+> **2026/11/25 追記: グランドルールを改訂（G2・文書のみ・コード変更なし）。** ルールの正本を `AI_RULES.md` に一本化し、`CLAUDE.md`/`AGENTS.md` は入口だけ、RUNBOOK は参照だけにした（それまで三重記載で内容がずれていた）。追加: 作業前レビュー・変更手順・コマンド実行ポリシー（`clasp push`/`clasp deploy`/`git push` はユーザー確認必須、`git add`/`commit` は可、force push・`--no-verify`・`-i` なし deploy は禁止）・本番識別子/個人名を公開リポジトリに書かない方針・各ルールの「仕組み（導入済み／導入予定）」欄・`executionApi=MYSELF`。ステージング環境は設けない。deploymentId の実値はローカルの `.clasp.deploy.json`（Git 対象外）へ。**続く作業（導入予定）:** 共有設定の確認（ユーザー）→ PreToolUse フック・ブランチ保護・CI に Jest → 同期チェック → デプロイ用スクリプト → 既存文書・コード・テストからの本番識別子/個人名の除去。
+
 ### 直近セッションで完了したこと（v1.12.13）
 - **案件詳細に「チャットを開く」リンク**: フォーム申込時に「タダサポ来たよ」が Google Chat に投稿したスレッド（挙手・担当調整）へ飛べる。
   - 申込通知 bot（回答スプシに付いた**別 GAS**・SDD 付録A）が Webhook 応答のスレッド名を回答スプシ「チャット連携」シートへ記録 → タダサポのスプシへ IMPORTRANGE（参照のみ・SDD S-10）→ `getAllCasesJoined()` が「申込日時の壁時計表記 + 正規化メール」で突合して `chatThreadUrl` を付与。
@@ -111,8 +113,9 @@ tadasaposys/
 ├── index.html              ← フロントエンド（React SPA、5100行超）
 ├── コード.js               ← バックエンド（GAS、4200行超）
 ├── appsscript.json         ← GASマニフェスト
-├── CLAUDE.md               ← Claude Code 専用 AI 開発指示書
-├── AGENTS.md               ← OpenAI Codex 専用 AI 開発指示書
+├── AI_RULES.md             ← AI エージェント共通の開発指示（グランドルールの正本）
+├── CLAUDE.md               ← Claude Code の入口（@AI_RULES.md を読込むだけ）
+├── AGENTS.md               ← OpenAI Codex の入口（AI_RULES.md を読ませるだけ）
 ├── .claude/settings.json   ← Claude Code 起動方針（GitHub共有用）
 ├── claude-tadasaposys.ps1  ← Claude プロジェクト起動ランチャー
 ├── CHANGELOG.md            ← バージョン変更履歴（keepachangelog形式）
@@ -162,7 +165,7 @@ tadasaposys/
 
 ### ⚠️ 絶対厳守
 
-詳細な判断基準と作業チェックリストは `AGENTS.md` / `CLAUDE.md` / `docs/RUNBOOK.md` の「グランドルール実行チェック」を参照する。
+詳細な判断基準・作業チェック・仕組みは `AI_RULES.md`（正本）の「グランドルール実行チェック」を参照する。以下は要約。
 
 - **React 18.2.0 固定**: React 19系混在で `Minified React error #31` クラッシュ
 - **clasp push --force**: `--force` なしだとサイレントにスキップされる場合がある
@@ -422,16 +425,16 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 2. `index.html` — フロントエンドUI + モックデータ
 3. `docs/SDD.md` — 設計書（データモデル・関数仕様）
 4. `docs/HANDOVER.md` — 本ドキュメント
-5. `CLAUDE.md` / `AGENTS.md` — AI開発指示書（IDX定数等の変更時）
+5. `AI_RULES.md` — AI 共通開発指示（IDX定数等の変更時。CLAUDE.md / AGENTS.md は入口のため編集不要）
 6. `CHANGELOG.md` — 変更履歴
 7. `docs/*.html` — ER図・テーブル設計書・人間向け補助資料（該当する設計変更時）
 
 ### バージョン管理ルール
 
-- `コード.js` 先頭コメント・`index.html`・SDD・HANDOVER・Manual・CHANGELOG・CLAUDE.md・AGENTS.md・package.json のバージョンは常に一致させること
+- `コード.js` 先頭コメント・`index.html`・SDD・HANDOVER・Manual・CHANGELOG・AI_RULES.md・package.json のバージョンは常に一致させること
 - 現行: **v1.12.12**
 
-### 🔒 デプロイ時の絶対グランドルール（CLAUDE.md / AGENTS.md にも記載）
+### 🔒 デプロイ時の絶対グランドルール（正本は AI_RULES.md）
 
 1. **Webapp 設定固定**: `executeAs: USER_ACCESSING` / `access: DOMAIN`（NPO法人タダカヨ内）
    - ❌ 禁止: 実行=自分（`USER_DEPLOYING`） / アクセス=Googleアカウント全員（`ANYONE_WITH_GOOGLE_ACCOUNT`）
@@ -602,7 +605,7 @@ v1.12.1 デプロイ後、次担当者が安全に作業へ入れるよう、開
 ### 1. 最初に読むもの（30分）
 
 1. **本ファイル `docs/HANDOVER.md`** §1〜§13（現状把握）
-2. **`CLAUDE.md`** または **`AGENTS.md`**（AI 開発支援を使う場合）
+2. **`AI_RULES.md`**（開発ルールの正本。AI 開発支援を使う場合は CLAUDE.md / AGENTS.md から自動で読まれる）
 3. **`docs/SDD.md`** §1（データモデルと IDX 定数）
 4. **`docs/ADR.md`**（12件の設計判断）
 
@@ -674,7 +677,7 @@ clasp deploy -i AKfycbwEhK-pEBSOS4Rjti9lhU2fn1cFQ0ON9E4vh-XSS3bMB3KzSbHPipqcQ65n
 
 ### 5-1. グランドルール運用状況
 
-G1（グランドルール見直し）は 2026/05/28 に完了。以後は `AGENTS.md` / `CLAUDE.md` / `docs/RUNBOOK.md` の「グランドルール実行チェック」に従う。
+G1（グランドルール見直し）は 2026/05/28 に完了。**2026/11/25 に G2 として `AI_RULES.md` へ一本化**（CLAUDE.md / AGENTS.md は入口のみ、RUNBOOK は参照のみ）。以後は `AI_RULES.md` の「グランドルール実行チェック」に従う。
 
 特に次の点は毎回確認する:
 - 不明瞭・抽象的・掘り下げが必要な依頼は、想像で進めずユーザーに質問して明確化する

@@ -299,7 +299,7 @@
         <tr><td><strong>セキュリティ文書</strong></td><td>セキュリティ</td><td class="yes">SECURITY.md</td><td>脆弱性報告・セキュア方針</td></tr>
         <tr><td><strong>操作マニュアル</strong></td><td>エンドユーザー</td><td class="yes">docs/Manual.md</td><td>タダメン向け操作手順（構築後の受け入れ確認に活用）</td></tr>
         <tr><td><strong>引き継ぎ書 (HANDOVER)</strong></td><td>開発者引継ぎ</td><td class="yes">docs/HANDOVER.md</td><td>現状・既知課題・次フェーズ候補・本番 ID の所在</td></tr>
-        <tr><td><strong>AI 開発指示書</strong></td><td>AI 協働</td><td class="yes">CLAUDE.md / AGENTS.md</td><td>AI ツールに渡すグランドルールと制約</td></tr>
+        <tr><td><strong>AI 開発指示書</strong></td><td>AI 協働</td><td class="yes">AI_RULES.md（＋入口の CLAUDE.md / AGENTS.md）</td><td>AI ツールに渡すグランドルールと制約（正本は AI_RULES.md に一本化）</td></tr>
       </tbody>
     </table>
 
@@ -704,7 +704,7 @@ clasp deploy <span class="ok">-i &lt;DEPLOYMENT_ID&gt;</span> -d "vX.X.X"
       <li><code>docs/HANDOVER.md</code> — 現状・既知課題・次フェーズ・関連リソース ID（§7）</li>
       <li><code>docs/Manual.md</code> — エンドユーザー操作マニュアル</li>
       <li><code>docs/playwright-guide.html</code> / <code>docs/test-criteria.html</code> — テスト導入と品質基準</li>
-      <li><code>CLAUDE.md</code> / <code>AGENTS.md</code> — AI 開発指示書（グランドルール）</li>
+      <li><code>AI_RULES.md</code> — AI 共通開発指示（グランドルールの正本）。<code>CLAUDE.md</code> / <code>AGENTS.md</code> は入口のみ</li>
       <li><code>CHANGELOG.md</code> / <code>SECURITY.md</code></li>
     </ul>
     <h4>外部ベストプラクティス（2026 年取得）</h4>
