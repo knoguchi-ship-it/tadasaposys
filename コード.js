@@ -115,14 +115,21 @@ function getSecret_(key) {
   return legacy ? String(legacy).trim() : '';
 }
 
-/** 各秘密情報の保存場所: 'property' | 'sheet'（平文で残存・要移行） | 'none' */
+/**
+ * 各秘密情報の保存場所:
+ *   'property' | 'sheet'（平文で残存・要移行） | 'property+sheet'（同じ値が両方にある・移行でシートを消す）
+ *   | 'conflict'（プロパティとシートで値が異なる・移行では消さない。管理者が正しい値を入力して保存する） | 'none'
+ */
 function getSecretStatus_() {
   let props = getScriptProps_();
   let settings = loadSettings_();
   let out = {};
   SECRET_SETTING_KEYS_.forEach(function(k) {
-    if (String(props[k] || '').trim()) out[k] = settings[k] ? 'property+sheet' : 'property';
-    else out[k] = settings[k] ? 'sheet' : 'none';
+    let p = String(props[k] || '').trim();
+    let s = String(settings[k] || '').trim();
+    if (p && s) out[k] = (p === s) ? 'property+sheet' : 'conflict';
+    else if (p) out[k] = 'property';
+    else out[k] = s ? 'sheet' : 'none';
   });
   return out;
 }
@@ -211,33 +218,46 @@ function redactSecretsInAuditLog_(secretValues) {
 }
 
 /**
- * 秘密情報を「設定」シートからスクリプトプロパティへ移す（管理者が設定管理画面から1回実行）。
- * - シートに値があり、プロパティが未設定ならプロパティへ移す（設定済みならプロパティを優先）
- * - シートのセルを空にし、過去の監査ログに残った平文を [REDACTED] にする
- * - 監査ログには移したキー名と件数だけを記録する（値は記録しない）
+ * 秘密情報の移行計画を立てる（純粋関数・v1.13.0）。本物の値を絶対に失わないことを最優先にする。
+ *   シート空                      → 何もしない
+ *   プロパティ空                  → move（プロパティへコピーし、シートを空にする）
+ *   プロパティ＝シート            → blank（プロパティは既に同じ値。シートだけ空にする）
+ *   プロパティ≠シート（食い違い） → conflict（どちらが正しいか機械では決めない。両方残し、管理者に知らせる）
+ * 返り値: { move: [key], blank: [key], conflict: [key] }（move のキーは blank にも含める）
+ */
+function planSecretMigration_(sheetVals, propVals, keys) {
+  let out = { move: [], blank: [], conflict: [] };
+  keys.forEach(function(k) {
+    let s = String((sheetVals || {})[k] == null ? '' : sheetVals[k]).trim();
+    let p = String((propVals || {})[k] == null ? '' : propVals[k]).trim();
+    if (!s) return;
+    if (!p) { out.move.push(k); out.blank.push(k); return; }
+    if (p === s) { out.blank.push(k); return; }
+    out.conflict.push(k);
+  });
+  return out;
+}
+
+/**
+ * 秘密情報を「設定」シートからスクリプトプロパティへ移す（管理者が設定管理画面から実行）。
+ * - 計画は planSecretMigration_ に従う。プロパティとシートの値が食い違うキーは何も消さずに残し、
+ *   管理者に知らせる（ダミー値などがプロパティに先に入っていても、シートの本物の値を失わない）
+ * - 空にしたキーだけ、過去の監査ログの平文を [REDACTED] にする
+ * - 監査ログにはキー名と件数だけを記録する（値は記録しない）
  * 冪等: 何度実行しても結果は同じ。
  */
 function migrateSecretsToProperties() {
   let actor = requireAdmin_();
   return withScriptLock_(function() {
     let settings = loadSettings_();
-    let props = getScriptProps_();
-    let moved = [];
-    let sheetValues = [];
-    SECRET_SETTING_KEYS_.forEach(function(k) {
-      let sheetVal = String(settings[k] || '').trim();
-      if (!sheetVal) return;
-      sheetValues.push(sheetVal);
-      if (!String(props[k] || '').trim()) {
-        setSecret_(k, sheetVal);
-        moved.push(k);
-      }
-    });
-    let blanked = blankSecretCellsInSheet_(SECRET_SETTING_KEYS_);
-    let redacted = redactSecretsInAuditLog_(sheetValues);
+    let plan = planSecretMigration_(settings, getScriptProps_(), SECRET_SETTING_KEYS_);
+    let redactValues = plan.blank.map(function(k) { return String(settings[k] || '').trim(); });
+    plan.move.forEach(function(k) { setSecret_(k, String(settings[k]).trim()); });
+    let blanked = plan.blank.length ? blankSecretCellsInSheet_(plan.blank) : [];
+    let redacted = redactSecretsInAuditLog_(redactValues);
     appendAuditLog_(actor, 'migrate_secrets', 'settings', 'secrets', null,
-      { moved: moved, blanked: blanked, auditCellsRedacted: redacted });
-    return { moved: moved, blanked: blanked, auditCellsRedacted: redacted, status: getSecretStatus_() };
+      { moved: plan.move, blanked: blanked, conflicts: plan.conflict, auditCellsRedacted: redacted });
+    return { moved: plan.move, blanked: blanked, conflicts: plan.conflict, auditCellsRedacted: redacted, status: getSecretStatus_() };
   });
 }
 

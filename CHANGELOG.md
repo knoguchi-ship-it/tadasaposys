@@ -17,7 +17,7 @@
 
 ### Security
 - **`SPREADSHEET_ID` をスクリプトプロパティへ**（コードの直書きを廃止。未設定時は明示エラー）。
-- **Zoom の秘密情報を書込専用に**（`ZOOM_ACCOUNT_ID`・`ZOOM_CLIENT_ID`・`ZOOM_CLIENT_SECRET`・`ZOOM_FIXED_URL`・`ZOOM_FIXED_PASS`）: スクリプトプロパティに保存し、管理画面に値を返さない（状態のみ）。監査ログに値を残さない（以前は変更前後の値が平文で記録されていた）。設定管理「連携」に password 入力・削除・「秘密情報をプロパティへ移行」（`migrateSecretsToProperties`: シートのセルを空にし、過去の監査ログの平文を `[REDACTED]` に置換。冪等）。移行後に Zoom の Client Secret を再発行すること。
+- **Zoom の秘密情報を書込専用に**（`ZOOM_ACCOUNT_ID`・`ZOOM_CLIENT_ID`・`ZOOM_CLIENT_SECRET`・`ZOOM_FIXED_URL`・`ZOOM_FIXED_PASS`）: スクリプトプロパティに保存し、管理画面に値を返さない（状態のみ）。監査ログに値を残さない（以前は変更前後の値が平文で記録されていた）。設定管理「連携」に password 入力・削除・「秘密情報をプロパティへ移行」（`migrateSecretsToProperties`: シートのセルを空にし、過去の監査ログの平文を `[REDACTED]` に置換。冪等。プロパティとシートで値が食い違うキーは消さずに残し管理者に知らせる＝先にダミー値が入っていても本物を失わない）。移行後に Zoom の Client Secret を再発行すること。
 - **埋め込み禁止**: `XFrameOptionsMode.ALLOWALL` をやめ既定に（クリックジャッキング対策）。
 - **`executionApi.access` を `MYSELF` に**。
 - 設定シートのひな形にあった実在風の固定 Zoom 会議ID・パスコードの例をダミーに置換。
@@ -30,8 +30,8 @@
 - `.gitignore` に `dist/`、`.claspignore` に `dist/**`。
 
 ### Tests
-- 単体: `build-deploy.test.js`（6件）・監査ログ伏せ字化 `redactAuditCell`（4件）・check-sync 1件・guard 1行追加（116 → 127件）。伏せ字化を壊すと失敗・戻すと合格を確認。
-- E2E: `13-secret-settings.spec.ts`（3件。68 → 71件）。password 表示を text にした壊れたコードで失敗・正しいコードで合格を確認。全71件を `dist/` で合格。
+- 単体: `build-deploy.test.js`（6件）・監査ログ伏せ字化 `redactAuditCell`（4件）・移行計画 `planSecretMigration`（3件）・check-sync 1件・guard 1行追加（116 → 130件）。伏せ字化を壊すと失敗・戻すと合格を確認。
+- E2E: `13-secret-settings.spec.ts`（4件。68 → 72件）。password 表示を text にした壊れたコードで失敗・正しいコードで合格を確認。全72件を `dist/` で合格。
 
 ### Docs
 - ADR-013・ADR-014 を追加（ADR-002 は置き換え済み）。SDD（F-01/F-02/F-03/F-16/F-19/F-19b・S-00・SEC-07/08・TC-01/03）、AI_RULES（ファイル構成・React 固定・デプロイ・コーディング規約）、RUNBOOK（§1-2・§1-3・§2-3-1 秘密情報の移行・§3 デプロイ・§4-2・§5-1・§6）、HANDOVER、Manual、SECURITY、BUILD_SPEC・build-from-scratch（v1.13.0 追補）。

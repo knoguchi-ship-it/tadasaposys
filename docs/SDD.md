@@ -126,7 +126,7 @@
 | `ZOOM_FIXED_URL` / `ZOOM_FIXED_PASS` | NO | 同上 | 「いつものタダスクID」の URL（`?pwd=` を含む）とパスコード |
 
 - 取得は `getSetting_` が自動で振り分ける（`SECRET_SETTING_KEYS_`）。未移行の間はシートの旧値を読む（後方互換）。
-- 管理画面は値を表示せず状態（`property` / `sheet` / `property+sheet` / `none`）のみ表示。空欄で保存=変更なし、「削除」=プロパティ削除。
+- 管理画面は値を表示せず状態（`property` / `sheet` / `property+sheet` / `conflict` / `none`）のみ表示。空欄で保存=変更なし、「削除」=プロパティ削除。
 - 保存・移行時にシートの該当セルを空にし、入力例・説明を「シートに入力しない」案内へ書き換える。
 
 | 設定キー | 必須 | 説明 |
@@ -457,7 +457,8 @@ HTML を返す Web App エントリポイント。v1.13.0〜 シートを読ま�
 許可された設定キーのみ更新。ホワイトリスト外のキーは拒否。管理者のみ。v1.13.0〜 秘密情報はスクリプトプロパティへ保存（空文字=変更なし、`null`=削除）し、監査ログには値を残さない。戻り値は `{ settings, secretStatus }`（秘密は空文字）。
 
 ### F-19b: `migrateSecretsToProperties()`（v1.13.0）
-管理者のみ。設定シートに平文で残る秘密情報をスクリプトプロパティへ移し（プロパティ設定済みならプロパティ優先）、シートのセルを空にし、過去の監査ログ（beforeJson / afterJson）に残った平文を `[REDACTED]` に置換する。監査ログには移したキー名と件数のみ記録。冪等。戻り値 `{ moved, blanked, auditCellsRedacted, status }`。
+管理者のみ。設定シートに平文で残る秘密情報をスクリプトプロパティへ移し、シートのセルを空にし、過去の監査ログ（beforeJson / afterJson）に残った平文を `[REDACTED]` に置換する。監査ログには移したキー名と件数のみ記録。冪等。戻り値 `{ moved, blanked, conflicts, auditCellsRedacted, status }`。
+計画は純粋関数 `planSecretMigration_`: シート空=何もしない／プロパティ空=コピーしてシートを空に／同じ値=シートだけ空に／**値が食い違う=何も消さず `conflicts` で知らせる**（プロパティに先にダミー値等があってもシートの本物の値を失わない）。食い違いは管理画面に `conflict` と表示し、管理者が正しい値を入力して保存すると解消する。
 
 ### F-20: `reassignCaseAdmin(caseId, staffEmail)`
 管理者による再アサイン。有効なスタッフのみ指定可能。

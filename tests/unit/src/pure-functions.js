@@ -322,6 +322,28 @@ function redactAuditCell(cell, secretKeys, secretValues) {
   return next;
 }
 
+/**
+ * コード.js: planSecretMigration_()
+ * 秘密情報の移行計画を立てる（純粋関数・v1.13.0）。本物の値を絶対に失わないことを最優先にする。
+ *   シート空                      → 何もしない
+ *   プロパティ空                  → move（プロパティへコピーし、シートを空にする）
+ *   プロパティ＝シート            → blank（プロパティは既に同じ値。シートだけ空にする）
+ *   プロパティ≠シート（食い違い） → conflict（どちらが正しいか機械では決めない。両方残し、管理者に知らせる）
+ * 返り値: { move: [key], blank: [key], conflict: [key] }（move のキーは blank にも含める）
+ */
+function planSecretMigration(sheetVals, propVals, keys) {
+  var out = { move: [], blank: [], conflict: [] };
+  keys.forEach(function(k) {
+    var s = String((sheetVals || {})[k] == null ? '' : sheetVals[k]).trim();
+    var p = String((propVals || {})[k] == null ? '' : propVals[k]).trim();
+    if (!s) return;
+    if (!p) { out.move.push(k); out.blank.push(k); return; }
+    if (p === s) { out.blank.push(k); return; }
+    out.conflict.push(k);
+  });
+  return out;
+}
+
 module.exports = {
   getFiscalYear,
   caseFiscalYear,
@@ -347,4 +369,5 @@ module.exports = {
   chatLinkKey,
   buildChatThreadUrl,
   redactAuditCell,
+  planSecretMigration,
 };

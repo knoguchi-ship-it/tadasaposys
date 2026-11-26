@@ -5,7 +5,8 @@
  * スクリプトプロパティに保存し、管理画面へ値を返さない（入力欄は password・常に空・状態だけ表示）。
  * 設定シートに平文で残っている場合は警告と「秘密情報をプロパティへ移行」ボタンを出す。
  *
- * ローカルモック: mockSecretStatus（ACCOUNT/CLIENT_ID/SECRET = 'sheet'、FIXED_URL = 'property'、FIXED_PASS = 'none'）。
+ * ローカルモック: mockSecretStatus（ACCOUNT_ID = 'conflict'、CLIENT_ID/SECRET = 'sheet'、FIXED_URL = 'property'、FIXED_PASS = 'none'）。
+ * 'conflict' はプロパティとシートで値が異なる状態。移行では消さずに残し、管理者が正しい値を入力して保存すると解消する。
  */
 import { test, expect } from '../fixtures';
 
@@ -33,14 +34,28 @@ test.describe('秘密情報の書込専用設定', () => {
     await expect(page.getByRole('button', { name: '秘密情報をプロパティへ移行' })).toBeVisible();
   });
 
-  test('移行ボタンでシート残存が解消し、警告と移行ボタンが消える', async ({ appPage }) => {
+  test('移行ボタンでシート残存が解消し、警告と移行ボタンが消える。食い違いは消さずに残る', async ({ appPage }) => {
     await openIntegrationSettings(appPage);
     const page = appPage.page;
 
     await page.getByRole('button', { name: '秘密情報をプロパティへ移行' }).click();
-    await expect(page.getByText('移行 3件')).toBeVisible();
+    await expect(page.getByText('移行 2件')).toBeVisible();
+    await expect(page.getByText('食い違い 1件')).toBeVisible();
     await expect(page.getByTestId('secret-ZOOM_CLIENT_SECRET')).toContainText('スクリプトプロパティに保存済み');
+    await expect(page.getByTestId('secret-ZOOM_ACCOUNT_ID')).toContainText('値が異なります');
     await expect(page.getByRole('button', { name: '秘密情報をプロパティへ移行' })).toHaveCount(0);
+  });
+
+  test('食い違いは正しい値を入力して保存すると解消する', async ({ appPage }) => {
+    await openIntegrationSettings(appPage);
+    const page = appPage.page;
+
+    const acct = page.getByTestId('secret-ZOOM_ACCOUNT_ID');
+    await expect(acct).toContainText('値が異なります');
+    await acct.getByLabel('Zoom Account ID（書込専用）').fill('dummy-account-id');
+    await page.getByRole('button', { name: '設定を保存' }).click();
+    await expect(page.getByText('設定を保存しました。')).toBeVisible();
+    await expect(acct).toContainText('スクリプトプロパティに保存済み');
   });
 
   test('新しい値を保存すると保存済みになり、入力欄は空に戻る（値は画面に返らない）', async ({ appPage }) => {

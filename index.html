@@ -353,7 +353,7 @@
     // v1.13.0: 秘密情報の保存場所（ローカルモック）。本番はサーバーが getSecretStatus_ で返す。
     // 'sheet' = 設定シートに平文で残存（要移行）／'property' = スクリプトプロパティ／'none' = 未設定
     let mockSecretStatus = {
-      ZOOM_ACCOUNT_ID: 'sheet', ZOOM_CLIENT_ID: 'sheet', ZOOM_CLIENT_SECRET: 'sheet',
+      ZOOM_ACCOUNT_ID: 'conflict', ZOOM_CLIENT_ID: 'sheet', ZOOM_CLIENT_SECRET: 'sheet',
       ZOOM_FIXED_URL: 'property', ZOOM_FIXED_PASS: 'none'
     };
 
@@ -782,7 +782,8 @@
               if (mockSecretStatus[k] === 'sheet') { mockSecretStatus[k] = 'property'; moved.push(k); }
               if (mockSecretStatus[k] === 'property+sheet') mockSecretStatus[k] = 'property';
             });
-            resolve({ moved: moved, blanked: moved, auditCellsRedacted: 0, status: { ...mockSecretStatus } });
+            var conflicts = Object.keys(mockSecretStatus).filter(k => mockSecretStatus[k] === 'conflict');
+            resolve({ moved: moved, blanked: moved, conflicts: conflicts, auditCellsRedacted: 0, status: { ...mockSecretStatus } });
           }, 200));
         }
         return new Promise((resolve, reject) => {
@@ -2955,7 +2956,10 @@
         try {
           const r = await Api.migrateSecretsToProperties();
           await refreshAdminPanelData();
-          showToast('移行 ' + r.moved.length + '件・シートから消去 ' + r.blanked.length + '件・監査ログの伏せ字化 ' + r.auditCellsRedacted + '件', { type: 'success', title: '秘密情報の移行' });
+          const conflicts = (r.conflicts || []).length;
+          showToast('移行 ' + r.moved.length + '件・シートから消去 ' + r.blanked.length + '件・監査ログの伏せ字化 ' + r.auditCellsRedacted + '件'
+            + (conflicts ? '・食い違い ' + conflicts + '件（消さずに残しました。正しい値を入力して保存してください）' : ''),
+            { type: conflicts ? 'info' : 'success', title: '秘密情報の移行' });
         } catch (e) {
           showToast(e.message || String(e), { type: 'error', title: '秘密情報の移行エラー' });
         } finally {
@@ -5194,9 +5198,10 @@
                                   >{settingsDraft[key] === null ? '削除予定（取消）' : '削除'}</button>
                                 )}
                               </div>
-                              <p className={'text-[10px] font-bold ' + (secretState.indexOf('sheet') !== -1 ? 'text-rose-700' : 'text-slate-500')}>
+                              <p className={'text-[10px] font-bold ' + ((secretState.indexOf('sheet') !== -1 || secretState === 'conflict') ? 'text-rose-700' : 'text-slate-500')}>
                                 {secretState === 'property' ? '🔒 スクリプトプロパティに保存済み（値は表示しません）'
                                   : secretState === 'none' ? '未設定'
+                                  : secretState === 'conflict' ? '⚠ スクリプトプロパティと設定シートで値が異なります（どちらも消していません）。正しい値をここに入力して保存してください（保存するとシート側は消えます）'
                                   : '⚠ 設定シートに平文で残っています（組織内の誰でも読めます）。下の「秘密情報をプロパティへ移行」を実行してください'}
                               </p>
                             </div>

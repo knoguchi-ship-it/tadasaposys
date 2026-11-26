@@ -30,6 +30,7 @@ const {
   chatLinkKey,
   buildChatThreadUrl,
   redactAuditCell,
+  planSecretMigration,
 } = require('./src/pure-functions');
 
 // ============================================================
@@ -764,5 +765,24 @@ describe('redactAuditCell（監査ログの秘密情報を伏せる）', () => {
     const cell = JSON.stringify({ MAIL_FORCE_CC: 'a@b.jp' });
     expect(redactAuditCell(cell, KEYS, [])).toBe(cell);
     expect(redactAuditCell('', KEYS, [])).toBe('');
+  });
+});
+
+// ── v1.13.0: 秘密情報の移行計画（本物の値を失わない） ──
+describe('planSecretMigration（秘密情報の移行計画）', () => {
+  const KEYS = ['A', 'B', 'C', 'D'];
+
+  test('プロパティ空はコピーして空に、同じ値は空にするだけ、シート空は何もしない', () => {
+    expect(planSecretMigration({ A: 'real-a', B: 'same', C: '' }, { B: 'same' }, KEYS))
+      .toEqual({ move: ['A'], blank: ['A', 'B'], conflict: [] });
+  });
+
+  test('プロパティに別の値（ダミー等）が先にあっても、シートの本物の値は消さず食い違いとして知らせる', () => {
+    const plan = planSecretMigration({ A: 'real-secret' }, { A: 'dummy' }, KEYS);
+    expect(plan).toEqual({ move: [], blank: [], conflict: ['A'] });
+  });
+
+  test('前後の空白は無視して比較する', () => {
+    expect(planSecretMigration({ A: ' x ' }, { A: 'x' }, KEYS)).toEqual({ move: [], blank: ['A'], conflict: [] });
   });
 });
