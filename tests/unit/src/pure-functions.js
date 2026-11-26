@@ -344,6 +344,24 @@ function planSecretMigration(sheetVals, propVals, keys) {
   return out;
 }
 
+// コード.js: normalizeSpreadsheetId_()（v1.13.0）
+// SPREADSHEET_ID プロパティの値を ID に正規化。URL が貼られても ID を取り出す。空なら ''、ID の形でなければ null。
+function normalizeSpreadsheetId(raw) {
+  var s = String(raw == null ? '' : raw).trim();
+  if (!s) return '';
+  var m = s.match(/\/spreadsheets\/d\/([A-Za-z0-9_-]+)/);
+  if (m) s = m[1];
+  return /^[A-Za-z0-9_-]{20,}$/.test(s) ? s : null;
+}
+
+// コード.js: schemaMigrationNeeded_()（v1.13.0）
+// 永続記録（スクリプトプロパティ）か CacheService の印のどちらかが現行版なら移行確認は不要。
+function schemaMigrationNeeded(appliedProp, cachedVersion, currentVersion) {
+  var cur = String(currentVersion);
+  return String(appliedProp == null ? '' : appliedProp).trim() !== cur
+    && String(cachedVersion == null ? '' : cachedVersion).trim() !== cur;
+}
+
 module.exports = {
   getFiscalYear,
   caseFiscalYear,
@@ -370,4 +388,6 @@ module.exports = {
   buildChatThreadUrl,
   redactAuditCell,
   planSecretMigration,
+  normalizeSpreadsheetId,
+  schemaMigrationNeeded,
 };

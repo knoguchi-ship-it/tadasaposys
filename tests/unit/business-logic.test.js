@@ -31,6 +31,8 @@ const {
   buildChatThreadUrl,
   redactAuditCell,
   planSecretMigration,
+  normalizeSpreadsheetId,
+  schemaMigrationNeeded,
 } = require('./src/pure-functions');
 
 // ============================================================
@@ -784,5 +786,39 @@ describe('planSecretMigration（秘密情報の移行計画）', () => {
 
   test('前後の空白は無視して比較する', () => {
     expect(planSecretMigration({ A: ' x ' }, { A: 'x' }, KEYS)).toEqual({ move: [], blank: ['A'], conflict: [] });
+  });
+});
+
+// ── v1.13.0: SPREADSHEET_ID の正規化（URL を貼っても動く） ──
+describe('normalizeSpreadsheetId（SPREADSHEET_ID の正規化）', () => {
+  const ID = 'A'.repeat(20) + '_-' + 'b'.repeat(20); // 実在しないダミー
+
+  test('ID はそのまま、URL からは ID を取り出す、前後の空白は無視する', () => {
+    expect(normalizeSpreadsheetId(ID)).toBe(ID);
+    expect(normalizeSpreadsheetId(' https://docs.google.com/spreadsheets/d/' + ID + '/edit#gid=0 ')).toBe(ID);
+    expect(normalizeSpreadsheetId('https://docs.google.com/spreadsheets/d/' + ID)).toBe(ID);
+  });
+
+  test('空は空文字（未設定）、ID の形でない値は null（案内つきエラーにする）', () => {
+    expect(normalizeSpreadsheetId('')).toBe('');
+    expect(normalizeSpreadsheetId(null)).toBe('');
+    expect(normalizeSpreadsheetId('https://docs.google.com/document/d/x/edit')).toBeNull();
+    expect(normalizeSpreadsheetId('タダサポDB')).toBeNull();
+  });
+});
+
+// ── v1.13.0: スキーマ移行確認の省略（6時間ごとの約10秒の待ちを無くす） ──
+describe('schemaMigrationNeeded（スキーマ移行確認の要否）', () => {
+  test('永続記録が現行版なら、キャッシュが切れていても不要', () => {
+    expect(schemaMigrationNeeded('6', null, '6')).toBe(false);
+  });
+
+  test('永続記録が無くても、キャッシュが現行版なら不要（v1.12.x からの移行期）', () => {
+    expect(schemaMigrationNeeded(undefined, '6', '6')).toBe(false);
+  });
+
+  test('どちらも無い・古い版なら必要（版を上げると1回だけ走る）', () => {
+    expect(schemaMigrationNeeded(undefined, null, '6')).toBe(true);
+    expect(schemaMigrationNeeded('6', '6', '7')).toBe(true);
   });
 });

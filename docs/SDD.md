@@ -121,7 +121,8 @@
 
 | プロパティ | 必須 | 設定方法 | 説明 |
 |---|---|---|---|
-| `SPREADSHEET_ID` | YES | GAS エディタで手入力（デプロイ前） | タダサポDB の ID。未設定なら全 API が明示エラーで止まる |
+| `SPREADSHEET_ID` | YES | GAS エディタで手入力（デプロイ前） | タダサポDB の ID。未設定なら全 API が明示エラーで止まる。スプレッドシートの URL（`…/d/<ID>/edit`）を貼っても ID を取り出して使う。ID の形でない値は「ID だけを入力」と案内するエラー（`normalizeSpreadsheetId_`） |
+| `SCHEMA_VERSION_APPLIED` | — | アプリが自動で書く（手入力しない） | スキーマ自動移行を適用済みの版。`SCHEMA_VERSION_` と一致すれば起動時の移行確認を省く（F-02）。削除すると次回起動時に移行確認を再実行する |
 | `ZOOM_ACCOUNT_ID` / `ZOOM_CLIENT_ID` / `ZOOM_CLIENT_SECRET` | NO* | 管理画面の設定管理「連携」（書込専用） | Zoom Server-to-Server OAuth |
 | `ZOOM_FIXED_URL` / `ZOOM_FIXED_PASS` | NO | 同上 | 「いつものタダスクID」の URL（`?pwd=` を含む）とパスコード |
 
@@ -400,7 +401,9 @@ pending/sending → disabled（予約送信機能廃止により未送信のま�
 HTML を返す Web App エントリポイント。v1.13.0〜 シートを読まずに `createHtmlOutputFromFile('index')` を即返す（ADR-013）。`XFrameOptionsMode` は既定（他サイトへの埋め込み不可）。初期データはページ先頭の script が `google.script.run.getInitialData()` を先行発行し、`window.__INITIAL_DATA_PROMISE__` としてアプリへ渡す（v1.12.x までの `window.__INITIAL_DATA__` 埋め込みは廃止）。
 
 ### F-02: `getInitialData()`
-起動時データ取得。`user` / `cases` / `masters` / `draftCaseIds` / `forcedCc` / `_perf` を返す。`ensureAttachmentSchema_()` でスキーマ自動マイグレーションを実行する。`_perf` は区間ごとの処理時間（ms: `schema` / `auth` / `cases` / `masters` / `drafts`）で、実行ログにも JSON で出力する（v1.13.0）。
+起動時データ取得。`user` / `cases` / `masters` / `draftCaseIds` / `forcedCc` / `_perf` を返す。`ensureAttachmentSchema_()` でスキーマ自動マイグレーションを実行する。`_perf` は区間ごとの処理時間（ms: `schema` / `auth` / `cases` / `masters` / `drafts`、`cases` の内訳 `casesDetail`）で、実行ログにも JSON で出力する（v1.13.0）。
+- **移行確認の省略（v1.13.0）:** 適用済みの版をスクリプトプロパティ `SCHEMA_VERSION_APPLIED` に永続記録し、`SCHEMA_VERSION_` と一致すれば移行確認をしない（判定は純粋関数 `schemaMigrationNeeded_`）。v1.12.x までは確認済みの印を CacheService に6時間だけ持ったため、6時間ごとに最初の利用者が全移行確認（テストデプロイ実測 約10秒）を待った。移行はすべて冪等で、成功したときだけ記録する。`SCHEMA_VERSION_` を上げる（移行を追加する）と次回起動時に1回だけ走る。
+- タダメンマスタの ROLE / IS_ACTIVE 補完（`ensureStaffAdminSchema_`）は、空欄があるときだけ書き込む（従来は毎回全行を書き直していた）。
 
 ### F-03: `getAllCasesJoined()`
 案件リスト + 案件手動追加 + 案件補正 + サポート記録を結合し、削除済み案件を除外して返す（v1.13.0〜 メール履歴は結合しない。案件の `emails` は廃止）。各案件に `currentFiscalYearCount`（今年度累計利用回数）を付与する。v1.12.13 からフォーム案件には「チャット連携」シートから `chatThreadUrl`（申込通知スレッドURL・なければ `null`）も付与する（S-10）。

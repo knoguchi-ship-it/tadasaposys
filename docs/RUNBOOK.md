@@ -81,7 +81,7 @@ npm ci
 1. GASエディタ → 左側「サービス」の `+` をクリック
 2. **Gmail API v1** を追加（`Gmail` として追加）
 3. **Google Calendar API v3** を追加（`Calendar` として追加）
-4. 「プロジェクトの設定 → スクリプト プロパティ」に `SPREADSHEET_ID` = タダサポDB のスプレッドシートID を追加する（v1.13.0〜。コードには書かない。ADR-014）
+4. 「プロジェクトの設定 → スクリプト プロパティ」に `SPREADSHEET_ID` = タダサポDB のスプレッドシートID を追加する（v1.13.0〜。コードには書かない。ADR-014）。ID は URL の `/d/` と `/edit` の間の部分。URL をそのまま貼っても動く。`SCHEMA_VERSION_APPLIED` はアプリが自動で書くので手入力しない
 
 ### 1-4. 初期セットアップ関数の実行
 
@@ -302,4 +302,4 @@ v1.13.0 より前（スクリプトプロパティ化以前）の版へ戻す場
 | Webapp 設定 | `executeAs: USER_ACCESSING` / `access: DOMAIN` |
 | タイムゾーン | `Etc/GMT-9`（JST） |
 | 予約送信トリガ間隔 | 廃止（v1.12.1以降は作成しない） |
-| スキーマバージョン | `SCHEMA_VERSION_ = '6'`（コード.js 内） |
+| スキーマバージョン | `SCHEMA_VERSION_ = '6'`（コード.js 内）。適用済みの版はスクリプトプロパティ `SCHEMA_VERSION_APPLIED`（v1.13.0〜。削除すると次回起動時に移行確認を再実行） |

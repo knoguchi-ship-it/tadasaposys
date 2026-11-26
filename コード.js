@@ -79,10 +79,26 @@ function getScriptProps_() {
   return _scriptPropsCache;
 }
 
+/**
+ * SPREADSHEET_ID プロパティの値を ID に正規化する（純粋関数・v1.13.0）。
+ * スプレッドシートの URL（…/spreadsheets/d/<ID>/edit…）が貼られても ID を取り出す。
+ * 空なら ''、ID の形でなければ null を返す。
+ */
+function normalizeSpreadsheetId_(raw) {
+  let s = String(raw == null ? '' : raw).trim();
+  if (!s) return '';
+  let m = s.match(/\/spreadsheets\/d\/([A-Za-z0-9_-]+)/);
+  if (m) s = m[1];
+  return /^[A-Za-z0-9_-]{20,}$/.test(s) ? s : null;
+}
+
 function getSpreadsheetId_() {
-  let id = String(getScriptProps_()[SCRIPT_PROP_SPREADSHEET_ID_] || '').trim();
-  if (!id) {
+  let id = normalizeSpreadsheetId_(getScriptProps_()[SCRIPT_PROP_SPREADSHEET_ID_]);
+  if (id === '') {
     throw new Error('スクリプトプロパティ SPREADSHEET_ID が未設定です。GAS エディタ「プロジェクトの設定 → スクリプト プロパティ」にタダサポDBのスプレッドシートIDを設定してください（RUNBOOK §3）。');
+  }
+  if (id === null) {
+    throw new Error('スクリプトプロパティ SPREADSHEET_ID の値がスプレッドシートIDの形ではありません。URL の /d/ と /edit の間の部分だけを入力してください（RUNBOOK §3）。');
   }
   return id;
 }
@@ -752,8 +768,10 @@ function getInitialData() {
   let role = getStaffRoleByEmail_(userEmail) || (isAdminEmail_(userEmail) ? 'admin' : 'staff');
   let isAdmin = role === 'admin';
   lap('auth');
-  let cases = getAllCasesJoined();
+  let casesDetail = {};
+  let cases = getAllCasesJoined(casesDetail);
   lap('cases');
+  perf.casesDetail = casesDetail;
   let masters = getMasters();
   lap('masters');
   // v1.11.0: 下書きを持つ案件IDの一覧（バッジ表示用）
@@ -906,21 +924,28 @@ function getChatLinkMap_(ss, timeZone) {
 // ======================================================================
 // データ結合取得
 // ======================================================================
-function getAllCasesJoined() {
+function getAllCasesJoined(perfOut) {
+  // v1.13.0: perfOut（任意）に区間ごとの処理時間を書き込む（getInitialData の _perf.casesDetail）
+  let t0 = Date.now();
+  let lap = function(name) { if (!perfOut) return; let now = Date.now(); perfOut[name] = now - t0; t0 = now; };
   let ss = getSpreadsheet_();
   // スプレッドシートのタイムゾーンを取得（dateLabel の整形に使用）
   let ssTimeZone = ss.getSpreadsheetTimeZone();
   let caseSheet = ss.getSheetByName(SHEET_NAMES.CASES);
   let recordSheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  lap('open');
 
   let caseData = caseSheet.getDataRange().getValues();
+  lap('caseList');
   let recordData = recordSheet.getDataRange().getValues();
+  lap('records');
 
   // 手動追加案件シートを読み込み、案件リストとマージ（ヘッダ行を除いた行配列を結合）
   let manualSheet = ss.getSheetByName(SHEET_NAMES.CASES_MANUAL);
   let manualRows = (manualSheet && manualSheet.getLastRow() > 1)
     ? manualSheet.getDataRange().getValues().slice(1)
     : [];
+  lap('manual');
   let allCaseRows = caseData.slice(1).concat(manualRows);
 
   // 削除済み案件を除外
@@ -934,6 +959,7 @@ function getAllCasesJoined() {
   // S1 Stage4: 読み取り結合を case_id 経由へ切替えるフラグ（既定OFF=従来どおり String(PK)）。
   // Backfill 完了・監視後に CASE_KEY_READ_VIA_MAP=true で切替える（ロールバックは false に戻すだけ）。
   let readViaMap = parseBoolean_(getSetting_('CASE_KEY_READ_VIA_MAP', 'false'), false);
+  lap('settings');
 
   // 案件補正マップを読み込む（管理者が修正した値を案件リストに上書き表示するため）
   let overrideMap = getCasesOverrideMap_(ss);
@@ -945,10 +971,13 @@ function getAllCasesJoined() {
   }
 
   // 年間利用補正マップ（管理者が手動修正した利用回数の補正量。キー=正規化メール+'_'+年度）— v1.12.4
+  lap('override');
   let annualAdjustMap = getAnnualAdjustmentMap_(ss);
+  lap('annualAdjust');
 
   // 申込通知チャットのスレッドリンク（v1.12.13。フォーム案件のみ・取得失敗時は空）
   let chatLinkMap = getChatLinkMap_(ss, ssTimeZone);
+  lap('chatLink');
 
   // v1.13.0: メール履歴（本文つき）の全件読込を廃止。joined の emails はフロントで未使用だった
   // （案件ごとのメール表示は getThreadMessages が担う）。起動時の読込と送信量・データ露出を削減。
@@ -1087,7 +1116,9 @@ function getAllCasesJoined() {
     });
   }
 
-  return joinedCases.sort(function(a, b) { return new Date(b.timestamp) - new Date(a.timestamp); });
+  let sorted = joinedCases.sort(function(a, b) { return new Date(b.timestamp) - new Date(a.timestamp); });
+  lap('join');
+  return sorted;
 }
 
 // ======================================================================
@@ -1303,12 +1334,30 @@ function cancelCase(caseId) {
 // v1.11.7 で 6 に更新（addScheduleZoomSettings を自動実行）
 const SCHEMA_VERSION_ = '6';
 
+// v1.13.0: 適用済みのスキーマ版を永続記録するスクリプトプロパティ（SDD S-00・F-02）
+const SCRIPT_PROP_SCHEMA_APPLIED_ = 'SCHEMA_VERSION_APPLIED';
+
+/**
+ * スキーマ移行の確認が必要か（純粋関数・v1.13.0）。
+ * 永続記録（スクリプトプロパティ）か、従来の CacheService の印のどちらかが現行版なら不要。
+ */
+function schemaMigrationNeeded_(appliedProp, cachedVersion, currentVersion) {
+  let cur = String(currentVersion);
+  return String(appliedProp == null ? '' : appliedProp).trim() !== cur
+    && String(cachedVersion == null ? '' : cachedVersion).trim() !== cur;
+}
+
+/** スキーマ移行が済んでいるか（プロパティは getScriptProps_ の一括取得を使うので追加の読込なし） */
+function isSchemaApplied_() {
+  let cached = null;
+  try { cached = CacheService.getScriptCache().get('schema_v'); } catch (e) { /* 利用不可は無視 */ }
+  return !schemaMigrationNeeded_(getScriptProps_()[SCRIPT_PROP_SCHEMA_APPLIED_], cached, SCHEMA_VERSION_);
+}
+
 function ensureAttachmentSchema_() {
-  // CacheService でスキーマ確認済みなら全スキップ（6時間有効）
-  try {
-    let cache = CacheService.getScriptCache();
-    if (cache.get('schema_v') === SCHEMA_VERSION_) return;
-  } catch (e) { /* CacheService 利用不可の場合はフォールスルー */ }
+  // v1.13.0: 適用済みの版をスクリプトプロパティに永続記録し、一致すれば全スキップ。
+  // v1.12.x までは CacheService の6時間の印だけで、6時間ごとに最初の利用者が全移行確認（約10秒）を待っていた。
+  if (isSchemaApplied_()) return;
 
   try {
     ensureAdminSchema_();
@@ -1326,7 +1375,11 @@ function ensureAttachmentSchema_() {
     throw new Error('添付機能の初期化に失敗しました。管理者に連絡してください。詳細: ' + e.message);
   }
 
-  // 全マイグレーション成功後にキャッシュ（21600秒 = 6時間）
+  // 全マイグレーション成功後に永続記録（失敗時は記録しないので次回また確認する）
+  try {
+    PropertiesService.getScriptProperties().setProperty(SCRIPT_PROP_SCHEMA_APPLIED_, SCHEMA_VERSION_);
+    _scriptPropsCache = null;
+  } catch (e) { /* 記録失敗は無視（次回また確認するだけ） */ }
   try {
     CacheService.getScriptCache().put('schema_v', SCHEMA_VERSION_, 21600);
   } catch (e) { /* キャッシュ保存失敗は無視 */ }
@@ -2780,12 +2833,14 @@ function ensureStaffAdminSchema_() {
     let activeRange = sheet.getRange(2, IDX.STAFF.IS_ACTIVE + 1, sheet.getLastRow() - 1, 1);
     let roleValues = roleRange.getValues();
     let activeValues = activeRange.getValues();
+    let roleChanged = false, activeChanged = false;
     for (let i = 0; i < roleValues.length; i++) {
-      if (!String(roleValues[i][0] || '').trim()) roleValues[i][0] = 'staff';
-      if (String(activeValues[i][0] || '').trim() === '') activeValues[i][0] = 'true';
+      if (!String(roleValues[i][0] || '').trim()) { roleValues[i][0] = 'staff'; roleChanged = true; }
+      if (String(activeValues[i][0] || '').trim() === '') { activeValues[i][0] = 'true'; activeChanged = true; }
     }
-    roleRange.setValues(roleValues); invalidateStaffRowsCache_();
-    activeRange.setValues(activeValues); invalidateStaffRowsCache_();
+    // v1.13.0: 空欄があったときだけ書き込む（従来は毎回全行を書き直していた）
+    if (roleChanged) { roleRange.setValues(roleValues); invalidateStaffRowsCache_(); }
+    if (activeChanged) { activeRange.setValues(activeValues); invalidateStaffRowsCache_(); }
   }
 }
 
@@ -2801,17 +2856,16 @@ function migrateAdminEmailsToStaffRoles_() {
   for (let i = 1; i < data.length; i++) {
     let em = normalizeEmail_(data[i][IDX.STAFF.EMAIL]);
     if (!em) continue;
-    if (adminMap[em]) {
+    // v1.13.0: 既に admin の行は書き直さない
+    if (adminMap[em] && String(data[i][IDX.STAFF.ROLE] || '').trim().toLowerCase() !== 'admin') {
       sheet.getRange(i + 1, IDX.STAFF.ROLE + 1).setValue('admin'); invalidateStaffRowsCache_();
     }
   }
 }
 
 function ensureAdminSchema_() {
-  // CacheService でスキーマ確認済みならスキップ
-  try {
-    if (CacheService.getScriptCache().get('schema_v') === SCHEMA_VERSION_) return;
-  } catch (e) { /* フォールスルー */ }
+  // スキーマ確認済み（永続記録または CacheService）ならスキップ
+  if (isSchemaApplied_()) return;
   ensureStaffAdminSchema_();
   migrateAdminEmailsToStaffRoles_();
   getOrCreateAuditLogSheet_();
