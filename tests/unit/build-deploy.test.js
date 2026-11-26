@@ -69,16 +69,31 @@ describe('本番ビルド', () => {
     const { build } = require('../../tools/build');
     build();
     const html = require('fs').readFileSync(require('path').join(__dirname, '../../dist/index.html'), 'utf8');
-    const a = html.indexOf('<script>(()=>');
+    const open = '<script type="text/plain" id="tadasapo-app">';
+    const a = html.indexOf(open);
     expect(a).toBeGreaterThan(0);
-    const js = html.slice(a, html.indexOf('</script>', a));
+    const js = html.slice(a + open.length, html.indexOf('</script>', a));
     expect(/[^\x00-\x7f]/.test(js)).toBe(false);
     expect(js).toContain('\\u30BF\\u30C0\\u30B5\\u30DD'); // 「タダサポ」
     expect(js).toContain('\\u{1F512}'); // 🔒 は \u{...} エスケープになる（ASCII だけ）
     expect(() => assertNoAstral(html)).not.toThrow();
-    expect(js.slice('<script>'.length)).not.toMatch(/<\/?script/i); // React 同梱の "<script><\/script>" も無害化済み
+    expect(js).not.toMatch(/<\/?script/i); // React 同梱の "<script><\/script>" も無害化済み
     expect(js).toContain('\\x3Cscript');
+    expect(() => new Function(js)).not.toThrow(); // text/plain の中身はそのまま JS として解析できる
   }, 120000);
+
+  test('GAS が加工する「実行される種類」のインライン script は小さな起動用だけ（アプリ本体は text/plain に入れる）', () => {
+    const html = require('fs').readFileSync(require('path').join(__dirname, '../../dist/index.html'), 'utf8');
+    const executable = [...html.matchAll(/<script(\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
+      .filter((m) => !/\bsrc=/.test(m[1] || '') && !/\btype="text\/plain"/.test(m[1] || ''));
+    expect(executable.length).toBe(2); // 初期データの先行取得 + アプリ起動
+    for (const m of executable) {
+      expect(m[2].length).toBeLessThan(3000);
+      expect(m[2]).not.toContain('`'); // テンプレート文字列を含めない（GAS の加工で壊れる）
+    }
+    expect(executable[1][2]).toContain('getElementById("tadasapo-app")');
+    expect(executable[1][2]).toContain('(0, eval)(');
+  });
 });
 
 describe('デプロイ事前検査', () => {

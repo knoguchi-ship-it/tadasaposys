@@ -135,6 +135,23 @@ function buildCss(htmlForScan) {
   }
 }
 
+/**
+ * アプリ本体の埋め込み方。JS を「実行されない種類」の script（text/plain）に入れ、短い起動用 script が
+ * 中身を間接 eval で実行する。
+ * 理由: GAS は配信時に、実行される種類のインライン script の中身を古い JS 文法の前提で加工する
+ * （行の詰め・コメント除去など）。テンプレート文字列などを含む現代の JS が壊れ、Uncaught SyntaxError
+ * で起動しなかった（2026-11-26 テストデプロイ @160〜@162。エラー位置は "https://…" の文字列の先頭）。
+ * v1.12 までは text/babel の中身を Babel が実行しており、GAS はその中身を加工していなかった。同じ考え方に戻す。
+ * GAS の CSP は 'unsafe-eval' を許可している（v1.12 の Babel も eval 系で実行していた）。
+ */
+const APP_SCRIPT_ID = 'tadasapo-app';
+function appScriptTags(js) {
+  return '<!-- アプリ本体（npm run build で事前変換・React 18.2.0 同梱。GAS に加工させないため text/plain に入れ、下の起動用 script が実行する） -->\n'
+    + '  <script type="text/plain" id="' + APP_SCRIPT_ID + '">' + js + '</script>\n'
+    + '  <script>(function () { var el = document.getElementById("' + APP_SCRIPT_ID + '");'
+    + ' (0, eval)(el.textContent + "\\n//# sourceURL=' + APP_SCRIPT_ID + '.js"); })();</script>';
+}
+
 function sha256(text) {
   return crypto.createHash('sha256').update(text).digest('hex');
 }
@@ -154,9 +171,7 @@ function build() {
   // Tailwind はアプリのクラス名を原本全体から走査する
   const css = assertAscii(escapeInline(buildCss(src), 'style'), 'Tailwind の CSS');
 
-  let html = src.slice(0, app.start)
-    + '<!-- アプリ本体（npm run build で事前変換・React 18.2.0 同梱） -->\n  <script>' + js + '</script>'
-    + src.slice(app.end);
+  let html = src.slice(0, app.start) + appScriptTags(js) + src.slice(app.end);
   html = stripDevOnly(html);
   if (!html.includes('<!-- build:css -->')) throw new Error('<!-- build:css --> の目印が見つからない');
   html = html.replace('<!-- build:css -->', '<style>' + css + '</style>');
