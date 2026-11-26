@@ -2061,9 +2061,11 @@
         let bodyTemplate = tpl.initialBody || '';
         if (!includeDetails) {
           // {{相談内容}}を含む区切りブロック（----------------〜{{相談内容}}〜----------------）を除去
-          bodyTemplate = bodyTemplate.replace(/\n*[-]{3,}\n[\s\S]*?\{\{相談内容\}\}[\s\S]*?\n[-]{3,}/g, '');
+          // ※ 日本語を含む正規表現は new RegExp(文字列) で書く（正規表現リテラル内の日本語は本番ビルドで
+          //   \u エスケープされず、ASCII 検査でビルドが止まる。GAS 配信で壊れないための制約・ADR-013）
+          bodyTemplate = bodyTemplate.replace(new RegExp('\\n*[-]{3,}\\n[\\s\\S]*?\\{\\{相談内容\\}\\}[\\s\\S]*?\\n[-]{3,}', 'g'), '');
           // 「以下の内容で受付いたしました。」行を除去（相談内容ブロックの見出し相当）
-          bodyTemplate = bodyTemplate.replace(/\n*以下の内容で受付いたしました。[ \t]*\n*/g, '\n\n');
+          bodyTemplate = bodyTemplate.replace(new RegExp('\\n*以下の内容で受付いたしました。[ \\t]*\\n*', 'g'), '\n\n');
           // 連続した空行を整理
           bodyTemplate = bodyTemplate.replace(/\n{3,}/g, '\n\n').trim();
         }

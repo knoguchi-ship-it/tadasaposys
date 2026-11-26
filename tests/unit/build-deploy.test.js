@@ -4,7 +4,7 @@
 
 'use strict';
 
-const { stripDevOnly, extractApp, escapeInline } = require('../../tools/build');
+const { stripDevOnly, extractApp, escapeInline, assertAscii, assertNoAstral } = require('../../tools/build');
 const { preflight } = require('../../tools/deploy');
 
 describe('本番ビルド', () => {
@@ -37,6 +37,30 @@ describe('本番ビルド', () => {
     expect(escapeInline('x</script>y<!--z', 'script')).toBe('x<\\/script>y<\\!--z');
     expect(escapeInline('a</STYLE>b', 'style')).toBe('a<\\/style>b');
   });
+
+  test('インライン JS/CSS に ASCII 以外の文字が残っていたらビルドを止める（GAS 配信で壊れるため）', () => {
+    expect(assertAscii('const a="\\u3042";', 'JS')).toBe('const a="\\u3042";');
+    expect(() => assertAscii('const a="あ";', 'JS')).toThrow('ASCII 以外');
+    expect(() => assertAscii('x="\u{1F512}"', 'JS')).toThrow('ASCII 以外');
+  });
+
+  test('HTML 部分に BMP 外の文字（絵文字）があればビルドを止める。日本語（BMP 内）は通す', () => {
+    expect(assertNoAstral('<title>タダサポ ⚠</title>')).toBe('<title>タダサポ ⚠</title>');
+    expect(() => assertNoAstral('<p>\n\u{1F512} 保存済み</p>')).toThrow('2 行目に BMP 外の文字');
+  });
+
+  test('本番ビルドのアプリ本体は ASCII だけになる（日本語・絵文字は \\u エスケープ）', () => {
+    const { build } = require('../../tools/build');
+    build();
+    const html = require('fs').readFileSync(require('path').join(__dirname, '../../dist/index.html'), 'utf8');
+    const a = html.indexOf('<script>(()=>');
+    expect(a).toBeGreaterThan(0);
+    const js = html.slice(a, html.indexOf('</script>', a));
+    expect(/[^\x00-\x7f]/.test(js)).toBe(false);
+    expect(js).toContain('\\u30BF\\u30C0\\u30B5\\u30DD'); // 「タダサポ」
+    expect(js).toContain('\\u{1F512}'); // 🔒 は \u{...} エスケープになる（ASCII だけ）
+    expect(() => assertNoAstral(html)).not.toThrow();
+  }, 120000);
 });
 
 describe('デプロイ事前検査', () => {

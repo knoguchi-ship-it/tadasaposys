@@ -413,6 +413,7 @@ npm run deploy
 - ESM import は原本では importmap 経由（ブラウザ内 Babel）、本番はビルドで同梱（ADR-013）。新しい外部ライブラリを足すときは `package.json` に版固定で追加し、原本の importmap と揃える
 - Tailwind のクラス名は文字列連結で組み立てない（本番ビルドは静的走査のため欠ける）。完全なクラス名を書く
 - 外部 CDN から実行時に読むスクリプトには SRI（`integrity`）を付ける
+- 絵文字など BMP 外の文字（U+10000 以上）は JS の文字列内だけで使い、HTML 部分には書かない。日本語を含む正規表現はリテラルでなく `new RegExp('…')` で書く（GAS 配信で壊れるため。本番ビルドが検査して止める。ADR-013）
 - GAS 関数呼び出しは `google.script.run` 経由（ローカルではモック）
 - 日付フォーマット: `toISOString()` は UTC ずれが出るため `getFullYear()/getMonth()/getDate()` を使用
 - DRY原則を守る。新規処理追加時も既存ヘルパー・既存パターンとの共通化を先に検討する

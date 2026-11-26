@@ -52,6 +52,33 @@ function escapeInline(text, tag) {
   return text.replace(new RegExp('</' + tag, 'gi'), '<\\/' + tag).replace(/<!--/g, '<\\!--');
 }
 
+/** インラインに埋め込む JS/CSS が ASCII だけで書かれていることを確かめる（GAS 配信で壊れないように） */
+function assertAscii(text, label) {
+  const m = /[^\x00-\x7f]/.exec(text);
+  if (m) {
+    const ctx = text.slice(Math.max(0, m.index - 30), m.index + 30).replace(/\s+/g, ' ');
+    throw new Error(label + ' に ASCII 以外の文字が残っている（位置 ' + m.index + '）: …' + ctx + '…');
+  }
+  return text;
+}
+
+/**
+ * HTML 全体に BMP 外の文字（絵文字 🔒 など U+10000 以上）が無いことを確かめる。
+ * GAS は配信時にアプリの HTML を外枠ページ（userCodeAppPanel）の JS 文字列へ埋め込むが、BMP 外の文字で
+ * その JS が壊れる（v1.13.0 テストデプロイで「Uncaught SyntaxError: Invalid or unexpected token」。v1.12.13 までは 0 個）。
+ */
+function assertNoAstral(html) {
+  let line = 1;
+  for (const ch of html) {
+    if (ch === '\n') line++;
+    else if (ch.codePointAt(0) > 0xffff) {
+      throw new Error('ビルド結果の ' + line + ' 行目に BMP 外の文字（' + ch + ' U+' + ch.codePointAt(0).toString(16).toUpperCase()
+        + '）がある。GAS の配信で壊れるため、JS では \\u エスケープにし、HTML 部分では使わない');
+    }
+  }
+  return html;
+}
+
 function bundleApp(code) {
   const esbuild = require('esbuild');
   const result = esbuild.buildSync({
@@ -63,7 +90,9 @@ function bundleApp(code) {
     jsx: 'transform',
     minify: true,
     legalComments: 'none',
-    charset: 'utf8',
+    // ASCII 以外（日本語・絵文字）は \uXXXX に置き換える（esbuild の既定）。GAS の HtmlService は
+    // 配信時に ASCII 以外を含むインラインスクリプトを壊すことがある（v1.13.0 テストデプロイで SyntaxError）
+    charset: 'ascii',
     define: { 'process.env.NODE_ENV': '"production"' },
     write: false,
     logLevel: 'silent',
@@ -104,10 +133,10 @@ function sourceHash() {
 function build() {
   const src = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8').replace(/\r\n/g, '\n');
   const app = extractApp(src);
-  const js = escapeInline(bundleApp(app.code), 'script');
+  const js = assertAscii(escapeInline(bundleApp(app.code), 'script'), 'アプリ本体の JS');
 
   // Tailwind はアプリのクラス名を原本全体から走査する
-  const css = escapeInline(buildCss(src), 'style');
+  const css = assertAscii(escapeInline(buildCss(src), 'style'), 'Tailwind の CSS');
 
   let html = src.slice(0, app.start)
     + '<!-- アプリ本体（npm run build で事前変換・React 18.2.0 同梱） -->\n  <script>' + js + '</script>'
@@ -120,6 +149,8 @@ function build() {
   for (const bad of ['text/babel', 'cdn.tailwindcss.com', 'babel.min.js', 'type="importmap"', 'esm.sh/']) {
     if (html.includes(bad)) throw new Error('ビルド結果に開発用の参照が残っている: ' + bad);
   }
+
+  assertNoAstral(html);
 
   const hash = sourceHash();
   html = html.replace('<head>', '<head>\n  <!-- build: source-sha256=' + hash + ' -->');
@@ -155,4 +186,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { build, isDistFresh, sourceHash, stripDevOnly, extractApp, escapeInline };
+module.exports = { build, isDistFresh, sourceHash, stripDevOnly, extractApp, escapeInline, assertAscii, assertNoAstral };

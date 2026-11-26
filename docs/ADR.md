@@ -250,6 +250,7 @@
 - FullCalendar は日程確定モーダル専用のため、初期表示では読み込まず SRI 付きで遅延読込し、アイドル時に先読みする。
 - `doGet` はシートを読まずに HTML を即返し（`createHtmlOutputFromFile`）、ページ先頭の素の script が `google.script.run.getInitialData()` を最初に発行する。シート読込と画面資源の読込・初期化が並行する。
 - E2E は既定で `dist/` を検証する（出荷物を試験する）。デプロイは検査付きの `npm run deploy` に一本化する。
+- **インライン JS は ASCII だけで出力する**（esbuild `charset: 'ascii'`。日本語・絵文字は `\uXXXX` / `\u{...}`）。ビルドは、アプリ本体の JS・CSS に ASCII 以外の文字が残るか、HTML 全体に BMP 外の文字（絵文字など U+10000 以上）があれば止まる。理由: GAS は配信時にアプリの HTML を外枠ページ（`userCodeAppPanel`）の JS 文字列へ埋め込み、BMP 外の文字でその JS が壊れる（2026-11-26 テストデプロイで `Uncaught SyntaxError: Invalid or unexpected token`。原因は v1.13.0 で追加した 🔒。v1.12.13 までは BMP 外の文字が 0 個だった）。esbuild は正規表現リテラル内の文字をエスケープしないため、日本語を含む正規表現は原本で `new RegExp('…')` と書く。
 
 **長所:**
 - ローカル実測で初回表示 2,341ms → 629ms（-73%）、転送 約5.1MB → 約0.76MB（-85%）。E2E 全体の所要時間も 3.3分 → 2.2分
