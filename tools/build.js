@@ -47,9 +47,25 @@ function extractApp(html) {
   return { start: marker, end: close + '</script>'.length, code: html.slice(bodyStart, close), markerEnd };
 }
 
-/** インラインに埋め込む JS/CSS が HTML の終了タグとして解釈されないようにする */
+/**
+ * インラインに埋め込む JS/CSS が HTML のタグとして解釈されないようにする。
+ * - `</script` → `<\/script`、`<!--` → `<\!--`（HTML の終了タグ・コメントとして読まれない）
+ * - JS の `<script`（開始タグの形）→ `\x3Cscript`。GAS は配信時に HTML 中の `<script` すべてへ
+ *   `nonce="…"` を書き足すため、React 同梱の文字列 "<script><\/script>" の中に `"` が差し込まれて
+ *   JS が壊れる（2026-11-26 テストデプロイで Uncaught SyntaxError）。`\x3C` は文字列・テンプレート・
+ *   正規表現のどれの中でも `<` と同じ意味になる
+ */
 function escapeInline(text, tag) {
-  return text.replace(new RegExp('</' + tag, 'gi'), '<\\/' + tag).replace(/<!--/g, '<\\!--');
+  let out = text.replace(new RegExp('</' + tag, 'gi'), '<\\/' + tag).replace(/<!--/g, '<\\!--');
+  if (tag === 'script') out = out.replace(/<(script)/gi, '\\x3C$1'); // 大文字小文字は元のまま
+  return out;
+}
+
+/** インライン JS に `<script` / `</script` の形が残っていないことを確かめる（GAS の nonce 付与で壊れないように） */
+function assertNoScriptTagInJs(js) {
+  const m = /<\/?script/i.exec(js);
+  if (m) throw new Error('アプリ本体の JS に「' + m[0] + '」が残っている（位置 ' + m.index + '）。GAS の配信で壊れる');
+  return js;
 }
 
 /** インラインに埋め込む JS/CSS が ASCII だけで書かれていることを確かめる（GAS 配信で壊れないように） */
@@ -133,7 +149,7 @@ function sourceHash() {
 function build() {
   const src = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8').replace(/\r\n/g, '\n');
   const app = extractApp(src);
-  const js = assertAscii(escapeInline(bundleApp(app.code), 'script'), 'アプリ本体の JS');
+  const js = assertNoScriptTagInJs(assertAscii(escapeInline(bundleApp(app.code), 'script'), 'アプリ本体の JS'));
 
   // Tailwind はアプリのクラス名を原本全体から走査する
   const css = assertAscii(escapeInline(buildCss(src), 'style'), 'Tailwind の CSS');
@@ -186,4 +202,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { build, isDistFresh, sourceHash, stripDevOnly, extractApp, escapeInline, assertAscii, assertNoAstral };
+module.exports = { build, isDistFresh, sourceHash, stripDevOnly, extractApp, escapeInline, assertAscii, assertNoAstral, assertNoScriptTagInJs };

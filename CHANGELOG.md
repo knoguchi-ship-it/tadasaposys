@@ -28,10 +28,10 @@
 - E2E は既定で `dist/` を検証（`E2E_TARGET=src` で原本）。
 - HANDOVER の「現在地」行で本番未反映を表せるようにした（`本番 @nn（vA.B.C）`）。
 - `.gitignore` に `dist/`、`.claspignore` に `dist/**`。
-- **ビルドの文字制約（2026-11-26 テストデプロイで発見）**: GAS の配信で BMP 外の文字（v1.13.0 で追加した 🔒）が外枠ページの JS を壊し、`Uncaught SyntaxError: Invalid or unexpected token` で起動しなかった。インライン JS を ASCII だけで出力し（esbuild `charset: 'ascii'`）、ASCII 以外が JS・CSS に残るか HTML 全体に BMP 外の文字があればビルドを止める。日本語を含む正規表現リテラル2か所（初回メールの相談内容ブロック除去）を `new RegExp('…')` に書き換え（挙動同一）。
+- **GAS 配信で壊れない出力（2026-11-26 テストデプロイで発見）**: ① GAS は配信時に HTML 中のすべての `<script` へ `nonce="…"` を書き足すため、同梱した React の文字列 `"<script><\/script>"` に `"` が差し込まれ `Uncaught SyntaxError: Invalid or unexpected token` で起動しなかった（真因）。インライン JS の `<script` を `\x3Cscript`（大文字小文字は維持）にし、`<script`・`</script` の形が残ればビルドを止める。② 予防（当初は絵文字 🔒 を疑った。真因ではなかったが配信の安全策として残す）: インライン JS を ASCII だけで出力し（esbuild `charset: 'ascii'`）、ASCII 以外が JS・CSS に残るか HTML 全体に BMP 外の文字があればビルドを止める。日本語を含む正規表現リテラル2か所（初回メールの相談内容ブロック除去）を `new RegExp('…')` に書き換え（挙動同一）。
 
 ### Tests
-- 単体: `build-deploy.test.js`（9件）・監査ログ伏せ字化 `redactAuditCell`（4件）・移行計画 `planSecretMigration`（3件）・check-sync 1件・guard 1行追加（116 → 133件）。ASCII 出力の検査は、旧設定（`charset: 'utf8'`）で失敗・正しい設定で合格を確認。伏せ字化を壊すと失敗・戻すと合格を確認。
+- 単体: `build-deploy.test.js`（11件）・監査ログ伏せ字化 `redactAuditCell`（4件）・移行計画 `planSecretMigration`（3件）・check-sync 1件・guard 1行追加（116 → 135件）。ASCII 出力の検査は旧設定（`charset: 'utf8'`）で、`<script` 無害化の検査は無害化を外したコードで、それぞれ失敗・正しいコードで合格を確認。伏せ字化を壊すと失敗・戻すと合格を確認。
 - E2E: `13-secret-settings.spec.ts`（4件。68 → 72件）。password 表示を text にした壊れたコードで失敗・正しいコードで合格を確認。全72件を `dist/` で合格。
 
 ### Docs

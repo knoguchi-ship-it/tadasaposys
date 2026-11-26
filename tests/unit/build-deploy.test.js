@@ -4,7 +4,7 @@
 
 'use strict';
 
-const { stripDevOnly, extractApp, escapeInline, assertAscii, assertNoAstral } = require('../../tools/build');
+const { stripDevOnly, extractApp, escapeInline, assertAscii, assertNoAstral, assertNoScriptTagInJs } = require('../../tools/build');
 const { preflight } = require('../../tools/deploy');
 
 describe('本番ビルド', () => {
@@ -38,6 +38,22 @@ describe('本番ビルド', () => {
     expect(escapeInline('a</STYLE>b', 'style')).toBe('a<\\/style>b');
   });
 
+  test('JS 内の <script（開始タグの形）を \\x3Cscript にし、評価結果は元の文字列と同じ（GAS の nonce 付与で壊れない）', () => {
+    const src = 'e.innerHTML="<script><\\/script>";var r=/<SCRIPT/i;var t=`<script>`;';
+    const out = escapeInline(src, 'script');
+    expect(out).not.toMatch(/<\/?script/i);
+    expect(() => assertNoScriptTagInJs(out)).not.toThrow();
+    const run = (code) => { const e = {}; return new Function('e', code + 'return [e.innerHTML, r.source, t];')(e); };
+    expect(run(out)).toEqual([ '<script></script>', '\\x3CSCRIPT', '<script>' ]);
+    expect(run(out)[0]).toBe(run(src)[0]);
+    expect(new RegExp(run(out)[1], 'i').test('<script')).toBe(true);
+  });
+
+  test('JS に <script / </script の形が残っていたらビルドを止める', () => {
+    expect(() => assertNoScriptTagInJs('x="<script>"')).toThrow('<script');
+    expect(() => assertNoScriptTagInJs('x="</SCRIPT>"')).toThrow('</SCRIPT');
+  });
+
   test('インライン JS/CSS に ASCII 以外の文字が残っていたらビルドを止める（GAS 配信で壊れるため）', () => {
     expect(assertAscii('const a="\\u3042";', 'JS')).toBe('const a="\\u3042";');
     expect(() => assertAscii('const a="あ";', 'JS')).toThrow('ASCII 以外');
@@ -60,6 +76,8 @@ describe('本番ビルド', () => {
     expect(js).toContain('\\u30BF\\u30C0\\u30B5\\u30DD'); // 「タダサポ」
     expect(js).toContain('\\u{1F512}'); // 🔒 は \u{...} エスケープになる（ASCII だけ）
     expect(() => assertNoAstral(html)).not.toThrow();
+    expect(js.slice('<script>'.length)).not.toMatch(/<\/?script/i); // React 同梱の "<script><\/script>" も無害化済み
+    expect(js).toContain('\\x3Cscript');
   }, 120000);
 });
 
