@@ -747,6 +747,93 @@ function doGet() {
 }
 
 // ======================================================================
+// v1.13.0 計測: 初期データの読み方の比較（読むだけ。書き込みなし）
+// ======================================================================
+
+/** 起動時に読むシート（getInitialData が読む順） */
+function initialDataSheetNames_() {
+  return [SHEET_NAMES.STAFF, SHEET_NAMES.CASES, SHEET_NAMES.RECORDS, SHEET_NAMES.CASES_MANUAL,
+    SHEET_NAMES.SETTINGS, SHEET_NAMES.CASES_OVERRIDE, SHEET_NAMES.ANNUAL_ADJUST, SHEET_NAMES.CHAT_LINKS,
+    SHEET_NAMES.EMAIL_DRAFTS];
+}
+
+/**
+ * Sheets API values:batchGet の URL を組み立てる（純粋関数）。
+ * シート名は A1 表記の引用符で囲み（' は '' に）、URL エンコードする。値は書式なし・日時はシリアル値で受け取る。
+ */
+function buildBatchGetUrl_(spreadsheetId, sheetNames) {
+  let ranges = sheetNames.map(function(n) {
+    return 'ranges=' + encodeURIComponent("'" + String(n).replace(/'/g, "''") + "'");
+  }).join('&');
+  return 'https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(spreadsheetId)
+    + '/values:batchGet?' + ranges + '&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER';
+}
+
+/**
+ * 計測用（管理者が GAS エディタから実行。結果は実行ログ）。
+ * 起動時に読むシートを ① Sheets API の一括読込（1回の通信）と ② 現行の SpreadsheetApp（シートごと）で読み、
+ * 所要時間と行数を比べる。あわせて全シートの行数・列数（グリッドの大きさ）を出す（DB の重さの把握用）。
+ * 値そのものはログに出さない。冷えた状態と温まった状態を比べるため、時間をおいて2回実行する。
+ */
+function perfProbeSheetsApi() {
+  // 管理者確認は計測の後に行う（先に行うと DB が開かれ、冷えた状態を測れない）。
+  // 読むのは実行者が元々読めるデータだけで、値は返さず出力もしない。
+  let id = getSpreadsheetId_();
+  let names = initialDataSheetNames_();
+  let headers = { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() };
+  let result = { api: {}, spreadsheetApp: {}, rows: {}, sheets: [] };
+
+  // ① Sheets API（先に実行し、冷えた状態の値を取る）
+  let t = Date.now();
+  let res = UrlFetchApp.fetch(buildBatchGetUrl_(id, names), { headers: headers, muteHttpExceptions: true });
+  result.api.batchGetMs = Date.now() - t;
+  result.api.status = res.getResponseCode();
+  let apiRows = {};
+  if (result.api.status === 200) {
+    let body = JSON.parse(res.getContentText());
+    (body.valueRanges || []).forEach(function(vr, i) { apiRows[names[i]] = (vr.values || []).length; });
+    result.api.bytes = res.getContentText().length;
+  } else {
+    result.api.error = res.getContentText().slice(0, 300);
+  }
+
+  // ② 現行（SpreadsheetApp。シートごとに読む）
+  t = Date.now();
+  let ss = SpreadsheetApp.openById(id);
+  result.spreadsheetApp.openMs = Date.now() - t;
+  let total = result.spreadsheetApp.openMs;
+  names.forEach(function(n) {
+    let t1 = Date.now();
+    let sh = ss.getSheetByName(n);
+    let rows = sh ? sh.getDataRange().getValues().length : 0;
+    let ms = Date.now() - t1;
+    total += ms;
+    result.spreadsheetApp[n] = ms;
+    result.rows[n] = { spreadsheetApp: rows, api: apiRows[n] };
+  });
+  result.spreadsheetApp.totalMs = total;
+
+  // 全シートのグリッドの大きさ（値は読まない）
+  t = Date.now();
+  let meta = UrlFetchApp.fetch('https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(id)
+    + '?fields=' + encodeURIComponent('sheets(properties(title,gridProperties(rowCount,columnCount)))'),
+    { headers: headers, muteHttpExceptions: true });
+  result.metaMs = Date.now() - t;
+  if (meta.getResponseCode() === 200) {
+    (JSON.parse(meta.getContentText()).sheets || []).forEach(function(s) {
+      let g = s.properties.gridProperties || {};
+      result.sheets.push({ title: s.properties.title, rows: g.rowCount, cols: g.columnCount, cells: (g.rowCount || 0) * (g.columnCount || 0) });
+    });
+    result.sheets.sort(function(a, b) { return b.cells - a.cells; });
+    result.totalCells = result.sheets.reduce(function(a, s) { return a + s.cells; }, 0);
+  }
+
+  requireAdmin_();
+  console.log(JSON.stringify(result, null, 1));
+  return result;
+}
+
+// ======================================================================
 // 初期データ取得
 // ======================================================================
 function getInitialData() {

@@ -362,7 +362,17 @@ function schemaMigrationNeeded(appliedProp, cachedVersion, currentVersion) {
     && String(cachedVersion == null ? '' : cachedVersion).trim() !== cur;
 }
 
+// コード.js: buildBatchGetUrl_()（v1.13.0 計測）
+function buildBatchGetUrl(spreadsheetId, sheetNames) {
+  var ranges = sheetNames.map(function(n) {
+    return 'ranges=' + encodeURIComponent("'" + String(n).replace(/'/g, "''") + "'");
+  }).join('&');
+  return 'https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(spreadsheetId)
+    + '/values:batchGet?' + ranges + '&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER';
+}
+
 module.exports = {
+  buildBatchGetUrl,
   getFiscalYear,
   caseFiscalYear,
   canonicalNaturalKey,

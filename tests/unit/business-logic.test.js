@@ -33,6 +33,7 @@ const {
   planSecretMigration,
   normalizeSpreadsheetId,
   schemaMigrationNeeded,
+  buildBatchGetUrl,
 } = require('./src/pure-functions');
 
 // ============================================================
@@ -820,5 +821,17 @@ describe('schemaMigrationNeeded（スキーマ移行確認の要否）', () => {
   test('どちらも無い・古い版なら必要（版を上げると1回だけ走る）', () => {
     expect(schemaMigrationNeeded(undefined, null, '6')).toBe(true);
     expect(schemaMigrationNeeded('6', '6', '7')).toBe(true);
+  });
+});
+
+// ── v1.13.0: 計測用 Sheets API 一括読込の URL ──
+describe('buildBatchGetUrl（Sheets API values:batchGet の URL）', () => {
+  test('シート名を引用符で囲んで URL エンコードし、書式なし・シリアル日時で受け取る', () => {
+    const url = buildBatchGetUrl('dummy-id', ['タダメンマスタ', "O'Brien"]);
+    expect(url.startsWith('https://sheets.googleapis.com/v4/spreadsheets/dummy-id/values:batchGet?')).toBe(true);
+    const ranges = new URL(url).searchParams.getAll('ranges');
+    expect(ranges).toEqual(["'タダメンマスタ'", "'O''Brien'"]);
+    expect(url).toContain('valueRenderOption=UNFORMATTED_VALUE');
+    expect(url).toContain('dateTimeRenderOption=SERIAL_NUMBER');
   });
 });
