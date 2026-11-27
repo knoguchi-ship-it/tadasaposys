@@ -292,7 +292,120 @@ function buildChatThreadUrl(threadName) {
   return m ? 'https://chat.google.com/room/' + m[1] + '/' + m[2] + '/' + m[2] : null;
 }
 
+/**
+ * コード.js: redactAuditCell_()
+ * 監査ログの JSON セル1つから秘密情報を伏せ字にする（v1.13.0）。純粋関数。
+ * - JSON オブジェクトなら、秘密情報キーの値だけを '[REDACTED]' にする（'(設定済み)' 等の状態表記は残す）
+ * - JSON でない・オブジェクトでない場合は、既知の秘密値（8文字以上）を部分一致で伏せる
+ * 返り値は書き換え後の文字列（変化なしなら元の文字列）。
+ */
+function redactAuditCell(cell, secretKeys, secretValues) {
+  var text = String(cell == null ? '' : cell);
+  if (!text) return text;
+  var obj = null;
+  try { obj = JSON.parse(text); } catch (e) { obj = null; }
+  if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+    var changed = false;
+    secretKeys.forEach(function(k) {
+      if (!Object.prototype.hasOwnProperty.call(obj, k)) return;
+      var v = obj[k];
+      if (v === '' || v === null || v === '[REDACTED]' || /^\(.*\)$/.test(String(v))) return;
+      obj[k] = '[REDACTED]';
+      changed = true;
+    });
+    return changed ? JSON.stringify(obj) : text;
+  }
+  var next = text;
+  (secretValues || []).forEach(function(v) {
+    if (v && String(v).length >= 8) next = next.split(String(v)).join('[REDACTED]');
+  });
+  return next;
+}
+
+/**
+ * コード.js: planSecretMigration_()
+ * 秘密情報の移行計画を立てる（純粋関数・v1.13.0）。本物の値を絶対に失わないことを最優先にする。
+ *   シート空                      → 何もしない
+ *   プロパティ空                  → move（プロパティへコピーし、シートを空にする）
+ *   プロパティ＝シート            → blank（プロパティは既に同じ値。シートだけ空にする）
+ *   プロパティ≠シート（食い違い） → conflict（どちらが正しいか機械では決めない。両方残し、管理者に知らせる）
+ * 返り値: { move: [key], blank: [key], conflict: [key] }（move のキーは blank にも含める）
+ */
+function planSecretMigration(sheetVals, propVals, keys) {
+  var out = { move: [], blank: [], conflict: [] };
+  keys.forEach(function(k) {
+    var s = String((sheetVals || {})[k] == null ? '' : sheetVals[k]).trim();
+    var p = String((propVals || {})[k] == null ? '' : propVals[k]).trim();
+    if (!s) return;
+    if (!p) { out.move.push(k); out.blank.push(k); return; }
+    if (p === s) { out.blank.push(k); return; }
+    out.conflict.push(k);
+  });
+  return out;
+}
+
+// コード.js: normalizeSpreadsheetId_()（v1.13.0）
+// SPREADSHEET_ID プロパティの値を ID に正規化。URL が貼られても ID を取り出す。空なら ''、ID の形でなければ null。
+function normalizeSpreadsheetId(raw) {
+  var s = String(raw == null ? '' : raw).trim();
+  if (!s) return '';
+  var m = s.match(/\/spreadsheets\/d\/([A-Za-z0-9_-]+)/);
+  if (m) s = m[1];
+  return /^[A-Za-z0-9_-]{20,}$/.test(s) ? s : null;
+}
+
+// コード.js: schemaMigrationNeeded_()（v1.13.0）
+// 永続記録（スクリプトプロパティ）か CacheService の印のどちらかが現行版なら移行確認は不要。
+function schemaMigrationNeeded(appliedProp, cachedVersion, currentVersion) {
+  var cur = String(currentVersion);
+  return String(appliedProp == null ? '' : appliedProp).trim() !== cur
+    && String(cachedVersion == null ? '' : cachedVersion).trim() !== cur;
+}
+
+// コード.js: buildBatchGetUrl_()（v1.13.0 計測）
+function buildBatchGetUrl(spreadsheetId, sheetNames) {
+  var ranges = sheetNames.map(function(n) {
+    return 'ranges=' + encodeURIComponent("'" + String(n).replace(/'/g, "''") + "'");
+  }).join('&');
+  return 'https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(spreadsheetId)
+    + '/values:batchGet?' + ranges + '&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER';
+}
+
+// コード.js: planStaffDefaults_()（v1.13.0）
+// メールがある行だけ ROLE 空欄→'staff'、IS_ACTIVE 空欄→'true'。メールの無い行は触らない。
+// IDX.STAFF: NAME:1, EMAIL:2, ROLE:3, IS_ACTIVE:4
+function planStaffDefaults(rows) {
+  var STAFF = { EMAIL: 2, ROLE: 3, IS_ACTIVE: 4 };
+  var out = { role: [], active: [], roleChanged: false, activeChanged: false };
+  (rows || []).forEach(function(r) {
+    var hasEmail = String(r[STAFF.EMAIL] || '').trim() !== '';
+    var role = r[STAFF.ROLE], active = r[STAFF.IS_ACTIVE];
+    if (hasEmail && !String(role == null ? '' : role).trim()) { role = 'staff'; out.roleChanged = true; }
+    if (hasEmail && String(active == null ? '' : active).trim() === '') { active = 'true'; out.activeChanged = true; }
+    out.role.push([role == null ? '' : role]);
+    out.active.push([active == null ? '' : active]);
+  });
+  return out;
+}
+
+// コード.js: parseRangeSpec_() / isWithinKeepWarmWindow_()（v1.13.0 DB の温め）
+function parseRangeSpec(spec, defLo, defHi, min, max) {
+  var m = String(spec == null ? '' : spec).trim().match(/^(\d{1,2})\s*-\s*(\d{1,2})$/);
+  if (!m) return [defLo, defHi];
+  var lo = parseInt(m[1], 10), hi = parseInt(m[2], 10);
+  if (lo < min || hi > max || lo > hi) return [defLo, defHi];
+  return [lo, hi];
+}
+function isWithinKeepWarmWindow(hour, isoDay, hoursSpec, daysSpec) {
+  var h = parseRangeSpec(hoursSpec, 8, 20, 0, 24);
+  var d = parseRangeSpec(daysSpec, 1, 7, 1, 7);
+  return hour >= h[0] && hour < h[1] && isoDay >= d[0] && isoDay <= d[1];
+}
+
 module.exports = {
+  isWithinKeepWarmWindow,
+  planStaffDefaults,
+  buildBatchGetUrl,
   getFiscalYear,
   caseFiscalYear,
   canonicalNaturalKey,
@@ -316,4 +429,8 @@ module.exports = {
   normalizeSubmittedAtLabel,
   chatLinkKey,
   buildChatThreadUrl,
+  redactAuditCell,
+  planSecretMigration,
+  normalizeSpreadsheetId,
+  schemaMigrationNeeded,
 };

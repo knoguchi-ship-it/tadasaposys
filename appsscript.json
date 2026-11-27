@@ -11,6 +11,11 @@
         "userSymbol": "Calendar",
         "version": "v3",
         "serviceId": "calendar"
+      },
+      {
+        "userSymbol": "Sheets",
+        "version": "v4",
+        "serviceId": "sheets"
       }
     ]
   },
@@ -27,7 +32,7 @@
   "exceptionLogging": "STACKDRIVER",
   "runtimeVersion": "V8",
   "executionApi": {
-    "access": "ANYONE"
+    "access": "MYSELF"
   },
   "webapp": {
     "executeAs": "USER_ACCESSING",

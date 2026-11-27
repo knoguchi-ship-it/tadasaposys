@@ -30,6 +30,9 @@ Thumbs.db
 .playwright-mcp/
 .mcp.json
 
+# 本番ビルド成果物（npm run build で生成。Git で追跡しない。clasp は rootDir=dist で push）
+dist/
+
 # Test output（自動生成物。Git で追跡しない）
 output/
 playwright-report/

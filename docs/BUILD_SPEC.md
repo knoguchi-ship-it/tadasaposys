@@ -2,11 +2,17 @@
 
 **Document ID:** BSD-001
 **Version:** 2.1（単独完結・人間可読版／実コード照合済み）
-**対象システムバージョン:** v1.12.4
+**対象システムバージョン:** v1.12.4（v1.13.0 の差分は直下の追補を参照）
 **Date:** 2026/06/07
 **Status:** Released
 
 ---
+
+> **v1.13.0 追補（2026/11/25）— 本書は v1.12.4 時点の記述が基本です。次の点は v1.13.0 で変わりました（詳細は `docs/ADR.md` ADR-013・ADR-014、手順は `docs/RUNBOOK.md`）。**
+> - **ビルド工程あり**: 原本 `index.html` から `npm run build` で `dist/` を作り、clasp は `dist/` を push する（`.clasp.json` の `rootDir: "dist"`）。デプロイは `npm run deploy`（検査付き）。本番は Babel・esm.sh・Tailwind CDN を使わない（§4.2(1) の「ビルド工程を持たない」は原本＝開発時のみ当てはまる）。
+> - **`SPREADSHEET_ID` はスクリプトプロパティ**（コードに書かない）。Zoom の秘密情報（Account ID・Client ID・Client Secret・固定 URL・パスコード）も**スクリプトプロパティに書込専用**で、設定シートには入力しない。
+> - **起動**: `doGet` は HTML を即返し、初期データはページ先頭で先行取得（`window.__INITIAL_DATA__` の埋め込みは廃止）。案件データにメール履歴は含めない。
+> - `appsscript.json` の `executionApi.access` は `MYSELF`。他サイトへの iframe 埋め込みは不可。
 
 ## この文書について
 
@@ -322,9 +328,9 @@ HISTORY 列（過去回の記録）は、1回分が次の形の JSON エント�
 
 ### 6.1 起動・データ取得
 
-- **`doGet()`** — Web App の入口。HTML を返す際に初期データを `window.__INITIAL_DATA__` として埋め込み、初回通信を1往復減らして高速化します。
+- **`doGet()`** — Web App の入口。v1.13.0〜 シートを読まずに HTML を即返し、初期データはページ先頭の script が `getInitialData()` を先行取得します（シート読込と画面の準備が並行）。
 - **`getInitialData()`** — 起動時にユーザー情報・案件・マスタ・下書き有無・強制CCをまとめて返す。このとき**スキーマの自動移行**（不足列や新シートの追補）も行います。
-- **`getAllCasesJoined()`** — 案件リスト＋手動追加＋補正＋サポート記録＋メール履歴を結合し、削除済みを除外して返す。各案件に「今年度の累計利用回数」を付けます。
+- **`getAllCasesJoined()`** — 案件リスト＋手動追加＋補正＋サポート記録を結合し（v1.13.0〜 メール履歴は含めない）、削除済みを除外して返す。各案件に「今年度の累計利用回数」を付けます。
 - **`getMasters()`** — 対応方法・事業種別・都道府県・スタッフ一覧・上限値・対応ツール・メールテンプレート等のマスタを返す。
 - **`getStaffByEmail(email)`** — メールからスタッフ情報を引く。
 
@@ -421,11 +427,11 @@ clasp login
 ```
 `.clasp.json` の中身：
 ```json
-{ "scriptId": "<SCRIPT_ID>", "rootDir": "." }
+{ "scriptId": "<SCRIPT_ID>", "rootDir": "dist" }
 ```
 GAS エディタ側で：
 1. 「サービス」＋ から **Gmail API v1**（userSymbol を `Gmail`）と **Google Calendar API v3**（`Calendar`）を追加する。
-2. `コード.js` の `SPREADSHEET_ID` を `<SPREADSHEET_ID>` に書き換える。
+2. 「プロジェクトの設定 → スクリプト プロパティ」に `SPREADSHEET_ID` = `<SPREADSHEET_ID>` を追加する（v1.13.0〜。コードには書かない）。
 3. `appsscript.json` を次の内容にする（タイムゾーン・サービス・スコープ・Web App 設定）：
 ```json
 {
@@ -445,17 +451,19 @@ GAS エディタ側で：
     "openid"
   ],
   "runtimeVersion": "V8",
+  "executionApi": { "access": "MYSELF" },
   "webapp": { "executeAs": "USER_ACCESSING", "access": "DOMAIN" }
 }
 ```
 
 ### 段階4：コード配置とプッシュ
 - 配置するファイルは `index.html` / `コード.js` / `appsscript.json` の3つのみ。`src/` は作らない、`temp/` は配布しない。
-- `.claspignore` に `node_modules/` 等が含まれることを確認してから：
+- v1.13.0〜 本番用は `npm ci` → `npm run build` で `dist/` を作り、`dist/` を push する（`.clasp.json` の `rootDir: "dist"`）：
   ```
+  npm ci && npm run build
   clasp push --force
   ```
-  `--force` を付けないと、まれに変更がサイレントにスキップされます。
+  `--force` を付けないと、まれに変更がサイレントにスキップされます。初回以降のデプロイは `npm run deploy`（§8）。
 
 ### 段階5：初期セットアップ関数の実行
 GAS エディタの実行ボタンから順に実行します。
@@ -502,29 +510,24 @@ npm test            # Playwright E2E
 ### 8.2 デプロイ手順
 
 ```bash
-# 0. appsscript.json の webapp が USER_ACCESSING / DOMAIN か確認
-# 1. 先に git commit（clasp pull でローカルが上書きされる事故を防ぐ）
-git add index.html コード.js appsscript.json
-git commit -m "feat: vX.X.X - 説明"
-
-# 2. GAS にプッシュ（--force 必須）
-clasp push --force
-
-# 3. 固定 deploymentId へバージョンアップ（初回のみ -i なしで新規発番）
-clasp deploy -i <DEPLOYMENT_ID> -d "vX.X.X"
+# v1.13.0〜 検査付きの npm run deploy に一本化（初回の新規発番だけは clasp deploy を -i なしで1回）
+# 準備: .clasp.json の rootDir=dist、.clasp.deploy.json に {"production": "<DEPLOYMENT_ID>"}、
+#       スクリプトプロパティ SPREADSHEET_ID
+git switch master && git pull && npm ci
+npm run deploy   # 検査 → テスト → ビルド → 確認入力 → clasp push --force → clasp deploy -i <DEPLOYMENT_ID>
 
 # 4. GAS デプロイ管理画面で「実行=アクセスしているユーザー / アクセス=ドメイン内全員」を目視確認
 ```
 
 ### 8.3 ロールバック
 
-GAS のデプロイはバージョン管理されています。GAS エディタの「デプロイを管理」から、対象デプロイの「バージョンを編集」で過去バージョンに戻せます。git で戻す場合は、過去コミットの `index.html` / `コード.js` をチェックアウトして `clasp push --force` → 固定 deploymentId でデプロイし、その後ローカルを元に戻します。
+GAS のデプロイはバージョン管理されています。GAS エディタの「デプロイを管理」から、対象デプロイの「バージョンを編集」で過去バージョンに戻せます。git で戻す場合は、`git revert` で取り消しコミットを作り `npm run deploy` で出し直します（v1.13.0〜）。
 
 ### 8.4 よくある障害と対処
 
 | 症状 | 確認・対処 |
 |------|-----------|
-| アプリが起動しない（白画面） | GAS で `doGet` / `getInitialData()` を直接実行しエラーを確認。`SPREADSHEET_ID` の誤り、設定シート未作成（→`setupSettingsSheet()`）、Advanced Service 未有効化が典型 |
+| アプリが起動しない（白画面） | GAS で `doGet` / `getInitialData()` を直接実行しエラーを確認。スクリプトプロパティ `SPREADSHEET_ID` の未設定・誤り、`.clasp.json` の `rootDir` が `dist` でない、設定シート未作成（→`setupSettingsSheet()`）、Advanced Service 未有効化が典型 |
 | ログインできない | アクセス中のメールがタダメンマスタ C列にあるか、D列（ROLE）と E列（IS_ACTIVE=true）が正しいか確認 |
 | メールが送られない | `MAIL_DRY_RUN` が true でないか、Gmail Advanced Service が有効か、実行ログのエラーを確認 |
 | カレンダー連携が動かない | Calendar Advanced Service の有効化、`SHARED_CALENDAR_ID`、対象カレンダーの編集権限を確認 |
@@ -654,12 +657,12 @@ Web App の設定は**必ず `executeAs: USER_ACCESSING` / `access: DOMAIN`** �
 | キー | 必須 | 説明 |
 |------|------|------|
 | `ADMIN_EMAILS` | 任意 | 管理者メール（後方互換。現在は ROLE=admin を優先） |
-| `ZOOM_ACCOUNT_ID` / `ZOOM_CLIENT_ID` / `ZOOM_CLIENT_SECRET` | 任意 | Zoom Server-to-Server OAuth（**機密**。設定シートで管理） |
+| `ZOOM_ACCOUNT_ID` / `ZOOM_CLIENT_ID` / `ZOOM_CLIENT_SECRET` | 任意 | Zoom Server-to-Server OAuth（**機密**。v1.13.0〜 スクリプトプロパティに書込専用・管理画面から設定。シートに入力しない） |
 | `SHARED_CALENDAR_ID` | 任意 | 共有カレンダーID（空ならデフォルト） |
 | `TEAM_CALENDAR_ID` | 任意 | Zoom 予約・日程確定の書込先（重複検知の基準） |
 | `DISPLAY_CALENDARS_JSON` | 任意 | 重複監視する読取専用カレンダー |
 | `SCHEDULE_BUFFER_MIN` | 任意 | 重複判定で前後に確保するバッファ（分、既定30） |
-| `ZOOM_FIXED_URL` / `ZOOM_FIXED_ID` / `ZOOM_FIXED_PASS` | 任意 | 「いつものタダスクID」固定Zoom |
+| `ZOOM_FIXED_URL` / `ZOOM_FIXED_ID` / `ZOOM_FIXED_PASS` | 任意 | 「いつものタダスクID」固定Zoom（URL・パスコードは v1.13.0〜 スクリプトプロパティ・書込専用） |
 | `ATTACHMENT_FOLDER_ID` | 実質必須 | 添付保存先ドライブフォルダID |
 | `MAIL_FORCE_CC` | 任意 | 全メールに自動付与するCC（カンマ区切り） |
 | `ANNUAL_USAGE_LIMIT` | 任意 | 年間利用上限（既定10） |

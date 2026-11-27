@@ -10,7 +10,7 @@
 
 介護事業所向け無料 IT サポート管理システム。GAS 上の React SPA で、Google スプレッドシートをデータストアとして使用。
 
-- **現行バージョン:** v1.12.13
+- **現行バージョン:** v1.13.0
 - **詳細設計（仕様の正本）:** `docs/SDD.md`
 - **引き継ぎ書:** `docs/HANDOVER.md`
 - **運用手順:** `docs/RUNBOOK.md`
@@ -21,15 +21,19 @@
 ## ファイル構成（厳守）
 
 ```
-index.html      — フロントエンド（React SPA、Babel in-browser、モックデータ含む単一ファイル）
+index.html      — フロントエンドの原本（React SPA、モックデータ含む単一ファイル。開発時はブラウザ内 Babel で動く）
 コード.js        — バックエンド（GAS サーバーサイド）
 appsscript.json — GASマニフェスト
+dist/           — 本番ビルド成果物（npm run build が生成。Git 対象外。clasp はここを push。ADR-013）
+tools/          — ビルド・デプロイ・同期チェック（build.js / deploy.js / check-sync.js）
 AI_RULES.md     — 本ファイル（AI 共通ルールの正本）
 CLAUDE.md / AGENTS.md — 各エージェントの入口（本ファイルを読ませるだけ。ルールを書かない）
 ```
 
-- `src/` フォルダは廃止済み。**絶対に作らないこと**
+- `src/` フォルダは廃止済み。**絶対に作らないこと**。アプリの原本は `index.html` 1ファイルのまま（分割しない）
 - 新規ファイル追加は原則不要。上記2ファイル（`index.html` / `コード.js`）を編集する
+- `dist/` は手で編集しない（毎回 `npm run build` で作り直す）
+- 原本 `index.html` の目印コメント（`build:dev-only`・`build:css`・`build:app`）を消さない。開発専用の CDN・Babel・importmap は `build:dev-only` の内側に置く
 - `temp/` 配下はローカルバックアップ・GAS上の残存スタブ確認用。**Git追跡・clasp push対象から除外し、今後追わないこと**
 
 ---
@@ -97,6 +101,7 @@ git add / git commit                             # ローカルの記録（push 
 
 ```bash
 clasp push            # 本番 GAS のコードを書き換える
+npm run deploy        # 上記をまとめて実行する（人が端末で実行する）
 clasp deploy          # 本番 Webapp を更新する
 git push              # 公開リポジトリ（GitHub PUBLIC）へ出す
 ```
@@ -121,7 +126,7 @@ clasp pull（未コミット差分がある状態で）      # ローカルの�
 
 ### React 18.2.0 固定（ADR-004）
 
-React 19系を混在させると `Minified React error #31` でクラッシュする。CDN ライブラリには必ず `?deps=react@18.2.0` を付与。
+React 19系を混在させると `Minified React error #31` でクラッシュする。本番は `package.json` の版固定（`react@18.2.0`・`react-dom@18.2.0`・`lucide-react@0.330.0`、`--save-exact`）でビルドに同梱する。版を上げる変更は ADR を伴う。開発用の原本の importmap では、CDN ライブラリに必ず `?deps=react@18.2.0` を付与。
 
 ```json
 "imports": {
@@ -151,7 +156,7 @@ IMPORTRANGE 数式を破壊する。管理者による補正は「案件補正�
 
 Webapp 設定は **`executeAs: USER_ACCESSING` / `access: DOMAIN` 固定**。アクセスした本人の権限で実行されるため、実行者がそのまま監査主体になり、権限境界が構造的に守られる。`USER_DEPLOYING`（実行=自分）は監査・権限境界が崩壊し、`ANYONE_WITH_GOOGLE_ACCOUNT` / `ANYONE` はドメイン外流出になるため禁止（過去に「実行=自分 / アクセス=Googleアカウント全員」で運用された事故あり。介護事業所の個人情報を扱うため再発禁止）。
 
-`appsscript.json` の `executionApi.access` は **`MYSELF`** とする（現状 `ANYONE`。是正予定）。
+`appsscript.json` の `executionApi.access` は **`MYSELF`** とする（v1.13.0 で是正済み）。
 
 デプロイは新規作成せず、**固定 deploymentId への `-i` 付き更新のみ**。新規デプロイは Webapp URL を変え、タダメンに案内済みのブックマーク・QR・メールリンクを全て失効させる。GAS エディタでも「新しいデプロイ」ではなく「デプロイを管理 → 既存デプロイの ✏️ 編集 → バージョン: 新バージョン」を使う。
 
@@ -163,7 +168,7 @@ Webapp 設定は **`executeAs: USER_ACCESSING` / `access: DOMAIN` 固定**。ア
 
 仕組み:
 - 導入済み: Claude Code の PreToolUse フック（`.claude/hooks/guard.js`。Bash・PowerShell・MCP の git ツールが対象）。禁止リスト（`-i` なしの `clasp deploy`・`clasp create-deployment`・force push・`--no-verify`・`git reset --hard`・`git clean -f`・未コミット差分がある状態の `clasp pull`）を拒否（exit 2）し、要確認リスト（`clasp push`・`clasp deploy -i`・`git push`）は確認（ask）を求める。文字列照合だけの軽量な判定で、引用符内・ヒアドキュメント本文は対象外。判定は単体テスト `tests/unit/guard.test.js` で保証する
-- 導入予定: デプロイ用スクリプト（`webapp`=USER_ACCESSING/DOMAIN・`executionApi`=MYSELF・作業ツリーがクリーン・テスト合格を検査し、deploymentId はローカルファイルから読んで必ず `-i` 付きで実行。確認省略オプションは設けない）
+- 導入済み: デプロイ用スクリプト `npm run deploy`（`tools/deploy.js`）。`webapp`=USER_ACCESSING/DOMAIN・`executionApi`=MYSELF・作業ツリーがクリーン・`.clasp.json` の `rootDir`=`dist`・テスト合格（単体・check・E2E）を検査し、`dist/` をビルドして、deploymentId は `.clasp.deploy.json` から読んで必ず `-i` 付きで実行する。確認省略オプションはなく、端末で「deploy」と手入力しないと進まない（AI からは実行できない）。PreToolUse フックも `npm run deploy` に確認を求める
 - 導入予定: GitHub `master` のブランチ保護（CI 合格を必須にする）
 
 ### 2. データ保全
@@ -223,7 +228,8 @@ Webapp 設定は **`executeAs: USER_ACCESSING` / `access: DOMAIN` 固定**。ア
 - 導入済み: `.gitignore`（`.clasp.json`・`.clasp.*.json`・認証情報ファイル・`.private-terms.local.txt`）
 - 導入済み: `npm run check` が本番識別子の形式と、ローカルの `.clasp.json`・`.clasp.deploy.json`・`.private-terms.local.txt`（個人名など1行1語。Git 対象外）に書かれた実値の混入を検出する（移行中は警告、`--strict` でエラー）
 - 導入済み: 上記はコミット前検査（pre-commit）でも実行される（移行中は警告のみ）
-- 導入予定: 残存ゼロ達成後は pre-commit・CI を `--strict` にする（残りは `コード.js` の `SPREADSHEET_ID` 定数のみ。PropertiesService 移行で解消）
+- 導入済み: `SPREADSHEET_ID` と秘密情報はスクリプトプロパティ（ADR-014）。秘密情報は書込専用（管理画面・監査ログに値を出さない）
+- 導入予定: 残存ゼロを確認したら pre-commit・CI を `--strict` にする（v1.13.0 でコード上の残存は解消。過去のコミット履歴には残る）
 
 ### 4. 実装品質
 
@@ -265,7 +271,7 @@ DRY原則を守り、共通化できる処理を重複実装しない。新設�
 
 **バージョン同期対象:** `コード.js` 先頭コメント・`index.html`（`<meta name="app-version">`）・`package.json`・`CHANGELOG.md`・本ファイル（`AI_RULES.md`）・`docs/SDD.md`・`docs/HANDOVER.md`・`docs/Manual.md`
 
-**HANDOVER の現在地:** 版・本番デプロイ番号・テスト件数は、`docs/HANDOVER.md` 冒頭の1行「**現在地:** vX.Y.Z / 本番 @nn / 単体 N件 / E2E N件」だけに書く（DRY）。本文の他の箇所に件数・現行版を書き写さず「冒頭の現在地を参照」とする。例外として §1「本番デプロイバージョン: @nn（vX.Y.Z）」と §8 のスペック別件数一覧は維持し、`npm run check` が現在地・実テストと照合する。
+**HANDOVER の現在地:** 版・本番デプロイ番号・テスト件数は、`docs/HANDOVER.md` 冒頭の1行「**現在地:** vX.Y.Z / 本番 @nn / 単体 N件 / E2E N件」だけに書く（DRY）。リポジトリの版が本番より新しい（未反映）間は「本番 @nn（vA.B.C）」と本番の版を併記する。本文の他の箇所に件数・現行版を書き写さず「冒頭の現在地を参照」とする。例外として §1「本番デプロイバージョン: @nn（vX.Y.Z）」と §8 のスペック別件数一覧は維持し、`npm run check` が現在地・実テストと照合する。
 
 **デプロイ記録:** 本番へ反映したら、現在地の行と §1 本番デプロイバージョンを更新する。テストを追加・削除したら、現在地の件数と §8 のスペック一覧を更新する。
 
@@ -335,10 +341,11 @@ CHAT_LINK: { SUBMITTED_AT:0, EMAIL:1, THREAD_NAME:2, MESSAGE_NAME:3, RECORDED_AT
 ## ローカル開発・テスト
 
 ```bash
-npx serve -s . -l 3000          # → http://localhost:3000（モックデータ14パターンで動作）
+npx serve -s . -l 3000          # → http://localhost:3000（原本・ブラウザ内 Babel・モックデータ14パターン）
                                  # 代替: python -m http.server 3000 --directory .
+npm run build                    # 本番ビルド → dist/（npx serve -s dist -l 3000 で本番相当を確認）
 npm run test:unit                # Jest 単体テスト
-npm test                         # Playwright E2E
+npm test                         # Playwright E2E（既定で dist/ をビルドして検証。原本は E2E_TARGET=src）
 npm run check                    # ドキュメント同期チェック
 ```
 
@@ -361,25 +368,24 @@ npm run check                    # ドキュメント同期チェック
 
 理由と禁止設定はグランドルール1を参照。
 
-### デプロイ手順
+### デプロイ手順（v1.13.0〜 `npm run deploy` に一本化。ADR-013）
 
-`clasp push` / `clasp deploy` / `git push` は、実行前にユーザーの確認を得る（コマンド実行ポリシー）。
+本番反映は人が端末で `npm run deploy` を実行する（AI は実行しない。`clasp push` / `clasp deploy` を個別に打たない）。初回だけ次の準備が要る。
 
 ```bash
-# 0. appsscript.json の webapp（USER_ACCESSING / DOMAIN）と .claspignore（node_modules/** 等の除外）を確認
-#    単体テスト・E2E が全て合格していること
+# 準備（初回のみ・各自の手元）
+#  a. .clasp.json に "rootDir": "dist" を設定（Git 対象外のローカルファイル）
+#  b. .clasp.deploy.json に {"production": "<DEPLOYMENT_ID>"}（Git 対象外）
+#  c. GAS「プロジェクトの設定 → スクリプト プロパティ」に SPREADSHEET_ID（ADR-014）
 
-# 1. 必ず先に git commit（clasp pull でローカルが上書きされる対策）
-git add <files> && git commit -m "feat: vX.X.X - 説明"
+# 1. master を最新にし、作業ツリーをクリーンにする（未コミットがあると止まる）
+git switch master && git pull && npm ci
 
-# 2. GAS にプッシュ（--force 必須。なしだとサイレントスキップが起きる場合がある）
-clasp push --force
+# 2. 検査付きデプロイ（単体・check・E2E → ビルド → 確認入力 → clasp push --force → clasp deploy -i）
+npm run deploy
 
-# 3. デプロイ更新（固定 deploymentId へのバージョンアップのみ）
-clasp deploy -i <DEPLOYMENT_ID> -d "vX.X.X"
-
-# 4. ブラウザの GAS デプロイ管理画面で「実行=アクセスしているユーザー / アクセス=NPO法人タダカヨ 内の全員」を目視確認
-# 5. 本番URLで変更箇所の動作を確認し、HANDOVER に @nn を記録（グランドルール6）
+# 3. ブラウザの GAS デプロイ管理画面で「実行=アクセスしているユーザー / アクセス=NPO法人タダカヨ 内の全員」を目視確認
+# 4. 本番URLで変更箇所の動作を確認し（コンソールに [perf] initial data）、HANDOVER に @nn を記録（グランドルール6）
 ```
 
 **v1.12.1 以降:** 予約送信は廃止。デプロイ後は必要に応じて GAS エディタで `disablePendingScheduledEmails()` を実行し、未送信予約を無効化する。`setupScheduledEmailTrigger()` は既存トリガー削除のみ行う。
@@ -393,7 +399,8 @@ clasp deploy -i <DEPLOYMENT_ID> -d "vX.X.X"
 | 項目 | 値の置き場所 |
 |-----|----|
 | GAS プロジェクト ID | `<SCRIPT_ID>` — ローカルの `.clasp.json`（Git 対象外） |
-| スプレッドシート ID | `<SPREADSHEET_ID>` — 現状 `コード.js` の定数（PropertiesService へ移行予定） |
+| スプレッドシート ID | `<SPREADSHEET_ID>` — GAS のスクリプトプロパティ `SPREADSHEET_ID`（v1.13.0〜・ADR-014） |
+| Zoom 連携の秘密情報 | スクリプトプロパティ（管理画面の設定管理から書込専用で設定・ADR-014） |
 | デプロイ ID | `<DEPLOYMENT_ID>` — ローカルの `.clasp.deploy.json`（Git 対象外） |
 | Webapp 設定 | `executeAs: USER_ACCESSING` / `access: DOMAIN` |
 
@@ -403,7 +410,10 @@ clasp deploy -i <DEPLOYMENT_ID> -d "vX.X.X"
 
 - 日本語コメント推奨
 - フロントエンドは Tailwind CSS でスタイリング
-- ESM import は importmap 経由（Babel in-browser のため）
+- ESM import は原本では importmap 経由（ブラウザ内 Babel）、本番はビルドで同梱（ADR-013）。新しい外部ライブラリを足すときは `package.json` に版固定で追加し、原本の importmap と揃える
+- Tailwind のクラス名は文字列連結で組み立てない（本番ビルドは静的走査のため欠ける）。完全なクラス名を書く
+- 外部 CDN から実行時に読むスクリプトには SRI（`integrity`）を付ける
+- 絵文字など BMP 外の文字（U+10000 以上）は JS の文字列内だけで使い、HTML 部分には書かない。日本語を含む正規表現はリテラルでなく `new RegExp('…')` で書く（GAS 配信で壊れるため。本番ビルドが検査して止める。ADR-013）
 - GAS 関数呼び出しは `google.script.run` 経由（ローカルではモック）
 - 日付フォーマット: `toISOString()` は UTC ずれが出るため `getFullYear()/getMonth()/getDate()` を使用
 - DRY原則を守る。新規処理追加時も既存ヘルパー・既存パターンとの共通化を先に検討する
@@ -443,7 +453,7 @@ clasp deploy -i <DEPLOYMENT_ID> -d "vX.X.X"
 | `CLAUDE.md` / `AGENTS.md` | Claude Code / Codex の入口（本ファイルを読ませるだけ） | AI |
 | `docs/SDD.md` | システム詳細設計書（仕様の正本） | AI・開発者 |
 | `docs/HANDOVER.md` | 引き継ぎ書（現在地・残作業） | 開発者 |
-| `docs/ADR.md` | アーキテクチャ判断記録（ADR-001〜012） | AI・開発者 |
+| `docs/ADR.md` | アーキテクチャ判断記録（ADR-001〜014） | AI・開発者 |
 | `docs/RUNBOOK.md` | 運用手順書（デプロイ・障害対応） | 開発者・運用者 |
 | `docs/Manual.md` | 操作マニュアル | エンドユーザー |
 | `docs/RD.md` | 要件定義 | 参照用 |

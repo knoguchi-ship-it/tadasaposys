@@ -228,12 +228,21 @@
         2026 年時点のドキュメント・ベストプラクティス（greenfield ワークフロー / arc42＋C4 / ADR / Documentation-as-Code）に基づいて構成。
       </div>
       <div class="hero-tags">
-        <span class="tag">対象: v1.12.4</span>
+        <span class="tag">対象: v1.12.4（v1.13.0 追補あり）</span>
         <span class="tag">GAS + React SPA</span>
         <span class="tag">作成日: 2026/06/07</span>
         <span class="tag">読了目安: 30分 / 構築: 半日〜1日</span>
       </div>
     </div>
+    <div class="callout warn" style="margin:16px 0;padding:12px 16px;border-left:4px solid #f59e0b;background:#fffbeb;border-radius:8px">
+      <strong>v1.13.0 追補（2026/11/25）</strong> — 本ガイドは v1.12.4 時点の手順が基本です。v1.13.0 で次が変わりました（詳細は <code>docs/ADR.md</code> ADR-013・ADR-014、<code>docs/RUNBOOK.md</code>）。
+      <ul>
+        <li><strong>ビルド工程あり</strong>: 原本 <code>index.html</code> から <code>npm run build</code> で <code>dist/</code> を作り、clasp は <code>dist/</code> を push（<code>.clasp.json</code> の <code>rootDir: "dist"</code>）。デプロイは <code>npm run deploy</code>。本番は Babel・esm.sh・Tailwind CDN を使いません。</li>
+        <li><strong><code>SPREADSHEET_ID</code> はスクリプトプロパティ</strong>（コードに書かない）。Zoom の秘密情報もスクリプトプロパティに書込専用（設定シートに入力しない）。</li>
+        <li><code>appsscript.json</code> の <code>executionApi.access</code> は <code>MYSELF</code>。</li>
+      </ul>
+    </div>
+
 
     <!-- ───────────────────────── 0 ───────────────────────── -->
     <h2 id="about">0. このガイドについて</h2>
@@ -537,7 +546,7 @@ clasp login
         <p>GAS エディタ側で:</p>
         <ol>
           <li>「サービス」＋ から <strong>Gmail API v1</strong>（userSymbol <code>Gmail</code>）と <strong>Google Calendar API v3</strong>（<code>Calendar</code>）を追加</li>
-          <li><code>コード.js</code> 冒頭の <code>SPREADSHEET_ID</code> を <code>&lt;SPREADSHEET_ID&gt;</code> に書き換え</li>
+          <li>「プロジェクトの設定 → スクリプト プロパティ」に <code>SPREADSHEET_ID</code> = <code>&lt;SPREADSHEET_ID&gt;</code> を追加（v1.13.0〜。コードに書かない）</li>
           <li><code>appsscript.json</code> が下記であることを確認（OAuth スコープ・Webapp 設定・TZ）</li>
         </ol>
         <pre><code>{
@@ -699,7 +708,7 @@ clasp deploy <span class="ok">-i &lt;DEPLOYMENT_ID&gt;</span> -d "vX.X.X"
     <ul>
       <li><code>docs/RD.md</code> — 要件定義（業務フロー・ビジネスルール）</li>
       <li><code>docs/SDD.md</code> — 詳細設計（全シート列・関数 F-01〜F-40・セキュリティ仕様）</li>
-      <li><code>docs/ADR.md</code> — 意思決定記録 ADR-001〜012</li>
+      <li><code>docs/ADR.md</code> — 意思決定記録 ADR-001〜014</li>
       <li><code>docs/RUNBOOK.md</code> — 運用・デプロイ・ロールバック・インシデント／本番 ID（§6）</li>
       <li><code>docs/HANDOVER.md</code> — 現状・既知課題・次フェーズ・関連リソース ID（§7）</li>
       <li><code>docs/Manual.md</code> — エンドユーザー操作マニュアル</li>

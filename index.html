@@ -4,18 +4,38 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>タダサポ管理</title>
-  <meta name="app-version" content="1.12.13"><!-- 版数の同期対象（AI_RULES.md グランドルール6・npm run check が照合） -->
+  <meta name="app-version" content="1.13.0"><!-- 版数の同期対象（AI_RULES.md グランドルール6・npm run check が照合） -->
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230d9488'/><text x='50%25' y='55%25' dominant-baseline='middle' text-anchor='middle' fill='white' font-size='18' font-weight='bold'>T</text></svg>">
 
-  <!-- CDN先行接続＋重量リソース先読み -->
+  <!-- v1.13.0 B2（ADR-013）: 初期データの先行取得。doGet は HTML を即返し、ここで google.script.run を
+       最初に発行して、シート読込を画面資源の読込・初期化と並行させる。アプリ本体は
+       window.__INITIAL_DATA_PROMISE__ を受け取る（無ければ従来どおり Api.getInitialData）。 -->
+  <script>
+    (function () {
+      try { performance.mark('tadasapo:html'); } catch (e) {}
+      if (typeof google === 'undefined' || !google.script || !google.script.run) return;
+      var p = new Promise(function (resolve, reject) {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(function (e) { reject(new Error((e && e.message) || String(e))); })
+          .getInitialData();
+      });
+      p.catch(function () {}); // 未処理拒否の警告を防ぐ（アプリ側で改めて処理する）
+      window.__INITIAL_DATA_PROMISE__ = p;
+    })();
+  </script>
+
+  <!-- CDN先行接続 -->
+  <!-- build:dev-only:start（npm run build で除去。本番は React・Tailwind をビルド済みで同梱するため CDN 不要。ADR-013） -->
   <link rel="preconnect" href="https://esm.sh" crossorigin>
   <link rel="preconnect" href="https://unpkg.com" crossorigin>
   <link rel="preconnect" href="https://cdn.tailwindcss.com" crossorigin>
+  <!-- build:dev-only:end -->
   <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="preload" href="https://unpkg.com/@babel/standalone/babel.min.js" as="script">
 
-  <!-- CDN警告を抑制 -->
+  <!-- build:dev-only:start -->
+  <!-- CDN警告を抑制（開発時のみ） -->
   <script>
     (function(){
       var origWarn = console.warn;
@@ -30,8 +50,13 @@
     })();
   </script>
 
+  <!-- build:dev-only:end -->
+
   <!-- Styling -->
+  <!-- build:dev-only:start（開発時は Tailwind の開発用 CDN。本番ビルドは下の build:css にビルド済み CSS を埋め込む） -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- build:dev-only:end -->
+  <!-- build:css -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
     body { font-family: 'Inter', 'Noto Sans JP', sans-serif; background-color: #f3f4f6; }
@@ -52,6 +77,7 @@
     @keyframes slideInBottom { from { transform: translateY(1rem); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
   </style>
 
+  <!-- build:dev-only:start（開発時のみブラウザ内で JSX を変換。本番ビルドは事前変換・React 同梱。ADR-013） -->
   <!-- Babel for JSX transformation in browser (version pinned + SRI, ADR-004準拠) -->
   <script src="https://unpkg.com/@babel/standalone@7.29.4/babel.min.js"
           integrity="sha384-qVgGRi0TCdh+xrBD9+4kG0YlkbOkWu2J3CB46EekpYQmtM96n9v+uaKIS5ipaqKb"
@@ -67,11 +93,14 @@
     }
   }
   </script>
+  <!-- build:dev-only:end -->
 
-  <!-- FullCalendar v6.1.18 グローバルバンドル（v1.11.9 / Phase 3）
+  <!-- v1.13.0: FullCalendar は日程確定モーダルでのみ使うため、初期表示では読み込まない。
+       アプリが loadFullCalendar() で SRI 付きの遅延読込を行う（アイドル時に先読み）。
+       以下は v1.11.9 の経緯メモ。
+       FullCalendar v6.1.18 グローバルバンドル（v1.11.9 / Phase 3）
        importmap ではなく素のCDNを使うのは、既存の React 18.2.0 固定制約と独立して動作させるため。
        バンドルには core/daygrid/timegrid/interaction が含まれる。 -->
-  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.18/index.global.min.js"></script>
 
   <!-- v1.11.9: 重複監視カレンダーUI 用カスタムスタイル -->
   <style>
@@ -96,6 +125,7 @@
 <body class="antialiased text-slate-900">
   <div id="root"></div>
 
+  <!-- build:app（npm run build がこの script の中身を esbuild で事前変換・React 同梱の1本にして差し替える） -->
   <script type="text/babel" data-type="module" data-presets="react">
     import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
     import { createRoot } from 'react-dom/client';
@@ -315,8 +345,16 @@
       ZOOM_ACCOUNT_ID: '',
       ZOOM_CLIENT_ID: '',
       ZOOM_CLIENT_SECRET: '',
+      ZOOM_FIXED_URL: '',
+      ZOOM_FIXED_PASS: '',
       SUPPORT_TOOLS: SUPPORT_TOOLS.join(','),
       TOOL_MONTHLY_LIMITS: 'ケアプランデータ連携システム:30'
+    };
+    // v1.13.0: 秘密情報の保存場所（ローカルモック）。本番はサーバーが getSecretStatus_ で返す。
+    // 'sheet' = 設定シートに平文で残存（要移行）／'property' = スクリプトプロパティ／'none' = 未設定
+    let mockSecretStatus = {
+      ZOOM_ACCOUNT_ID: 'conflict', ZOOM_CLIENT_ID: 'sheet', ZOOM_CLIENT_SECRET: 'sheet',
+      ZOOM_FIXED_URL: 'property', ZOOM_FIXED_PASS: 'none'
     };
 
     // ======================================================================
@@ -675,6 +713,7 @@
             resolve({
               staffMembers: mockStaffMembers.map(s => ({ ...s })),
               settings: { ...mockAdminSettings },
+              secretStatus: { ...mockSecretStatus },
               auditLogs: []
             });
           }, 200));
@@ -734,9 +773,34 @@
           google.script.run.withSuccessHandler(() => resolve()).withFailureHandler(e => reject(new Error(e.message))).deactivateStaffMember(email);
         });
       },
+      // v1.13.0: 秘密情報をシートからスクリプトプロパティへ移す（管理者）
+      migrateSecretsToProperties: () => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            var moved = [];
+            Object.keys(mockSecretStatus).forEach(k => {
+              if (mockSecretStatus[k] === 'sheet') { mockSecretStatus[k] = 'property'; moved.push(k); }
+              if (mockSecretStatus[k] === 'property+sheet') mockSecretStatus[k] = 'property';
+            });
+            var conflicts = Object.keys(mockSecretStatus).filter(k => mockSecretStatus[k] === 'conflict');
+            resolve({ moved: moved, blanked: moved, conflicts: conflicts, auditCellsRedacted: 0, status: { ...mockSecretStatus } });
+          }, 200));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message))).migrateSecretsToProperties();
+        });
+      },
       updateSettingsAdmin: (patch) => {
         if (IS_LOCAL) {
           return new Promise(resolve => setTimeout(() => {
+            // 秘密情報は設定に保存せず、保存場所だけ更新する（本番の書込専用と同じ振る舞い）
+            patch = { ...patch };
+            Object.keys(mockSecretStatus).forEach(k => {
+              if (!Object.prototype.hasOwnProperty.call(patch, k)) return;
+              if (patch[k] === null) mockSecretStatus[k] = 'none';
+              else if (patch[k] !== '') mockSecretStatus[k] = 'property';
+              delete patch[k];
+            });
             mockAdminSettings = { ...mockAdminSettings, ...patch };
             if (Object.prototype.hasOwnProperty.call(patch, 'ANNUAL_USAGE_LIMIT')) {
               MOCK_MASTERS.limits.annual = Number(patch.ANNUAL_USAGE_LIMIT) || MOCK_MASTERS.limits.annual;
@@ -759,7 +823,7 @@
               });
               MOCK_MASTERS.toolMonthlyLimits = limits;
             }
-            resolve({ ...mockAdminSettings });
+            resolve({ settings: { ...mockAdminSettings }, secretStatus: { ...mockSecretStatus } });
           }, 300));
         }
         return new Promise((resolve, reject) => {
@@ -1140,7 +1204,45 @@
     // 日程確定モーダル内に埋め込み、チーム＋表示専用カレンダーのイベントを
     // バッファ込みで可視化する。ドラッグ選択で editFormData を更新。
     // ======================================================================
-    function ScheduleAvailabilityCalendar({ scheduledDateTime, duration, excludeEventId, onSelect }) {
+    // v1.13.0: FullCalendar の遅延読込（SRI で改ざん検知。CDN の内容が変わると読み込みを拒否する）
+    const FULLCALENDAR_SRC = 'https://cdn.jsdelivr.net/npm/fullcalendar@6.1.18/index.global.min.js';
+    const FULLCALENDAR_SRI = 'sha384-w+/36vzr+9muA3AD1xeLMQQj4GbMTCfzuUVqeZfjlk8S6UXWT5WMKuO8j+lxmtiH';
+    let fullCalendarPromise = null;
+    function loadFullCalendar() {
+      if (window.FullCalendar) return Promise.resolve();
+      if (fullCalendarPromise) return fullCalendarPromise;
+      fullCalendarPromise = new Promise((resolve, reject) => {
+        const el = document.createElement('script');
+        el.src = FULLCALENDAR_SRC;
+        el.integrity = FULLCALENDAR_SRI;
+        el.crossOrigin = 'anonymous';
+        el.onload = () => (window.FullCalendar ? resolve() : reject(new Error('FullCalendar が初期化されませんでした')));
+        el.onerror = () => { fullCalendarPromise = null; reject(new Error('FullCalendar の読み込みに失敗しました')); };
+        document.head.appendChild(el);
+      });
+      return fullCalendarPromise;
+    }
+
+    function ScheduleAvailabilityCalendar(props) {
+      const [state, setState] = useState(() => (window.FullCalendar ? 'ready' : 'loading'));
+      useEffect(() => {
+        if (state !== 'loading') return;
+        let alive = true;
+        loadFullCalendar().then(() => alive && setState('ready')).catch(() => alive && setState('error'));
+        return () => { alive = false; };
+      }, [state]);
+      if (state === 'ready') return <ScheduleAvailabilityCalendarInner {...props} />;
+      if (state === 'error') {
+        return <div className="p-4 text-xs font-bold text-rose-700 bg-rose-50 rounded-xl">カレンダーライブラリの読み込みに失敗しました。</div>;
+      }
+      return (
+        <div className="p-4 text-xs font-bold text-slate-500 flex items-center gap-2" role="status">
+          <Loader2 size={14} className="animate-spin" /> カレンダーを読み込み中...
+        </div>
+      );
+    }
+
+    function ScheduleAvailabilityCalendarInner({ scheduledDateTime, duration, excludeEventId, onSelect }) {
       const containerRef = useRef(null);
       const calRef = useRef(null);
       const [errorMsg, setErrorMsg] = useState(null);
@@ -1414,21 +1516,19 @@
             if (stored) setSeenCaseIds(JSON.parse(stored));
           } catch {}
         };
-        // doGet() が埋め込んだ初期データがあれば即使用（GAS往復を1回削減）
-        if (!IS_LOCAL && window.__INITIAL_DATA__) {
-          var data = window.__INITIAL_DATA__;
-          delete window.__INITIAL_DATA__;
-          setUser(data.user);
-          setCases(data.cases);
-          setMasters(data.masters);
-          setDraftCaseIds(data.draftCaseIds || []);
-          setForcedCc(data.forcedCc || '');
-          setLoading(false);
-          if (data.user?.email) restoreSeen(data.user.email);
-          return;
-        }
-        Api.getInitialData()
+        // v1.13.0 B2: ページ先頭で先行発行した取得を使う（無ければ通常取得）
+        var early = !IS_LOCAL ? window.__INITIAL_DATA_PROMISE__ : null;
+        delete window.__INITIAL_DATA_PROMISE__;
+        (early || Api.getInitialData())
           .then(data => {
+            // v1.13.0 B0: 起動時間の計測（サーバー区間 ms と、HTML 到着からデータ受信までの ms）
+            try {
+              performance.mark('tadasapo:data');
+              var m = performance.measure('tadasapo:html->data', 'tadasapo:html', 'tadasapo:data');
+              console.info('[perf] initial data', JSON.stringify({ server: data._perf || null, htmlToDataMs: Math.round(m.duration), cases: (data.cases || []).length }));
+            } catch (e) {}
+            // 日程確定モーダル用のカレンダーライブラリを、画面が落ち着いてから先読みする
+            (window.requestIdleCallback || ((fn) => setTimeout(fn, 2000)))(() => loadFullCalendar().catch(() => {}));
             setUser(data.user);
             setCases(data.cases);
             setMasters(data.masters);
@@ -1961,9 +2061,11 @@
         let bodyTemplate = tpl.initialBody || '';
         if (!includeDetails) {
           // {{相談内容}}を含む区切りブロック（----------------〜{{相談内容}}〜----------------）を除去
-          bodyTemplate = bodyTemplate.replace(/\n*[-]{3,}\n[\s\S]*?\{\{相談内容\}\}[\s\S]*?\n[-]{3,}/g, '');
+          // ※ 日本語を含む正規表現は new RegExp(文字列) で書く（正規表現リテラル内の日本語は本番ビルドで
+          //   \u エスケープされず、ASCII 検査でビルドが止まる。GAS 配信で壊れないための制約・ADR-013）
+          bodyTemplate = bodyTemplate.replace(new RegExp('\\n*[-]{3,}\\n[\\s\\S]*?\\{\\{相談内容\\}\\}[\\s\\S]*?\\n[-]{3,}', 'g'), '');
           // 「以下の内容で受付いたしました。」行を除去（相談内容ブロックの見出し相当）
-          bodyTemplate = bodyTemplate.replace(/\n*以下の内容で受付いたしました。[ \t]*\n*/g, '\n\n');
+          bodyTemplate = bodyTemplate.replace(new RegExp('\\n*以下の内容で受付いたしました。[ \\t]*\\n*', 'g'), '\n\n');
           // 連続した空行を整理
           bodyTemplate = bodyTemplate.replace(/\n{3,}/g, '\n\n').trim();
         }
@@ -2822,7 +2924,13 @@
       const handleSaveSettings = async () => {
         if (!adminPanelData?.settings) return;
         const patch = {};
+        const secretStatus = adminPanelData.secretStatus || {};
         Object.keys(settingsDraft || {}).forEach(k => {
+          if (Object.prototype.hasOwnProperty.call(secretStatus, k)) {
+            // v1.13.0: 秘密情報は書込専用。入力があったとき（または削除指定 null）だけ送る
+            if (settingsDraft[k] === null || String(settingsDraft[k] ?? '') !== '') patch[k] = settingsDraft[k];
+            return;
+          }
           if (String(settingsDraft[k] ?? '') !== String(adminPanelData.settings[k] ?? '')) patch[k] = settingsDraft[k];
         });
         if (!Object.keys(patch).length) {
@@ -2839,6 +2947,23 @@
           showToast('設定を保存しました。', { type: 'success', title: '設定管理' });
         } catch (e) {
           showToast(e.message || String(e), { type: 'error', title: '設定更新エラー' });
+        } finally {
+          setSubmitting(false);
+        }
+      };
+
+      // v1.13.0: 設定シートに平文で残る秘密情報をスクリプトプロパティへ移す
+      const handleMigrateSecrets = async () => {
+        startSubmit('秘密情報を移行中...');
+        try {
+          const r = await Api.migrateSecretsToProperties();
+          await refreshAdminPanelData();
+          const conflicts = (r.conflicts || []).length;
+          showToast('移行 ' + r.moved.length + '件・シートから消去 ' + r.blanked.length + '件・監査ログの伏せ字化 ' + r.auditCellsRedacted + '件'
+            + (conflicts ? '・食い違い ' + conflicts + '件（消さずに残しました。正しい値を入力して保存してください）' : ''),
+            { type: conflicts ? 'info' : 'success', title: '秘密情報の移行' });
+        } catch (e) {
+          showToast(e.message || String(e), { type: 'error', title: '秘密情報の移行エラー' });
         } finally {
           setSubmitting(false);
         }
@@ -4981,6 +5106,7 @@
                       const isTextArea = key.endsWith('_BODY');
                       const isBoolean = meta.type === 'boolean';
                       const isTools = meta.type === 'tools';
+                      const secretState = (adminPanelData?.secretStatus || {})[key] || null; // v1.13.0: 秘密情報（書込専用）
                       const boolVal = String(settingsDraft[key]) === 'true';
                       const rawStr = settingsDraft[key] || '';
                       const toolsArr = isTools
@@ -5054,6 +5180,33 @@
                               onChange={e => setSettingsDraft(prev => ({ ...prev, [key]: e.target.value }))}
                               className="w-full py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-sky-500 font-mono leading-relaxed"
                             />
+                          ) : secretState ? (
+                            <div className="space-y-1.5" data-testid={'secret-' + key}>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="password"
+                                  autoComplete="new-password"
+                                  aria-label={meta.label + '（書込専用）'}
+                                  value={settingsDraft[key] || ''}
+                                  placeholder={secretState === 'none' ? '未設定' : '設定済み（変更する場合のみ入力）'}
+                                  onChange={e => setSettingsDraft(prev => ({ ...prev, [key]: e.target.value }))}
+                                  className="flex-1 py-2 px-3 border-2 border-slate-100 rounded-xl text-xs font-bold outline-none focus:border-sky-500"
+                                />
+                                {secretState !== 'none' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSettingsDraft(prev => ({ ...prev, [key]: prev[key] === null ? '' : null }))}
+                                    className={'px-2 py-1.5 rounded-lg text-[10px] font-black ' + (settingsDraft[key] === null ? 'bg-rose-600 text-white' : 'bg-slate-100 text-slate-600')}
+                                  >{settingsDraft[key] === null ? '削除予定（取消）' : '削除'}</button>
+                                )}
+                              </div>
+                              <p className={'text-[10px] font-bold ' + ((secretState.indexOf('sheet') !== -1 || secretState === 'conflict') ? 'text-rose-700' : 'text-slate-500')}>
+                                {secretState === 'property' ? '🔒 スクリプトプロパティに保存済み（値は表示しません）'
+                                  : secretState === 'none' ? '未設定'
+                                  : secretState === 'conflict' ? '⚠ スクリプトプロパティと設定シートで値が異なります（どちらも消していません）。正しい値をここに入力して保存してください（保存するとシート側は消えます）'
+                                  : '⚠ 設定シートに平文で残っています（組織内の誰でも読めます）。下の「秘密情報をプロパティへ移行」を実行してください'}
+                              </p>
+                            </div>
                           ) : (
                             <input
                               value={settingsDraft[key] || ''}
@@ -5067,6 +5220,12 @@
                     });
                     })()}
                   </div>
+                  {Object.values(adminPanelData?.secretStatus || {}).some(v => String(v).indexOf('sheet') !== -1) && (
+                    <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-between gap-3">
+                      <p className="text-[11px] font-bold text-rose-800">設定シートに秘密情報が平文で残っています。スクリプトプロパティへ移し、シートと過去の監査ログから消去します。移行後は Zoom の Client Secret の再発行（ローテーション）を推奨します。</p>
+                      <button type="button" onClick={handleMigrateSecrets} disabled={submitting} className="shrink-0 px-3 py-2 rounded-xl text-xs font-black bg-rose-600 text-white disabled:opacity-40">秘密情報をプロパティへ移行</button>
+                    </div>
+                  )}
                   <div className="flex justify-end">
                     <button onClick={handleSaveSettings} disabled={submitting || adminPanelLoading} className="px-4 py-2 rounded-xl text-xs font-black bg-sky-600 text-white disabled:opacity-40 inline-flex items-center gap-1.5">
                       <Save size={12}/> 設定を保存

@@ -58,12 +58,22 @@ clasp login
 # .clasp.json に scriptId を設定する（.gitignore 対象のため手動作成）
 ```
 
-`.clasp.json` の形式:
+`.clasp.json` の形式（v1.13.0〜 `rootDir` は `dist`。clasp はビルド成果物を push する。ADR-013）:
 ```json
 {
   "scriptId": "<SCRIPT_ID>",
-  "rootDir": "."
+  "rootDir": "dist"
 }
+```
+
+`.clasp.deploy.json` の形式（固定 deploymentId。Git 対象外。`npm run deploy` が読む）:
+```json
+{ "production": "<DEPLOYMENT_ID>" }
+```
+
+依存パッケージを入れる（ビルド用。git の pre-commit も自動設定される）:
+```bash
+npm ci
 ```
 
 ### 1-3. GASエディタでの設定
@@ -71,7 +81,7 @@ clasp login
 1. GASエディタ → 左側「サービス」の `+` をクリック
 2. **Gmail API v1** を追加（`Gmail` として追加）
 3. **Google Calendar API v3** を追加（`Calendar` として追加）
-4. `コード.js` 上部の `SPREADSHEET_ID` を設定済みスプレッドシートIDに書き換える
+4. 「プロジェクトの設定 → スクリプト プロパティ」に `SPREADSHEET_ID` = タダサポDB のスプレッドシートID を追加する（v1.13.0〜。コードには書かない。ADR-014）。ID は URL の `/d/` と `/edit` の間の部分。URL をそのまま貼っても動く。`SCHEMA_VERSION_APPLIED` はアプリが自動で書くので手入力しない
 
 ### 1-4. 初期セットアップ関数の実行
 
@@ -85,6 +95,20 @@ GASエディタの実行ボタンから以下を順番に実行する:
 5. addUsageLimitSettings()     — 利用制限設定を追加
 6. addAttachmentFolderSetting()— 添付フォルダ設定を追加
 ```
+
+### 1-4-1. DB の温めトリガー（v1.13.0〜）
+
+冷えた DB を起こすのに約11秒かかるため、業務時間中は5分ごとに DB を温める（SDD F-02）。管理者が GAS エディタで1回だけ実行する:
+
+```
+setupKeepWarmTrigger()   // 作り直して1つだけ設定。実行した人のアカウントで動く
+removeKeepWarmTrigger()  // 解除
+```
+
+- トリガーは**設定した人のアカウント**で動く。異動・退職でアカウントが止まるとトリガーも止まる（アプリは遅くなるだけで壊れない）。管理者アカウントで設定する
+- 時間帯はスクリプトプロパティ `KEEP_WARM_HOURS`（既定 `8-20`）・`KEEP_WARM_DAYS`（既定 `1-7`。1=月…7=日）で変更
+- 効果の確認: GAS「実行数」で `keepWarm` のログ `{"keepWarm": ms}` が数百 ms 程度なら温まっている。数秒以上が続くなら間隔が長すぎる
+- 前提: 高度なサービスに Sheets API がある必要はない（SpreadsheetApp で読む）
 
 ### 1-5. 予約送信トリガの削除（v1.12.1以降）
 
@@ -122,6 +146,15 @@ getScheduledEmailTriggerStatus()
 
 管理者がアプリの「設定管理」ダイアログから変更可能（コードの修正不要）:
 - メールテンプレート、CC アドレス、利用制限回数、対応ツール一覧等
+- Zoom 連携の秘密情報（Account ID・Client ID・Client Secret・固定 Zoom の URL とパスコード）は「連携」タブで**書込専用**（値は表示されない。空欄で保存=変更なし、「削除」で消去）。スクリプトプロパティに保存され、設定シートには入力しない（ADR-014）
+
+#### 2-3-1. 秘密情報の移行（v1.13.0 デプロイ後に1回）
+
+1. 管理者でアプリを開き、管理モード →「設定管理」→「連携」タブ
+2. 赤い「秘密情報をプロパティへ移行」が出ていれば押す（設定シートの値をスクリプトプロパティへ移し、シートのセルと過去の監査ログの平文を消す）
+3. 各項目が「🔒 スクリプトプロパティに保存済み」になったことを確認
+4. **Zoom Marketplace で Client Secret を再発行（ローテーション）し**、新しい値を「連携」タブで入力して保存する（シートに置かれていた間に組織内へ露出していたため）
+5. 日程確定で「Zoom」を選び、URL が発行されることを確認
 
 ### 2-4. GAS 上の残存スタブファイル（`temp/`）の削除（R4・一度きりのクリーンアップ）
 
@@ -141,35 +174,39 @@ getScheduledEmailTriggerStatus()
 
 ## 3. デプロイ手順
 
-### 3-1. 通常デプロイ
+### 3-1. 通常デプロイ（v1.13.0〜 `npm run deploy` に一本化）
+
+前提（初回のみ）: §1-2 の `.clasp.json`（`rootDir: "dist"`）・`.clasp.deploy.json`、§1-3 のスクリプトプロパティ `SPREADSHEET_ID`。
 
 ```bash
-# Step 1: 必ず先にコミット（clasp pull でローカルが上書きされる対策）
-git add index.html コード.js appsscript.json
-git commit -m "feat: vX.X.X - 変更内容の説明"
+# Step 1: master を最新にする（変更は PR でマージ済みであること）
+git switch master && git pull && npm ci
 
-# Step 2: GASにプッシュ（--force 必須）
-clasp push --force
+# Step 2: 検査付きデプロイ（人が端末で実行。AI は実行しない）
+npm run deploy
+#  - 検査: 作業ツリーがクリーン / Webapp=USER_ACCESSING・DOMAIN / executionApi=MYSELF /
+#          rootDir=dist / .clasp.deploy.json に production
+#  - テスト: 単体・npm run check・E2E（dist をビルドして検証）
+#  - ビルド: dist/ を作り直す
+#  - 確認: SPREADSHEET_ID を設定済みか（yes）→「deploy」と入力
+#  - 反映: clasp push --force → clasp deploy -i <固定 deploymentId>（URL は変わらない）
 
-# Step 3: デプロイを更新
-clasp deploy \
-  -i <DEPLOYMENT_ID> \
-  -d "vX.X.X"
-
-# Step 4: 動作確認
-# 本番URLにアクセスして正常に動作することを確認
+# Step 3: 動作確認（§3-2）し、付いた @nn を HANDOVER の「現在地」と §1 に記録
 ```
+
+`clasp push` / `clasp deploy` を手で打たない（原本の `index.html` を push したり、`-i` を付け忘れたりする事故を防ぐため）。
 
 ### 3-2. デプロイ後の確認チェックリスト
 
-- [ ] 本番URLにアクセスしてアプリが起動する
+- [ ] GAS デプロイ管理画面で「実行=アクセスしているユーザー / アクセス=NPO法人タダカヨ 内の全員」
+- [ ] 本番URLにアクセスしてアプリが起動する（ブラウザのコンソールに `[perf] initial data` が出る。`server` が各区間の ms）
 - [ ] ログインできる（タダメンマスタに登録済みのアカウントで）
 - [ ] 案件一覧が表示される
 - [ ] 予約送信トリガが残っていない（必要に応じて `getScheduledEmailTriggerStatus()` 確認）
 
 ### 3-3. バックエンドのみの変更（`コード.js` だけ変更した場合）
 
-フロントエンドに変更がない場合でも手順は同じ。`clasp push --force` でコード.js の最新版が反映される。
+フロントエンドに変更がない場合でも手順は同じ（`npm run deploy`）。
 
 ### 3-4. 申込通知 bot（チャット連携）の変更・初期設定（v1.12.13〜）
 
@@ -199,24 +236,15 @@ GAS のデプロイはバージョン管理されている。GASエディタか�
 
 ### 4-2. git を使ったロールバック
 
+まず §4-1（GAS のバージョン選択）を優先する（最速・コード操作なし）。コードを戻して出し直す場合は、取り消しコミットを作ってから通常のデプロイを行う:
+
 ```bash
-# 特定コミットの内容を確認
 git log --oneline -20
-
-# 特定コミットの状態に戻す（ローカルのみ）
-git checkout <commit-hash> -- index.html コード.js
-
-# GASに反映
-clasp push --force
-
-# デプロイ更新（ロールバック用のバージョン説明を付ける）
-clasp deploy \
-  -i <DEPLOYMENT_ID> \
-  -d "rollback to vX.X.X"
-
-# ロールバック後、作業ブランチを元に戻す
-git checkout HEAD -- index.html コード.js
+git revert <commit-hash>      # 取り消しコミットを作る（履歴を壊さない）
+npm run deploy                # 検査付きで反映（§3-1）
 ```
+
+v1.13.0 より前（スクリプトプロパティ化以前）の版へ戻す場合、旧版は `SPREADSHEET_ID` をコードに持つため動作するが、秘密情報はシートを読む。移行済みでシートが空なら Zoom 連携は止まる点に注意。
 
 ---
 
@@ -229,12 +257,13 @@ git checkout HEAD -- index.html コード.js
 **確認手順:**
 1. GASエディタで「実行」→ `doGet` を直接実行してエラーを確認
 2. `getInitialData()` を直接実行して認証・スプレッドシート接続エラーを確認
-3. `コード.js` の `SPREADSHEET_ID` が正しいか確認
+3. スクリプトプロパティ `SPREADSHEET_ID` が設定され、正しいか確認（未設定なら「スクリプトプロパティ SPREADSHEET_ID が未設定です」と出る）
+4. ブラウザのコンソールでスクリプトの読込エラーがないか確認（`dist/` ではなく原本を push していないか＝`.clasp.json` の `rootDir`）
 
 **よくある原因:**
-- スプレッドシートIDが間違っている
+- スクリプトプロパティ `SPREADSHEET_ID` の未設定・誤り
 - 「設定」シートが存在しない → `setupSettingsSheet()` を実行
-- Gmail API / Calendar API が有効化されていない
+- Gmail API / Calendar API / Sheets API が有効化されていない（GAS エディタの「サービス」に3つとも並んでいるか確認。デフォルトの GCP プロジェクトは Cloud コンソールから開けないため、エディタから追加する）
 
 ### 5-2. ログインできない
 
@@ -279,11 +308,13 @@ git checkout HEAD -- index.html コード.js
 |-----|----|
 | Webapp URL `<WEBAPP_URL>` | GAS デプロイ管理画面 |
 | GAS プロジェクト ID `<SCRIPT_ID>` | `.clasp.json`（Git 対象外） |
-| スプレッドシート ID `<SPREADSHEET_ID>` | `コード.js` の定数（PropertiesService へ移行予定） |
+| スプレッドシート ID `<SPREADSHEET_ID>` | GAS のスクリプトプロパティ `SPREADSHEET_ID`（v1.13.0〜） |
+| Zoom 連携の秘密情報 | GAS のスクリプトプロパティ（管理画面の設定管理「連携」から書込専用で設定） |
 | デプロイ ID `<DEPLOYMENT_ID>` | `.clasp.deploy.json` の `production`（Git 対象外）・`clasp deployments` |
 | フォーム回答シート ID `<FORM_SHEET_ID>` | 案件リストの IMPORTRANGE 数式 |
 | 申込通知 bot スクリプト ID `<BOT_SCRIPT_ID>` | 回答スプシの「拡張機能 → Apps Script」 |
 | Webapp 設定 | `executeAs: USER_ACCESSING` / `access: DOMAIN` |
 | タイムゾーン | `Etc/GMT-9`（JST） |
 | 予約送信トリガ間隔 | 廃止（v1.12.1以降は作成しない） |
-| スキーマバージョン | `SCHEMA_VERSION_ = '6'`（コード.js 内） |
+| タダメンマスタの空行 | v1.12.x までの補完処理が、メールの無い空行にも D=`staff` / E=`true` を書いていた（v1.13.0 で修正）。最後のタダメンより下で D・E 列だけが入った行は**行ごと削除**する（値の消去ではなく行削除。最終行を戻すため） |
+| スキーマバージョン | `SCHEMA_VERSION_ = '6'`（コード.js 内）。適用済みの版はスクリプトプロパティ `SCHEMA_VERSION_APPLIED`（v1.13.0〜。削除すると次回起動時に移行確認を再実行） |

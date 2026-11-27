@@ -29,6 +29,13 @@ const {
   normalizeSubmittedAtLabel,
   chatLinkKey,
   buildChatThreadUrl,
+  redactAuditCell,
+  planSecretMigration,
+  normalizeSpreadsheetId,
+  schemaMigrationNeeded,
+  buildBatchGetUrl,
+  planStaffDefaults,
+  isWithinKeepWarmWindow,
 } = require('./src/pure-functions');
 
 // ============================================================
@@ -737,5 +744,143 @@ describe('v1.12.13 チャットスレッドリンク', () => {
     expect(buildChatThreadUrl('javascript:alert(1)')).toBeNull();
     expect(buildChatThreadUrl('spaces/AAA/threads/x"><script>')).toBeNull();
     expect(buildChatThreadUrl('spaces/AAA/threads/x/../../evil')).toBeNull();
+  });
+});
+
+// ── v1.13.0: 監査ログの秘密情報の伏せ字化（ADR-014） ──
+describe('redactAuditCell（監査ログの秘密情報を伏せる）', () => {
+  const KEYS = ['ZOOM_CLIENT_SECRET', 'ZOOM_FIXED_PASS'];
+
+  test('JSON の秘密情報キーの値だけを伏せ、他のキーと状態表記は残す', () => {
+    const cell = JSON.stringify({ ZOOM_CLIENT_SECRET: 'abcSECRETxyz', MAIL_FORCE_CC: 'a@b.jp', ZOOM_FIXED_PASS: '(設定済み)' });
+    const out = JSON.parse(redactAuditCell(cell, KEYS, []));
+    expect(out).toEqual({ ZOOM_CLIENT_SECRET: '[REDACTED]', MAIL_FORCE_CC: 'a@b.jp', ZOOM_FIXED_PASS: '(設定済み)' });
+  });
+
+  test('短いパスコードでも、キー指定なので無関係な数字は伏せない', () => {
+    const cell = JSON.stringify({ ZOOM_FIXED_PASS: '1234', ANNUAL_USAGE_LIMIT: '1234' });
+    expect(JSON.parse(redactAuditCell(cell, KEYS, ['1234']))).toEqual({ ZOOM_FIXED_PASS: '[REDACTED]', ANNUAL_USAGE_LIMIT: '1234' });
+  });
+
+  test('JSON でないセルは既知の秘密値（8文字以上）を部分一致で伏せる', () => {
+    expect(redactAuditCell('old=abcSECRETxyz;', KEYS, ['abcSECRETxyz', 'short'])).toBe('old=[REDACTED];');
+  });
+
+  test('変化がなければ元の文字列をそのまま返す', () => {
+    const cell = JSON.stringify({ MAIL_FORCE_CC: 'a@b.jp' });
+    expect(redactAuditCell(cell, KEYS, [])).toBe(cell);
+    expect(redactAuditCell('', KEYS, [])).toBe('');
+  });
+});
+
+// ── v1.13.0: 秘密情報の移行計画（本物の値を失わない） ──
+describe('planSecretMigration（秘密情報の移行計画）', () => {
+  const KEYS = ['A', 'B', 'C', 'D'];
+
+  test('プロパティ空はコピーして空に、同じ値は空にするだけ、シート空は何もしない', () => {
+    expect(planSecretMigration({ A: 'real-a', B: 'same', C: '' }, { B: 'same' }, KEYS))
+      .toEqual({ move: ['A'], blank: ['A', 'B'], conflict: [] });
+  });
+
+  test('プロパティに別の値（ダミー等）が先にあっても、シートの本物の値は消さず食い違いとして知らせる', () => {
+    const plan = planSecretMigration({ A: 'real-secret' }, { A: 'dummy' }, KEYS);
+    expect(plan).toEqual({ move: [], blank: [], conflict: ['A'] });
+  });
+
+  test('前後の空白は無視して比較する', () => {
+    expect(planSecretMigration({ A: ' x ' }, { A: 'x' }, KEYS)).toEqual({ move: [], blank: ['A'], conflict: [] });
+  });
+});
+
+// ── v1.13.0: SPREADSHEET_ID の正規化（URL を貼っても動く） ──
+describe('normalizeSpreadsheetId（SPREADSHEET_ID の正規化）', () => {
+  const ID = 'A'.repeat(20) + '_-' + 'b'.repeat(20); // 実在しないダミー
+
+  test('ID はそのまま、URL からは ID を取り出す、前後の空白は無視する', () => {
+    expect(normalizeSpreadsheetId(ID)).toBe(ID);
+    expect(normalizeSpreadsheetId(' https://docs.google.com/spreadsheets/d/' + ID + '/edit#gid=0 ')).toBe(ID);
+    expect(normalizeSpreadsheetId('https://docs.google.com/spreadsheets/d/' + ID)).toBe(ID);
+  });
+
+  test('空は空文字（未設定）、ID の形でない値は null（案内つきエラーにする）', () => {
+    expect(normalizeSpreadsheetId('')).toBe('');
+    expect(normalizeSpreadsheetId(null)).toBe('');
+    expect(normalizeSpreadsheetId('https://docs.google.com/document/d/x/edit')).toBeNull();
+    expect(normalizeSpreadsheetId('タダサポDB')).toBeNull();
+  });
+});
+
+// ── v1.13.0: スキーマ移行確認の省略（6時間ごとの約10秒の待ちを無くす） ──
+describe('schemaMigrationNeeded（スキーマ移行確認の要否）', () => {
+  test('永続記録が現行版なら、キャッシュが切れていても不要', () => {
+    expect(schemaMigrationNeeded('6', null, '6')).toBe(false);
+  });
+
+  test('永続記録が無くても、キャッシュが現行版なら不要（v1.12.x からの移行期）', () => {
+    expect(schemaMigrationNeeded(undefined, '6', '6')).toBe(false);
+  });
+
+  test('どちらも無い・古い版なら必要（版を上げると1回だけ走る）', () => {
+    expect(schemaMigrationNeeded(undefined, null, '6')).toBe(true);
+    expect(schemaMigrationNeeded('6', '6', '7')).toBe(true);
+  });
+});
+
+// ── v1.13.0: 計測用 Sheets API 一括読込の URL ──
+describe('buildBatchGetUrl（Sheets API values:batchGet の URL）', () => {
+  test('シート名を引用符で囲んで URL エンコードし、書式なし・シリアル日時で受け取る', () => {
+    const url = buildBatchGetUrl('dummy-id', ['タダメンマスタ', "O'Brien"]);
+    expect(url.startsWith('https://sheets.googleapis.com/v4/spreadsheets/dummy-id/values:batchGet?')).toBe(true);
+    const ranges = new URL(url).searchParams.getAll('ranges');
+    expect(ranges).toEqual(["'タダメンマスタ'", "'O''Brien'"]);
+    expect(url).toContain('valueRenderOption=UNFORMATTED_VALUE');
+    expect(url).toContain('dateTimeRenderOption=SERIAL_NUMBER');
+  });
+});
+
+// ── v1.13.0: タダメンマスタの ROLE / IS_ACTIVE 補完（空行に書かない） ──
+describe('planStaffDefaults（タダメンマスタの補完計画）', () => {
+  // [ID, 氏名, メール, ROLE, IS_ACTIVE]（ダミー）
+  test('メールがある行の空欄だけを補完し、メールの無い空行には書かない', () => {
+    const plan = planStaffDefaults([
+      ['1', 'メンバーA', 'a@example.com', '', ''],
+      ['2', 'メンバーB', 'b@example.com', 'admin', false],
+      ['', '', '', '', ''],
+    ]);
+    expect(plan.role).toEqual([['staff'], ['admin'], ['']]);
+    expect(plan.active).toEqual([['true'], [false], ['']]);
+    expect(plan.roleChanged).toBe(true);
+    expect(plan.activeChanged).toBe(true);
+  });
+
+  test('補完の必要がなければ変更なし（書き込まない）。空行だけでも変更なし', () => {
+    const plan = planStaffDefaults([
+      ['1', 'メンバーA', 'a@example.com', 'staff', 'true'],
+      ['', '', '', '', ''],
+      ['', '', '', '', ''],
+    ]);
+    expect(plan.roleChanged).toBe(false);
+    expect(plan.activeChanged).toBe(false);
+  });
+});
+
+// ── v1.13.0: DB の温め（keep-warm）の時間帯判定 ──
+describe('isWithinKeepWarmWindow（DB を温める時間帯）', () => {
+  test('既定は毎日 8時以上・20時未満', () => {
+    expect(isWithinKeepWarmWindow(8, 1)).toBe(true);
+    expect(isWithinKeepWarmWindow(19, 7)).toBe(true);
+    expect(isWithinKeepWarmWindow(7, 3)).toBe(false);
+    expect(isWithinKeepWarmWindow(20, 3)).toBe(false);
+  });
+
+  test('プロパティで時間帯と曜日を変えられる（平日 9-18 時）', () => {
+    expect(isWithinKeepWarmWindow(9, 5, '9-18', '1-5')).toBe(true);
+    expect(isWithinKeepWarmWindow(10, 6, '9-18', '1-5')).toBe(false);
+    expect(isWithinKeepWarmWindow(18, 2, '9-18', '1-5')).toBe(false);
+  });
+
+  test('不正な指定は既定値（8-20・毎日）にする', () => {
+    expect(isWithinKeepWarmWindow(10, 6, 'abc', '7-1')).toBe(true);
+    expect(isWithinKeepWarmWindow(21, 6, '20-8', '')).toBe(false);
   });
 });

@@ -39,11 +39,14 @@ export default defineConfig({
     },
   ],
 
+  // v1.13.0（ADR-013）: 既定は本番に出すビルド成果物 dist/ を検証する（ビルドしてから配信）。
+  // 開発用の原本（ブラウザ内 Babel）を検証するときは E2E_TARGET=src。
+  // ポートを使い回すと別の対象（原本/ビルド）を検証してしまうため、既存サーバーは再利用しない。
   webServer: {
-    command:              'npx serve -s . -l 3000',
+    command:              process.env.E2E_TARGET === 'src' ? 'npx serve -s . -l 3000' : 'node tools/build.js && npx serve -s dist -l 3000',
     url:                  'http://localhost:3000',
-    reuseExistingServer:  !process.env.CI,
-    timeout:              30_000,
+    reuseExistingServer:  false,
+    timeout:              120_000,
     stdout: 'ignore',
     stderr: 'pipe',
   },

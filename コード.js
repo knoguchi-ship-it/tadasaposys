@@ -1,5 +1,5 @@
 /**
- * タダサポ管理システム - Backend Logic (v1.12.13)
+ * タダサポ管理システム - Backend Logic (v1.13.0)
  *
  * 概要:
  * - Google Spreadsheets をデータベースとして利用
@@ -8,11 +8,20 @@
  */
 
 // ======================================================================
-// ★ デプロイ時にここだけ書き換えてください
-// スプレッドシートURLの /d/ と /edit の間の文字列がIDです
-// 例: https://docs.google.com/spreadsheets/d/【ここがID】/edit
+// v1.13.0: 本番の識別子・秘密情報はスクリプトプロパティで管理する（ADR-014）
+//   GAS エディタ「プロジェクトの設定 → スクリプト プロパティ」に設定する。
+//   - SPREADSHEET_ID: タダサポDB のスプレッドシートID（URL の /d/ と /edit の間）
+//   - Zoom 連携の秘密情報（SECRET_SETTING_KEYS_）: 管理画面から書込専用で設定
+//   コード・ドキュメント・GitHub に実値を書かない（AI_RULES.md グランドルール3）。
 // ======================================================================
-const SPREADSHEET_ID = '1hllLdETiK0sk0xW_y0V6vOmnlK7kIkHBjntYiCTom4w';
+const SCRIPT_PROP_SPREADSHEET_ID_ = 'SPREADSHEET_ID';
+
+/**
+ * 秘密情報として扱う設定キー。値はスクリプトプロパティに保存し、画面・監査ログ・シートに出さない。
+ * 組織内で編集可能な「設定」シートに置くと、組織内の誰でも読めてしまうため（v1.13.0）。
+ * ZOOM_FIXED_URL は ?pwd= でパスコードを含むため秘密扱い。ZOOM_FIXED_ID（会議ID）は秘密ではない。
+ */
+const SECRET_SETTING_KEYS_ = ['ZOOM_ACCOUNT_ID', 'ZOOM_CLIENT_ID', 'ZOOM_CLIENT_SECRET', 'ZOOM_FIXED_URL', 'ZOOM_FIXED_PASS'];
 
 // ======================================================================
 // シート名・列定義
@@ -58,6 +67,41 @@ const IDX = {
 // ======================================================================
 let _settingsCache = null;
 let _spreadsheetCache = null;
+let _scriptPropsCache = null;
+
+/**
+ * スクリプトプロパティを一括取得（実行コンテキスト内キャッシュ）。
+ * getProperties() は1回の呼び出しで全件返すため、キーごとの getProperty() より速い。
+ */
+function getScriptProps_() {
+  if (_scriptPropsCache) return _scriptPropsCache;
+  _scriptPropsCache = PropertiesService.getScriptProperties().getProperties() || {};
+  return _scriptPropsCache;
+}
+
+/**
+ * SPREADSHEET_ID プロパティの値を ID に正規化する（純粋関数・v1.13.0）。
+ * スプレッドシートの URL（…/spreadsheets/d/<ID>/edit…）が貼られても ID を取り出す。
+ * 空なら ''、ID の形でなければ null を返す。
+ */
+function normalizeSpreadsheetId_(raw) {
+  let s = String(raw == null ? '' : raw).trim();
+  if (!s) return '';
+  let m = s.match(/\/spreadsheets\/d\/([A-Za-z0-9_-]+)/);
+  if (m) s = m[1];
+  return /^[A-Za-z0-9_-]{20,}$/.test(s) ? s : null;
+}
+
+function getSpreadsheetId_() {
+  let id = normalizeSpreadsheetId_(getScriptProps_()[SCRIPT_PROP_SPREADSHEET_ID_]);
+  if (id === '') {
+    throw new Error('スクリプトプロパティ SPREADSHEET_ID が未設定です。GAS エディタ「プロジェクトの設定 → スクリプト プロパティ」にタダサポDBのスプレッドシートIDを設定してください（RUNBOOK §3）。');
+  }
+  if (id === null) {
+    throw new Error('スクリプトプロパティ SPREADSHEET_ID の値がスプレッドシートIDの形ではありません。URL の /d/ と /edit の間の部分だけを入力してください（RUNBOOK §3）。');
+  }
+  return id;
+}
 
 /**
  * スプレッドシートを取得（実行コンテキスト内キャッシュ）
@@ -65,11 +109,189 @@ let _spreadsheetCache = null;
  */
 function getSpreadsheet_() {
   if (_spreadsheetCache) return _spreadsheetCache;
-  if (!SPREADSHEET_ID) {
-    throw new Error('SPREADSHEET_ID が未設定です。コード.js 先頭の SPREADSHEET_ID にスプレッドシートIDを入力してください。');
-  }
-  _spreadsheetCache = SpreadsheetApp.openById(SPREADSHEET_ID);
+  _spreadsheetCache = SpreadsheetApp.openById(getSpreadsheetId_());
   return _spreadsheetCache;
+}
+
+// ======================================================================
+// v1.13.0: 秘密情報（書込専用・スクリプトプロパティ）— ADR-014
+// ======================================================================
+function isSecretSettingKey_(key) {
+  return SECRET_SETTING_KEYS_.indexOf(key) !== -1;
+}
+
+/**
+ * 秘密情報を取得する。スクリプトプロパティを優先し、未移行の間だけ「設定」シートの旧値を使う
+ * （移行前の本番を止めないための後方互換。管理画面に「シートに残存」と警告を出す）。
+ */
+function getSecret_(key) {
+  let v = String(getScriptProps_()[key] || '').trim();
+  if (v) return v;
+  let legacy = loadSettings_()[key];
+  return legacy ? String(legacy).trim() : '';
+}
+
+/**
+ * 各秘密情報の保存場所:
+ *   'property' | 'sheet'（平文で残存・要移行） | 'property+sheet'（同じ値が両方にある・移行でシートを消す）
+ *   | 'conflict'（プロパティとシートで値が異なる・移行では消さない。管理者が正しい値を入力して保存する） | 'none'
+ */
+function getSecretStatus_() {
+  let props = getScriptProps_();
+  let settings = loadSettings_();
+  let out = {};
+  SECRET_SETTING_KEYS_.forEach(function(k) {
+    let p = String(props[k] || '').trim();
+    let s = String(settings[k] || '').trim();
+    if (p && s) out[k] = (p === s) ? 'property+sheet' : 'conflict';
+    else if (p) out[k] = 'property';
+    else out[k] = s ? 'sheet' : 'none';
+  });
+  return out;
+}
+
+function setSecret_(key, value) {
+  let props = PropertiesService.getScriptProperties();
+  if (value === null) props.deleteProperty(key);
+  else props.setProperty(key, String(value).trim());
+  _scriptPropsCache = null;
+  if (key.indexOf('ZOOM_') === 0) clearZoomTokenCache_();
+}
+
+/** 「設定」シート上の秘密情報セルを空にする（平文を残さない） */
+function blankSecretCellsInSheet_(keys) {
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
+  if (!sheet) return [];
+  let data = sheet.getDataRange().getValues();
+  let blanked = [];
+  for (let i = 1; i < data.length; i++) {
+    let k = String(data[i][0]).trim();
+    if (keys.indexOf(k) === -1) continue;
+    if (String(data[i][2] || '').trim()) {
+      sheet.getRange(i + 1, 3).setValue('');
+      blanked.push(k);
+    }
+    // 旧行の入力例・説明を「シートに入力しない」案内に置き換える（v1.13.0）
+    sheet.getRange(i + 1, 4, 1, 2).setValues([[
+      '（管理画面の設定管理から入力）',
+      'v1.13.0〜 スクリプトプロパティに書込専用で保存。組織内の誰でも読めるため、このシートには入力しない。'
+    ]]);
+  }
+  _settingsCache = null;
+  return blanked;
+}
+
+/**
+ * 監査ログの JSON セル1つから秘密情報を伏せ字にする（v1.13.0）。純粋関数。
+ * - JSON オブジェクトなら、秘密情報キーの値だけを '[REDACTED]' にする（'(設定済み)' 等の状態表記は残す）
+ * - JSON でない・オブジェクトでない場合は、既知の秘密値（8文字以上）を部分一致で伏せる
+ * 返り値は書き換え後の文字列（変化なしなら元の文字列）。
+ */
+function redactAuditCell_(cell, secretKeys, secretValues) {
+  let text = String(cell == null ? '' : cell);
+  if (!text) return text;
+  let obj = null;
+  try { obj = JSON.parse(text); } catch (e) { obj = null; }
+  if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+    let changed = false;
+    secretKeys.forEach(function(k) {
+      if (!Object.prototype.hasOwnProperty.call(obj, k)) return;
+      let v = obj[k];
+      if (v === '' || v === null || v === '[REDACTED]' || /^\(.*\)$/.test(String(v))) return;
+      obj[k] = '[REDACTED]';
+      changed = true;
+    });
+    return changed ? JSON.stringify(obj) : text;
+  }
+  let next = text;
+  (secretValues || []).forEach(function(v) {
+    if (v && String(v).length >= 8) next = next.split(String(v)).join('[REDACTED]');
+  });
+  return next;
+}
+
+/**
+ * 監査ログに平文で残った秘密情報を [REDACTED] に置き換える（v1.13.0 以前の設定変更で記録されたもの）。
+ * 置換したセル数だけを返し、値そのものは返さない。
+ */
+function redactSecretsInAuditLog_(secretValues) {
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.AUDIT_LOG);
+  if (!sheet || sheet.getLastRow() < 2) return 0;
+  let range = sheet.getRange(2, 7, sheet.getLastRow() - 1, 2); // beforeJson / afterJson
+  let data = range.getValues();
+  let changed = 0;
+  for (let i = 0; i < data.length; i++) {
+    for (let j = 0; j < 2; j++) {
+      let cell = String(data[i][j] || '');
+      let next = redactAuditCell_(cell, SECRET_SETTING_KEYS_, secretValues);
+      if (next !== cell) { data[i][j] = next; changed++; }
+    }
+  }
+  if (changed) range.setValues(data);
+  return changed;
+}
+
+/**
+ * 秘密情報の移行計画を立てる（純粋関数・v1.13.0）。本物の値を絶対に失わないことを最優先にする。
+ *   シート空                      → 何もしない
+ *   プロパティ空                  → move（プロパティへコピーし、シートを空にする）
+ *   プロパティ＝シート            → blank（プロパティは既に同じ値。シートだけ空にする）
+ *   プロパティ≠シート（食い違い） → conflict（どちらが正しいか機械では決めない。両方残し、管理者に知らせる）
+ * 返り値: { move: [key], blank: [key], conflict: [key] }（move のキーは blank にも含める）
+ */
+function planSecretMigration_(sheetVals, propVals, keys) {
+  let out = { move: [], blank: [], conflict: [] };
+  keys.forEach(function(k) {
+    let s = String((sheetVals || {})[k] == null ? '' : sheetVals[k]).trim();
+    let p = String((propVals || {})[k] == null ? '' : propVals[k]).trim();
+    if (!s) return;
+    if (!p) { out.move.push(k); out.blank.push(k); return; }
+    if (p === s) { out.blank.push(k); return; }
+    out.conflict.push(k);
+  });
+  return out;
+}
+
+/**
+ * 秘密情報を「設定」シートからスクリプトプロパティへ移す（管理者が設定管理画面から実行）。
+ * - 計画は planSecretMigration_ に従う。プロパティとシートの値が食い違うキーは何も消さずに残し、
+ *   管理者に知らせる（ダミー値などがプロパティに先に入っていても、シートの本物の値を失わない）
+ * - 空にしたキーだけ、過去の監査ログの平文を [REDACTED] にする
+ * - 監査ログにはキー名と件数だけを記録する（値は記録しない）
+ * 冪等: 何度実行しても結果は同じ。
+ */
+function migrateSecretsToProperties() {
+  let actor = requireAdmin_();
+  return withScriptLock_(function() {
+    let settings = loadSettings_();
+    let plan = planSecretMigration_(settings, getScriptProps_(), SECRET_SETTING_KEYS_);
+    let redactValues = plan.blank.map(function(k) { return String(settings[k] || '').trim(); });
+    plan.move.forEach(function(k) { setSecret_(k, String(settings[k]).trim()); });
+    let blanked = plan.blank.length ? blankSecretCellsInSheet_(plan.blank) : [];
+    let redacted = redactSecretsInAuditLog_(redactValues);
+    appendAuditLog_(actor, 'migrate_secrets', 'settings', 'secrets', null,
+      { moved: plan.move, blanked: blanked, conflicts: plan.conflict, auditCellsRedacted: redacted });
+    return { moved: plan.move, blanked: blanked, conflicts: plan.conflict, auditCellsRedacted: redacted, status: getSecretStatus_() };
+  });
+}
+
+// ======================================================================
+// v1.13.0: タダメンマスタの読込を1実行1回にする（起動時に3〜4回読んでいた）
+// ======================================================================
+let _staffRowsCache = null;
+
+function getStaffRows_() {
+  if (_staffRowsCache) return _staffRowsCache;
+  let ss = getSpreadsheet_();
+  let sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
+  _staffRowsCache = (sheet && sheet.getLastRow() > 1) ? sheet.getDataRange().getValues() : [];
+  return _staffRowsCache;
+}
+
+function invalidateStaffRowsCache_() {
+  _staffRowsCache = null;
 }
 
 /**
@@ -103,6 +325,10 @@ function loadSettings_() {
  * 設定値を取得（キーが無い場合はデフォルト値を返す）
  */
 function getSetting_(key, defaultValue) {
+  if (isSecretSettingKey_(key)) {
+    let secret = getSecret_(key);
+    return secret || (defaultValue || '');
+  }
   let settings = loadSettings_();
   let val = settings[key];
   return (val !== undefined && val !== '') ? val : (defaultValue || '');
@@ -241,11 +467,7 @@ function getStaffRoleByEmail_(email) {
   let target = normalizeEmail_(email);
   if (!target) return null;
 
-  let ss = getSpreadsheet_();
-  let sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
-  if (!sheet || sheet.getLastRow() <= 1) return null;
-
-  let data = sheet.getDataRange().getValues();
+  let data = getStaffRows_(); // v1.13.0: 1実行1回の読込
   for (let i = 1; i < data.length; i++) {
     let em = normalizeEmail_(data[i][IDX.STAFF.EMAIL]);
     if (em !== target) continue;
@@ -269,13 +491,11 @@ function getActor_() {
   if (!actorEmail) {
     throw new Error('ユーザー情報の取得に失敗しました。');
   }
-  // Staffシート1回読みで name + role を同時取得
-  let ss = getSpreadsheet_();
-  let sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
+  // Staffシート1回読みで name + role を同時取得（v1.13.0: 実行内キャッシュを共用）
   let staffName = null;
   let staffRole = null;
-  if (sheet && sheet.getLastRow() > 1) {
-    let data = sheet.getDataRange().getValues();
+  {
+    let data = getStaffRows_();
     for (let i = 1; i < data.length; i++) {
       let em = normalizeEmail_(data[i][IDX.STAFF.EMAIL]);
       if (em !== actorEmail) continue;
@@ -516,29 +736,188 @@ function ensureCaseKeyMapping_(caseId, opt) {
 // Webアプリ エントリポイント
 // ======================================================================
 function doGet() {
-  let html = HtmlService.createTemplateFromFile('index')
-    .evaluate()
+  // v1.13.0（ADR-013）: シートを読まずに HTML を即座に返す。初期データはページ先頭のスクリプトが
+  // google.script.run で取りに行き、画面資源の読込・初期化と並行して進む（以前は全シート読込が
+  // 終わるまで HTML が返らず、その後に CDN 取得・JSX 変換が直列で走っていた）。
+  // テンプレート評価も不要なため createHtmlOutputFromFile を使う。
+  // XFrameOptions は既定（他サイトへの埋め込み不可）。埋め込み利用がないため、クリックジャッキング対策として ALLOWALL をやめた。
+  return HtmlService.createHtmlOutputFromFile('index')
     .setTitle('タダサポ管理')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
 
-  // 初期データをHTMLに埋め込み（google.script.run の往復を1回削減）
-  try {
-    let data = getInitialData();
-    let json = JSON.stringify(data).replace(/<\//g, '<\\/');
-    html.append('<script>window.__INITIAL_DATA__=' + json + ';</script>');
-  } catch (e) {
-    // 認証エラー等: 埋め込みスキップ（フロントで再取得しエラー表示）
+// ======================================================================
+// v1.13.0 計測: 初期データの読み方の比較（読むだけ。書き込みなし）
+// ======================================================================
+
+/** 起動時に読むシート（getInitialData が読む順） */
+function initialDataSheetNames_() {
+  return [SHEET_NAMES.STAFF, SHEET_NAMES.CASES, SHEET_NAMES.RECORDS, SHEET_NAMES.CASES_MANUAL,
+    SHEET_NAMES.SETTINGS, SHEET_NAMES.CASES_OVERRIDE, SHEET_NAMES.ANNUAL_ADJUST, SHEET_NAMES.CHAT_LINKS,
+    SHEET_NAMES.EMAIL_DRAFTS];
+}
+
+/**
+ * Sheets API values:batchGet の URL を組み立てる（純粋関数）。
+ * シート名は A1 表記の引用符で囲み（' は '' に）、URL エンコードする。値は書式なし・日時はシリアル値で受け取る。
+ */
+function buildBatchGetUrl_(spreadsheetId, sheetNames) {
+  let ranges = sheetNames.map(function(n) {
+    return 'ranges=' + encodeURIComponent("'" + String(n).replace(/'/g, "''") + "'");
+  }).join('&');
+  return 'https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(spreadsheetId)
+    + '/values:batchGet?' + ranges + '&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER';
+}
+
+/**
+ * 計測用（管理者が GAS エディタから実行。結果は実行ログ）。
+ * 起動時に読むシートを ① Sheets API の一括読込（1回の通信）と ② 現行の SpreadsheetApp（シートごと）で読み、
+ * 所要時間と行数を比べる。あわせて全シートの行数・列数（グリッドの大きさ）を出す（DB の重さの把握用）。
+ * 値そのものはログに出さない。冷えた状態と温まった状態を比べるため、時間をおいて2回実行する。
+ */
+function perfProbeSheetsApi() {
+  // 管理者確認は計測の後に行う（先に行うと DB が開かれ、冷えた状態を測れない）。
+  // 読むのは実行者が元々読めるデータだけで、値は返さず出力もしない。
+  let id = getSpreadsheetId_();
+  let names = initialDataSheetNames_();
+  let headers = { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() };
+  let result = { api: {}, spreadsheetApp: {}, rows: {}, sheets: [] };
+
+  // ① Sheets API（先に実行し、冷えた状態の値を取る）
+  let t = Date.now();
+  let res = UrlFetchApp.fetch(buildBatchGetUrl_(id, names), { headers: headers, muteHttpExceptions: true });
+  result.api.batchGetMs = Date.now() - t;
+  result.api.status = res.getResponseCode();
+  let apiRows = {};
+  if (result.api.status === 200) {
+    let body = JSON.parse(res.getContentText());
+    (body.valueRanges || []).forEach(function(vr, i) { apiRows[names[i]] = (vr.values || []).length; });
+    result.api.bytes = res.getContentText().length;
+  } else {
+    result.api.error = res.getContentText().slice(0, 300);
   }
 
-  return html;
+  // ② 現行（SpreadsheetApp。シートごとに読む）
+  t = Date.now();
+  let ss = SpreadsheetApp.openById(id);
+  result.spreadsheetApp.openMs = Date.now() - t;
+  let total = result.spreadsheetApp.openMs;
+  names.forEach(function(n) {
+    let t1 = Date.now();
+    let sh = ss.getSheetByName(n);
+    let rows = sh ? sh.getDataRange().getValues().length : 0;
+    let ms = Date.now() - t1;
+    total += ms;
+    result.spreadsheetApp[n] = ms;
+    result.rows[n] = { spreadsheetApp: rows, api: apiRows[n] };
+  });
+  result.spreadsheetApp.totalMs = total;
+
+  // 全シートのグリッドの大きさ（値は読まない）
+  t = Date.now();
+  let meta = UrlFetchApp.fetch('https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(id)
+    + '?fields=' + encodeURIComponent('sheets(properties(title,gridProperties(rowCount,columnCount)))'),
+    { headers: headers, muteHttpExceptions: true });
+  result.metaMs = Date.now() - t;
+  if (meta.getResponseCode() === 200) {
+    (JSON.parse(meta.getContentText()).sheets || []).forEach(function(s) {
+      let g = s.properties.gridProperties || {};
+      result.sheets.push({ title: s.properties.title, rows: g.rowCount, cols: g.columnCount, cells: (g.rowCount || 0) * (g.columnCount || 0) });
+    });
+    result.sheets.sort(function(a, b) { return b.cells - a.cells; });
+    result.totalCells = result.sheets.reduce(function(a, s) { return a + s.cells; }, 0);
+  }
+
+  requireAdmin_();
+  console.log(JSON.stringify(result, null, 1));
+  return result;
+}
+
+// ======================================================================
+// v1.13.0 DB の温め（keep-warm）: 冷えた DB を起こす約11秒を利用者に待たせない
+// ======================================================================
+// 時間帯はスクリプトプロパティで変更できる（DB を開かずに判定するため、設定シートではなくプロパティ）。
+//   KEEP_WARM_HOURS: 'H-H'（開始時以上・終了時未満。既定 '8-20'）
+//   KEEP_WARM_DAYS : 曜日 1=月 … 7=日 の範囲（既定 '1-7' = 毎日）
+const KEEP_WARM_FUNCTION_ = 'keepWarm';
+const KEEP_WARM_INTERVAL_MIN_ = 5;
+
+/** 範囲指定 'a-b' を [a, b] にする。不正なら既定値 */
+function parseRangeSpec_(spec, defLo, defHi, min, max) {
+  let m = String(spec == null ? '' : spec).trim().match(/^(\d{1,2})\s*-\s*(\d{1,2})$/);
+  if (!m) return [defLo, defHi];
+  let lo = parseInt(m[1], 10), hi = parseInt(m[2], 10);
+  if (lo < min || hi > max || lo > hi) return [defLo, defHi];
+  return [lo, hi];
+}
+
+/**
+ * 温める時間帯か（純粋関数）。hour: 0〜23、isoDay: 1=月 … 7=日。
+ * 時間は 開始以上・終了未満、曜日は両端を含む。
+ */
+function isWithinKeepWarmWindow_(hour, isoDay, hoursSpec, daysSpec) {
+  let h = parseRangeSpec_(hoursSpec, 8, 20, 0, 24);
+  let d = parseRangeSpec_(daysSpec, 1, 7, 1, 7);
+  return hour >= h[0] && hour < h[1] && isoDay >= d[0] && isoDay <= d[1];
+}
+
+/**
+ * 時間主導トリガーから呼ばれる（setupKeepWarmTrigger で設定）。時間帯外は DB を開かずに終わる。
+ * 時間帯内は IMPORTRANGE を含むシートの先頭セルだけを読み、DB を冷えさせない。
+ * 所要時間を実行ログに出す（数秒以上なら冷えていた＝間隔が長すぎる目安）。
+ */
+function keepWarm() {
+  let now = new Date();
+  let hour = parseInt(Utilities.formatDate(now, 'Asia/Tokyo', 'H'), 10);
+  let isoDay = parseInt(Utilities.formatDate(now, 'Asia/Tokyo', 'u'), 10);
+  let props = getScriptProps_();
+  if (!isWithinKeepWarmWindow_(hour, isoDay, props.KEEP_WARM_HOURS, props.KEEP_WARM_DAYS)) return;
+  let t = Date.now();
+  let ss = SpreadsheetApp.openById(getSpreadsheetId_());
+  [SHEET_NAMES.CASES, SHEET_NAMES.CHAT_LINKS, SHEET_NAMES.STAFF].forEach(function(n) {
+    let sh = ss.getSheetByName(n);
+    if (sh) sh.getRange(1, 1).getValue();
+  });
+  console.log(JSON.stringify({ keepWarm: Date.now() - t }));
+}
+
+/** keepWarm の時間主導トリガーを（作り直して）1つだけ設定する。管理者が GAS エディタから実行。トリガーは実行した人のアカウントで動く */
+function setupKeepWarmTrigger() {
+  requireAdmin_();
+  removeKeepWarmTrigger_();
+  ScriptApp.newTrigger(KEEP_WARM_FUNCTION_).timeBased().everyMinutes(KEEP_WARM_INTERVAL_MIN_).create();
+  let msg = 'keepWarm トリガーを設定しました（' + KEEP_WARM_INTERVAL_MIN_ + '分ごと。実行者: ' + Session.getActiveUser().getEmail() + '）';
+  console.log(msg);
+  return msg;
+}
+
+/** keepWarm のトリガーを削除する（管理者が GAS エディタから実行） */
+function removeKeepWarmTrigger() {
+  requireAdmin_();
+  let n = removeKeepWarmTrigger_();
+  console.log('keepWarm トリガーを ' + n + ' 件削除しました');
+  return n;
+}
+
+function removeKeepWarmTrigger_() {
+  let n = 0;
+  ScriptApp.getProjectTriggers().forEach(function(tr) {
+    if (tr.getHandlerFunction() === KEEP_WARM_FUNCTION_) { ScriptApp.deleteTrigger(tr); n++; }
+  });
+  return n;
 }
 
 // ======================================================================
 // 初期データ取得
 // ======================================================================
 function getInitialData() {
+  // v1.13.0 B0: 区間ごとの処理時間を計測し、実行ログ（Cloud Logging）と画面のコンソールに出す
+  let t0 = Date.now();
+  let perf = {};
+  let lap = function(name) { let now = Date.now(); perf[name] = now - t0; t0 = now; };
+
   ensureAttachmentSchema_();
+  lap('schema');
 
   let userEmail = normalizeEmail_(Session.getActiveUser().getEmail());
   let staff = getStaffByEmail(userEmail);
@@ -549,12 +928,20 @@ function getInitialData() {
 
   let role = getStaffRoleByEmail_(userEmail) || (isAdminEmail_(userEmail) ? 'admin' : 'staff');
   let isAdmin = role === 'admin';
-  let cases = getAllCasesJoined();
+  lap('auth');
+  let casesDetail = {};
+  let cases = getAllCasesJoined(casesDetail);
+  lap('cases');
+  perf.casesDetail = casesDetail;
   let masters = getMasters();
+  lap('masters');
   // v1.11.0: 下書きを持つ案件IDの一覧（バッジ表示用）
   let draftCaseIds = listDraftCaseIdsForUser_(userEmail);
+  lap('drafts');
+  console.log(JSON.stringify({ perf: 'getInitialData', ms: perf, cases: cases.length }));
 
   return {
+    _perf: perf,
     user: { name: staff.name, email: userEmail, isAdmin: isAdmin, role: role },
     cases: cases,
     masters: masters,
@@ -698,21 +1085,28 @@ function getChatLinkMap_(ss, timeZone) {
 // ======================================================================
 // データ結合取得
 // ======================================================================
-function getAllCasesJoined() {
+function getAllCasesJoined(perfOut) {
+  // v1.13.0: perfOut（任意）に区間ごとの処理時間を書き込む（getInitialData の _perf.casesDetail）
+  let t0 = Date.now();
+  let lap = function(name) { if (!perfOut) return; let now = Date.now(); perfOut[name] = now - t0; t0 = now; };
   let ss = getSpreadsheet_();
   // スプレッドシートのタイムゾーンを取得（dateLabel の整形に使用）
   let ssTimeZone = ss.getSpreadsheetTimeZone();
   let caseSheet = ss.getSheetByName(SHEET_NAMES.CASES);
   let recordSheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  lap('open');
 
   let caseData = caseSheet.getDataRange().getValues();
+  lap('caseList');
   let recordData = recordSheet.getDataRange().getValues();
+  lap('records');
 
   // 手動追加案件シートを読み込み、案件リストとマージ（ヘッダ行を除いた行配列を結合）
   let manualSheet = ss.getSheetByName(SHEET_NAMES.CASES_MANUAL);
   let manualRows = (manualSheet && manualSheet.getLastRow() > 1)
     ? manualSheet.getDataRange().getValues().slice(1)
     : [];
+  lap('manual');
   let allCaseRows = caseData.slice(1).concat(manualRows);
 
   // 削除済み案件を除外
@@ -726,6 +1120,7 @@ function getAllCasesJoined() {
   // S1 Stage4: 読み取り結合を case_id 経由へ切替えるフラグ（既定OFF=従来どおり String(PK)）。
   // Backfill 完了・監視後に CASE_KEY_READ_VIA_MAP=true で切替える（ロールバックは false に戻すだけ）。
   let readViaMap = parseBoolean_(getSetting_('CASE_KEY_READ_VIA_MAP', 'false'), false);
+  lap('settings');
 
   // 案件補正マップを読み込む（管理者が修正した値を案件リストに上書き表示するため）
   let overrideMap = getCasesOverrideMap_(ss);
@@ -737,27 +1132,16 @@ function getAllCasesJoined() {
   }
 
   // 年間利用補正マップ（管理者が手動修正した利用回数の補正量。キー=正規化メール+'_'+年度）— v1.12.4
+  lap('override');
   let annualAdjustMap = getAnnualAdjustmentMap_(ss);
+  lap('annualAdjust');
 
   // 申込通知チャットのスレッドリンク（v1.12.13。フォーム案件のみ・取得失敗時は空）
   let chatLinkMap = getChatLinkMap_(ss, ssTimeZone);
+  lap('chatLink');
 
-  // メール履歴を読み込み
-  let emailMap = {};
-  let emailSheet = ss.getSheetByName(SHEET_NAMES.EMAIL_HISTORY);
-  if (emailSheet && emailSheet.getLastRow() > 1) {
-    let emailData = emailSheet.getDataRange().getValues();
-    for (let ei = 1; ei < emailData.length; ei++) {
-      let eCaseId = joinKeyForRead_(emailData[ei][IDX.EMAIL.CASE_ID], readViaMap);
-      if (!emailMap[eCaseId]) emailMap[eCaseId] = [];
-      emailMap[eCaseId].push({
-        sendDate: emailData[ei][IDX.EMAIL.SEND_DATE] ? new Date(emailData[ei][IDX.EMAIL.SEND_DATE]).toISOString() : null,
-        senderName: String(emailData[ei][IDX.EMAIL.SENDER_NAME]),
-        subject: String(emailData[ei][IDX.EMAIL.SUBJECT]),
-        body: String(emailData[ei][IDX.EMAIL.BODY])
-      });
-    }
-  }
+  // v1.13.0: メール履歴（本文つき）の全件読込を廃止。joined の emails はフロントで未使用だった
+  // （案件ごとのメール表示は getThreadMessages が担う）。起動時の読込と送信量・データ露出を削減。
 
   let recordMap = {};
   let fiscalYearCounts = {};
@@ -889,12 +1273,13 @@ function getAllCasesJoined() {
       tools: record.tools || [],
       subStaff: record.subStaff || [],
       currentFiscalYearCount: count,
-      emails: emailMap[joinKey] || [],
       chatThreadUrl: (chatKey && chatLinkMap[chatKey]) || null
     });
   }
 
-  return joinedCases.sort(function(a, b) { return new Date(b.timestamp) - new Date(a.timestamp); });
+  let sorted = joinedCases.sort(function(a, b) { return new Date(b.timestamp) - new Date(a.timestamp); });
+  lap('join');
+  return sorted;
 }
 
 // ======================================================================
@@ -1110,12 +1495,30 @@ function cancelCase(caseId) {
 // v1.11.7 で 6 に更新（addScheduleZoomSettings を自動実行）
 const SCHEMA_VERSION_ = '6';
 
+// v1.13.0: 適用済みのスキーマ版を永続記録するスクリプトプロパティ（SDD S-00・F-02）
+const SCRIPT_PROP_SCHEMA_APPLIED_ = 'SCHEMA_VERSION_APPLIED';
+
+/**
+ * スキーマ移行の確認が必要か（純粋関数・v1.13.0）。
+ * 永続記録（スクリプトプロパティ）か、従来の CacheService の印のどちらかが現行版なら不要。
+ */
+function schemaMigrationNeeded_(appliedProp, cachedVersion, currentVersion) {
+  let cur = String(currentVersion);
+  return String(appliedProp == null ? '' : appliedProp).trim() !== cur
+    && String(cachedVersion == null ? '' : cachedVersion).trim() !== cur;
+}
+
+/** スキーマ移行が済んでいるか（プロパティは getScriptProps_ の一括取得を使うので追加の読込なし） */
+function isSchemaApplied_() {
+  let cached = null;
+  try { cached = CacheService.getScriptCache().get('schema_v'); } catch (e) { /* 利用不可は無視 */ }
+  return !schemaMigrationNeeded_(getScriptProps_()[SCRIPT_PROP_SCHEMA_APPLIED_], cached, SCHEMA_VERSION_);
+}
+
 function ensureAttachmentSchema_() {
-  // CacheService でスキーマ確認済みなら全スキップ（6時間有効）
-  try {
-    let cache = CacheService.getScriptCache();
-    if (cache.get('schema_v') === SCHEMA_VERSION_) return;
-  } catch (e) { /* CacheService 利用不可の場合はフォールスルー */ }
+  // v1.13.0: 適用済みの版をスクリプトプロパティに永続記録し、一致すれば全スキップ。
+  // v1.12.x までは CacheService の6時間の印だけで、6時間ごとに最初の利用者が全移行確認（約10秒）を待っていた。
+  if (isSchemaApplied_()) return;
 
   try {
     ensureAdminSchema_();
@@ -1133,7 +1536,11 @@ function ensureAttachmentSchema_() {
     throw new Error('添付機能の初期化に失敗しました。管理者に連絡してください。詳細: ' + e.message);
   }
 
-  // 全マイグレーション成功後にキャッシュ（21600秒 = 6時間）
+  // 全マイグレーション成功後に永続記録（失敗時は記録しないので次回また確認する）
+  try {
+    PropertiesService.getScriptProperties().setProperty(SCRIPT_PROP_SCHEMA_APPLIED_, SCHEMA_VERSION_);
+    _scriptPropsCache = null;
+  } catch (e) { /* 記録失敗は無視（次回また確認するだけ） */ }
   try {
     CacheService.getScriptCache().put('schema_v', SCHEMA_VERSION_, 21600);
   } catch (e) { /* キャッシュ保存失敗は無視 */ }
@@ -1762,13 +2169,37 @@ function getThreadMessages(caseId) {
 // ======================================================================
 // Zoom API
 // ======================================================================
-function getZoomAccessToken_() {
+// v1.13.0: Zoom のアクセストークン（有効1時間）を ScriptCache に50分保持し、毎回の取得往復を省く。
+// キーにクライアントIDのハッシュを含め、認証情報の差し替え時は clearZoomTokenCache_ で破棄する。
+const ZOOM_TOKEN_CACHE_SEC_ = 3000;
+
+function zoomTokenCacheKey_(clientId) {
+  let digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, String(clientId || ''));
+  return 'zoom_token_' + Utilities.base64EncodeWebSafe(digest).slice(0, 16);
+}
+
+function clearZoomTokenCache_() {
+  try {
+    let clientId = getSecret_('ZOOM_CLIENT_ID');
+    if (clientId) CacheService.getScriptCache().remove(zoomTokenCacheKey_(clientId));
+  } catch (e) { /* キャッシュ不可でも致命ではない */ }
+}
+
+function getZoomAccessToken_(forceRefresh) {
   let accountId = getSetting_('ZOOM_ACCOUNT_ID');
   let clientId = getSetting_('ZOOM_CLIENT_ID');
   let clientSecret = getSetting_('ZOOM_CLIENT_SECRET');
 
   if (!accountId || !clientId || !clientSecret) {
-    throw new Error('Zoom API の設定が不足しています。「設定」シートに ZOOM_ACCOUNT_ID, ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET を入力してください。');
+    throw new Error('Zoom API の設定が不足しています。管理画面の設定管理「連携」で ZOOM_ACCOUNT_ID, ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET を設定してください（スクリプトプロパティに書込専用で保存されます）。');
+  }
+
+  let cacheKey = zoomTokenCacheKey_(clientId);
+  let cache = null;
+  try { cache = CacheService.getScriptCache(); } catch (e) { cache = null; }
+  if (cache && !forceRefresh) {
+    let cached = cache.get(cacheKey);
+    if (cached) return cached;
   }
 
   let credentials = Utilities.base64Encode(clientId + ':' + clientSecret);
@@ -1780,24 +2211,34 @@ function getZoomAccessToken_() {
   });
 
   let result = JSON.parse(response.getContentText());
-  if (result.access_token) return result.access_token;
-  throw new Error('Zoom認証エラー: ' + (result.reason || response.getContentText()));
+  if (result.access_token) {
+    if (cache) {
+      let ttl = Math.min(ZOOM_TOKEN_CACHE_SEC_, Math.max(60, (Number(result.expires_in) || 3600) - 300));
+      try { cache.put(cacheKey, result.access_token, ttl); } catch (e) { /* 致命ではない */ }
+    }
+    return result.access_token;
+  }
+  // 認証失敗の応答本文には秘密が含まれないが、念のため reason のみ返す
+  throw new Error('Zoom認証エラー: ' + (result.reason || ('HTTP ' + response.getResponseCode())));
 }
 
 function createZoomMeeting(title, startTime, durationMinutes) {
-  let token = getZoomAccessToken_();
   let startISO = Utilities.formatDate(new Date(startTime), 'Asia/Tokyo', "yyyy-MM-dd'T'HH:mm:ss");
-
-  let response = UrlFetchApp.fetch('https://api.zoom.us/v2/users/me/meetings', {
-    method: 'post',
-    headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-    payload: JSON.stringify({
-      topic: title, type: 2, start_time: startISO,
-      duration: durationMinutes || 60, timezone: 'Asia/Tokyo',
-      settings: { join_before_host: true, waiting_room: false, auto_recording: 'none' }
-    }),
-    muteHttpExceptions: true
-  });
+  let post = function(token) {
+    return UrlFetchApp.fetch('https://api.zoom.us/v2/users/me/meetings', {
+      method: 'post',
+      headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+      payload: JSON.stringify({
+        topic: title, type: 2, start_time: startISO,
+        duration: durationMinutes || 60, timezone: 'Asia/Tokyo',
+        settings: { join_before_host: true, waiting_room: false, auto_recording: 'none' }
+      }),
+      muteHttpExceptions: true
+    });
+  };
+  let response = post(getZoomAccessToken_());
+  // v1.13.0: キャッシュしたトークンが失効・取消されていた場合は1回だけ取り直して再試行
+  if (response.getResponseCode() === 401) response = post(getZoomAccessToken_(true));
 
   let result = JSON.parse(response.getContentText());
   if (result.join_url) return { joinUrl: result.join_url, meetingId: String(result.id) };
@@ -2406,9 +2847,7 @@ function updateSupportRecord(recordData) {
 // ======================================================================
 function getStaffByEmail(email) {
   let normalized = normalizeEmail_(email);
-  let ss = getSpreadsheet_();
-  let sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
-  let data = sheet.getDataRange().getValues();
+  let data = getStaffRows_(); // v1.13.0: 1実行1回の読込
 
   for (let i = 1; i < data.length; i++) {
     let staffEmail = normalizeEmail_(data[i][IDX.STAFF.EMAIL]);
@@ -2428,10 +2867,8 @@ function getMasters() {
   if (zoomEnabled) methods.splice(1, 0, 'Zoom');
   let allStaff = [];
   try {
-    let ss = getSpreadsheet_();
-    let staffSheet = ss.getSheetByName(SHEET_NAMES.STAFF);
-    if (staffSheet && staffSheet.getLastRow() > 1) {
-      let rows = staffSheet.getDataRange().getValues();
+    {
+      let rows = getStaffRows_(); // v1.13.0: 1実行1回の読込
       for (let i = 1; i < rows.length; i++) {
         let em = normalizeEmail_(rows[i][IDX.STAFF.EMAIL]);
         if (!em) continue;
@@ -2547,23 +2984,38 @@ function ensureStaffAdminSchema_() {
   let activeHeader = String(headers[IDX.STAFF.IS_ACTIVE] || '').trim();
 
   if (sheet.getLastColumn() < 5) {
-    sheet.insertColumnsAfter(sheet.getLastColumn(), 5 - sheet.getLastColumn());
+    sheet.insertColumnsAfter(sheet.getLastColumn(), 5 - sheet.getLastColumn()); invalidateStaffRowsCache_();
   }
-  if (!roleHeader) sheet.getRange(1, IDX.STAFF.ROLE + 1).setValue('ROLE');
-  if (!activeHeader) sheet.getRange(1, IDX.STAFF.IS_ACTIVE + 1).setValue('IS_ACTIVE');
+  if (!roleHeader) sheet.getRange(1, IDX.STAFF.ROLE + 1).setValue('ROLE'); invalidateStaffRowsCache_();
+  if (!activeHeader) sheet.getRange(1, IDX.STAFF.IS_ACTIVE + 1).setValue('IS_ACTIVE'); invalidateStaffRowsCache_();
 
   if (sheet.getLastRow() > 1) {
-    let roleRange = sheet.getRange(2, IDX.STAFF.ROLE + 1, sheet.getLastRow() - 1, 1);
-    let activeRange = sheet.getRange(2, IDX.STAFF.IS_ACTIVE + 1, sheet.getLastRow() - 1, 1);
-    let roleValues = roleRange.getValues();
-    let activeValues = activeRange.getValues();
-    for (let i = 0; i < roleValues.length; i++) {
-      if (!String(roleValues[i][0] || '').trim()) roleValues[i][0] = 'staff';
-      if (String(activeValues[i][0] || '').trim() === '') activeValues[i][0] = 'true';
-    }
-    roleRange.setValues(roleValues);
-    activeRange.setValues(activeValues);
+    let n = sheet.getLastRow() - 1;
+    let rows = sheet.getRange(2, 1, n, IDX.STAFF.IS_ACTIVE + 1).getValues();
+    let plan = planStaffDefaults_(rows);
+    // v1.13.0: メールがある行の空欄だけを補完し、変更があったときだけ書き込む。
+    // 従来はメールの無い空行にも D=staff / E=true を書き、最終行が伸びたまま戻らなかった（1,506 行の原因）
+    if (plan.roleChanged) { sheet.getRange(2, IDX.STAFF.ROLE + 1, n, 1).setValues(plan.role); invalidateStaffRowsCache_(); }
+    if (plan.activeChanged) { sheet.getRange(2, IDX.STAFF.IS_ACTIVE + 1, n, 1).setValues(plan.active); invalidateStaffRowsCache_(); }
   }
+}
+
+/**
+ * タダメンマスタの ROLE / IS_ACTIVE の補完計画（純粋関数・v1.13.0）。
+ * メール（IDX.STAFF.EMAIL）がある行だけ、ROLE 空欄→'staff'、IS_ACTIVE 空欄→'true' にする。メールの無い行は触らない。
+ * 返り値: { role: [[v]], active: [[v]], roleChanged, activeChanged }（role/active はそのまま setValues できる形）
+ */
+function planStaffDefaults_(rows) {
+  let out = { role: [], active: [], roleChanged: false, activeChanged: false };
+  (rows || []).forEach(function(r) {
+    let hasEmail = String(r[IDX.STAFF.EMAIL] || '').trim() !== '';
+    let role = r[IDX.STAFF.ROLE], active = r[IDX.STAFF.IS_ACTIVE];
+    if (hasEmail && !String(role == null ? '' : role).trim()) { role = 'staff'; out.roleChanged = true; }
+    if (hasEmail && String(active == null ? '' : active).trim() === '') { active = 'true'; out.activeChanged = true; }
+    out.role.push([role == null ? '' : role]);
+    out.active.push([active == null ? '' : active]);
+  });
+  return out;
 }
 
 function migrateAdminEmailsToStaffRoles_() {
@@ -2578,17 +3030,16 @@ function migrateAdminEmailsToStaffRoles_() {
   for (let i = 1; i < data.length; i++) {
     let em = normalizeEmail_(data[i][IDX.STAFF.EMAIL]);
     if (!em) continue;
-    if (adminMap[em]) {
-      sheet.getRange(i + 1, IDX.STAFF.ROLE + 1).setValue('admin');
+    // v1.13.0: 既に admin の行は書き直さない
+    if (adminMap[em] && String(data[i][IDX.STAFF.ROLE] || '').trim().toLowerCase() !== 'admin') {
+      sheet.getRange(i + 1, IDX.STAFF.ROLE + 1).setValue('admin'); invalidateStaffRowsCache_();
     }
   }
 }
 
 function ensureAdminSchema_() {
-  // CacheService でスキーマ確認済みならスキップ
-  try {
-    if (CacheService.getScriptCache().get('schema_v') === SCHEMA_VERSION_) return;
-  } catch (e) { /* フォールスルー */ }
+  // スキーマ確認済み（永続記録または CacheService）ならスキップ
+  if (isSchemaApplied_()) return;
   ensureStaffAdminSchema_();
   migrateAdminEmailsToStaffRoles_();
   getOrCreateAuditLogSheet_();
@@ -2618,12 +3069,7 @@ function getAdminPanelData() {
   requireAdmin_();
   ensureAdminSchema_();
 
-  let settings = loadSettings_();
-  let allowed = getEditableSettingsKeys_();
-  let filteredSettings = {};
-  for (let i = 0; i < allowed.length; i++) {
-    filteredSettings[allowed[i]] = settings[allowed[i]] || '';
-  }
+  let filteredSettings = buildEditableSettingsForClient_();
 
   let auditSheet = getOrCreateAuditLogSheet_();
   let logs = [];
@@ -2645,6 +3091,7 @@ function getAdminPanelData() {
   return {
     staffMembers: listStaffMembers_(),
     settings: filteredSettings,
+    secretStatus: getSecretStatus_(), // v1.13.0: 秘密情報は値を返さず保存場所だけ返す
     auditLogs: logs
   };
 }
@@ -2693,8 +3140,8 @@ function upsertStaffMember(payload) {
     if (!hasIsActive) {
       isActive = parseBoolean_(data[rowIndex - 1][IDX.STAFF.IS_ACTIVE], true);
     }
-    sheet.getRange(rowIndex, IDX.STAFF.ROLE + 1).setValue(role);
-    sheet.getRange(rowIndex, IDX.STAFF.IS_ACTIVE + 1).setValue(String(isActive));
+    sheet.getRange(rowIndex, IDX.STAFF.ROLE + 1).setValue(role); invalidateStaffRowsCache_();
+    sheet.getRange(rowIndex, IDX.STAFF.IS_ACTIVE + 1).setValue(String(isActive)); invalidateStaffRowsCache_();
     _settingsCache = null;
     appendAuditLog_(actor, 'upsert_staff', 'staff', email, before, {
       name: name,
@@ -2730,7 +3177,7 @@ function deactivateStaffMember(email) {
           role: String(data[i][IDX.STAFF.ROLE] || 'staff').toLowerCase(),
           isActive: parseBoolean_(data[i][IDX.STAFF.IS_ACTIVE], true)
         };
-        sheet.getRange(i + 1, IDX.STAFF.IS_ACTIVE + 1).setValue('false');
+        sheet.getRange(i + 1, IDX.STAFF.IS_ACTIVE + 1).setValue('false'); invalidateStaffRowsCache_();
         appendAuditLog_(actor, 'deactivate_staff', 'staff', target, before, {
           name: before.name,
           email: target,
@@ -2778,6 +3225,18 @@ const SETTINGS_LABEL_MAP_ = {
   TOOL_MONTHLY_LIMITS:         'ツール月間上限'
 };
 
+/**
+ * 管理画面へ返す編集可能設定。秘密情報（SECRET_SETTING_KEYS_）は値を返さず常に空文字（書込専用）。
+ */
+function buildEditableSettingsForClient_() {
+  let settings = loadSettings_();
+  let out = {};
+  getEditableSettingsKeys_().forEach(function(key) {
+    out[key] = isSecretSettingKey_(key) ? '' : (settings[key] || '');
+  });
+  return out;
+}
+
 function updateSettingsAdmin(patch) {
   let actor = requireAdmin_();
   ensureAdminSchema_();
@@ -2796,8 +3255,20 @@ function updateSettingsAdmin(patch) {
   try {
     let before = {};
     let after = {};
+    // v1.13.0: 秘密情報はスクリプトプロパティへ。空文字=変更なし、null=削除。監査ログに値は残さない。
+    let secretKeysToBlank = [];
     Object.keys(patch).forEach(function(key) {
       if (!allowMap[key]) throw new Error('更新不可の設定キーです: ' + key);
+      if (isSecretSettingKey_(key)) {
+        let v = patch[key];
+        if (v === '' || v === undefined) return;
+        let had = !!String(getScriptProps_()[key] || '').trim();
+        setSecret_(key, v === null ? null : String(v));
+        before[key] = had ? '(設定済み)' : '(未設定)';
+        after[key] = v === null ? '(削除)' : '(変更)';
+        secretKeysToBlank.push(key);
+        return;
+      }
       let found = false;
       for (let i = 1; i < data.length; i++) {
         if (String(data[i][0]) === key) {
@@ -2823,16 +3294,14 @@ function updateSettingsAdmin(patch) {
         after[key] = newVal;
       }
     });
+    if (secretKeysToBlank.length) blankSecretCellsInSheet_(secretKeysToBlank); // 旧平文を残さない
     _settingsCache = null;
     appendAuditLog_(actor, 'update_settings', 'settings', 'settings', before, after);
   } finally {
     lock.releaseLock();
   }
 
-  let settings = loadSettings_();
-  let out = {};
-  getEditableSettingsKeys_().forEach(function(key) { out[key] = settings[key] || ''; });
-  return out;
+  return { settings: buildEditableSettingsForClient_(), secretStatus: getSecretStatus_() };
 }
 
 function reassignCaseAdmin(caseId, staffEmail) {
@@ -4022,12 +4491,12 @@ function setupSettingsSheet() {
 
     // カテゴリ: Zoom連携
     ['#Zoom連携',  'Zoom連携設定', '', '', ''],
-    ['ZOOM_ACCOUNT_ID',    'アカウント ID',            '', 'aBcDeFgHiJkLmN_12345',              'Zoom Marketplace → アプリ管理 → 「Account ID」の値。\nZoom連携を使わない場合は空欄でOK。'],
-    ['ZOOM_CLIENT_ID',     'クライアント ID',          '', 'xYz123AbC456dEf',                   '同画面の「Client ID」の値。'],
-    ['ZOOM_CLIENT_SECRET', 'クライアントシークレット', '', 'a1B2c3D4e5F6g7H8i9J0',             '同画面の「Client Secret」の値。\n※外部に漏らさないでください。'],
-    ['ZOOM_FIXED_URL',     '固定Zoom URL',             '', 'https://zoom.us/j/97381145741?pwd=...', '「いつものタダスクID」モードで再利用する固定 Zoom ミーティングの参加URL。\n空欄の場合は固定IDモードを使用しません（毎回新規発行）。'],
-    ['ZOOM_FIXED_ID',      '固定Zoom ID',              '', '973 8114 5741',                     '「いつものタダスクID」の Zoom ミーティング ID（ハイフン/スペース可）。'],
-    ['ZOOM_FIXED_PASS',    '固定Zoomパスコード',       '', 'tadasc',                            '「いつものタダスクID」の参加パスコード。'],
+    ['ZOOM_ACCOUNT_ID',    'アカウント ID',            '', '（管理画面の設定管理から入力）', 'v1.13.0〜 スクリプトプロパティに書込専用で保存。組織内の誰でも読めるため、このシートには入力しない。'],
+    ['ZOOM_CLIENT_ID',     'クライアント ID',          '', '（管理画面の設定管理から入力）', 'v1.13.0〜 スクリプトプロパティに書込専用で保存。組織内の誰でも読めるため、このシートには入力しない。'],
+    ['ZOOM_CLIENT_SECRET', 'クライアントシークレット', '', '（管理画面の設定管理から入力）', 'v1.13.0〜 スクリプトプロパティに書込専用で保存。組織内の誰でも読めるため、このシートには入力しない。'],
+    ['ZOOM_FIXED_URL',     '固定Zoom URL',             '', '（管理画面の設定管理から入力）', 'v1.13.0〜 スクリプトプロパティに書込専用で保存。組織内の誰でも読めるため、このシートには入力しない。'],
+    ['ZOOM_FIXED_ID',      '固定Zoom ID',              '', '123 4567 8901',                     '「いつものタダスクID」の Zoom ミーティング ID（ハイフン/スペース可）。'],
+    ['ZOOM_FIXED_PASS',    '固定Zoomパスコード',       '', '（管理画面の設定管理から入力）', 'v1.13.0〜 スクリプトプロパティに書込専用で保存。組織内の誰でも読めるため、このシートには入力しない。'],
 
     // カテゴリ: カレンダー連携
     ['#カレンダー', 'カレンダー連携設定', '', '', ''],
@@ -4841,9 +5310,9 @@ function addScheduleZoomSettings() {
 
   let newRows = [
     ['#日程・予約管理', '日程・予約管理設定（v1.11.7+）', '', '', ''],
-    ['ZOOM_FIXED_URL',     '固定Zoom URL',             '', 'https://zoom.us/j/97381145741?pwd=...', '「いつものタダスクID」モードで再利用する固定 Zoom ミーティングの参加URL。\n空欄の場合は固定IDモードを使用しません（毎回新規発行）。'],
-    ['ZOOM_FIXED_ID',      '固定Zoom ID',              '', '973 8114 5741',                     '「いつものタダスクID」の Zoom ミーティング ID。'],
-    ['ZOOM_FIXED_PASS',    '固定Zoomパスコード',       '', 'tadasc',                            '「いつものタダスクID」の参加パスコード。'],
+    ['ZOOM_FIXED_URL',     '固定Zoom URL',             '', '（管理画面の設定管理から入力）', 'v1.13.0〜 スクリプトプロパティに書込専用で保存。組織内の誰でも読めるため、このシートには入力しない。'],
+    ['ZOOM_FIXED_ID',      '固定Zoom ID',              '', '123 4567 8901',                     '「いつものタダスクID」の Zoom ミーティング ID。'],
+    ['ZOOM_FIXED_PASS',    '固定Zoomパスコード',       '', '（管理画面の設定管理から入力）', 'v1.13.0〜 スクリプトプロパティに書込専用で保存。組織内の誰でも読めるため、このシートには入力しない。'],
     ['TEAM_CALENDAR_ID',   'チームカレンダー ID（書込先）', 'c_c6938b18dde61c51ff917d22bea83e6852d1b960250fd583cf0993865cd0172d@group.calendar.google.com', 'xxx@group.calendar.google.com', 'Zoom予約・日程確定時に必ず登録するチーム共有カレンダーID。\n空欄時は SHARED_CALENDAR_ID にフォールバック。\n方法=Zoomの場合は本IDへの登録が強制されます（重複防止）。'],
     ['DISPLAY_CALENDARS_JSON', '表示専用カレンダー（重複監視）', '[{"name":"タダスク","id":"c_b6f7dbbd799d55c2ef9f64afb519043a93d11f2408706940f87db8eb2e06d028@group.calendar.google.com"}]', '[{"name":"タダスク","id":"xxx@group.calendar.google.com"}]', '日程の重複検知に使用する読み取り専用カレンダーのリスト（JSON配列）。\nname=表示名, id=カレンダーID。複数登録可。'],
     ['SCHEDULE_BUFFER_MIN', '予約前後インターバル（分）', '30', '30', '日程確定の重複判定で前後に確保するバッファ時間（分）。\n0以上の整数。']
