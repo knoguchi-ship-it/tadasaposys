@@ -31,7 +31,7 @@ keepWarm（DB の温め）では効果が薄かったため、画面を開くた
 | テスト | ローカルの単体・E2E は合格（冒頭の現在地）。**GAS 実機では未検証** |
 
 **次にやること（順番）**
-1. テスト用デプロイ（@164）を v1.14.0 のビルドで更新して実機確認（`clasp push` / `clasp deploy -i <テスト用ID>` はユーザー確認のうえ）。見ること: ①2回目以降の起動で `[perf] initial data` の `server.ms` が `snapshotRead` と `auth` だけ（`rebuild` が無い）こと、②担当などの書込後に別タブで開くと反映されていること、③「最新に更新」、④実行ログの `keepWarm` の `detail`（`saved.chunks`・`discarded`）
+1. **（2026/11/27 済）テスト用デプロイを @165（v1.14.0 8a16b18）に更新。** 実機確認（`clasp push` / `clasp deploy -i <テスト用ID>` はユーザー確認のうえ）。見ること: ①2回目以降の起動で `[perf] initial data` の `server.ms` が `snapshotRead` と `auth` だけ（`rebuild` が無い）こと、②担当などの書込後に別タブで開くと反映されていること、③「最新に更新」、④実行ログの `keepWarm` の `detail`（`saved.chunks`・`discarded`）
 2. 管理者アカウントで `diagnoseSheetsApiRead()` を数回実行し、`ok: true` なら `SNAPSHOT_READ_MODE=sheetsApi` に切り替えて `keepWarm` の `detail.read` を比べる（RUNBOOK §1-4-3）
 3. 検証が済んだら v1.13.0 と合わせて PR → テスト用デプロイを `clasp undeploy` → デプロイ担当へ依頼
 
@@ -50,7 +50,7 @@ keepWarm（DB の温め）では効果が薄かったため、画面を開くた
 | テスト用デプロイ | **@164**（説明欄「【テスト・本番ではない】v1.13.0 1b20c70 / 本番は @159（v1.12.13）」）。`clasp list-deployments` で確認できる。ID は作業者の手元の `.clasp.deploy.json` の `test`。**検証が終わったら `clasp undeploy <テスト用ID>` で削除する**。PR マージまで GAS エディタから「新しいバージョン」でデプロイしない（HEAD が未マージの v1.13.0 のため） |
 | スクリプトプロパティ | `SPREADSHEET_ID` 設定済み（v1.13.0 は URL を貼っても動く）。`SCHEMA_VERSION_APPLIED` はアプリが自動で書く |
 | 高度なサービス | **Sheets API v4 を GAS エディタから追加済み**（手元の `appsscript.json` にも反映済み） |
-| DB の温めトリガー | **設定済み（2026/11/27・検証担当のアカウント）**。「トリガー」に `keepWarm`（5分ごと）が1つ。時間帯は既定（毎日8〜20時）。本番反映時は管理者アカウントで設定し直す（`setupKeepWarmTrigger` は作り直して1つにする）。不要なら `removeKeepWarmTrigger` |
+| DB の温めトリガー | **削除済み（2026/11/27・利用者が停止）**。v1.14.0 では `keepWarm` は完成品の5分ごとの作り直しを担う。止めている間は、完成品の期限切れ（既定10分）後に最初に開いた人が作り直しを待ち、フォーム申込の反映は期限切れ・書込・「最新に更新」のいずれかまで遅れる。再開は管理者アカウントで `setupKeepWarmTrigger()` |
 | タダメンマスタの空行 | **削除済み（2026/11/27）**。本番反映時の手順 7-3 は確認だけでよい |
 | 本番 | **@159（v1.12.13）のまま**。毎回 `clasp list-deployments` で確認済み |
 
