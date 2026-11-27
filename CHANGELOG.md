@@ -13,7 +13,8 @@
 - **起動の並列化**: `doGet` はシートを読まずに HTML を即返し（`createHtmlOutputFromFile`）、ページ先頭の script が `getInitialData()` を先行発行。シート読込と画面資源の読込・初期化が並行する。
 - **読込量の削減**: `getAllCasesJoined` のメール履歴（本文つき）全件読込と、未使用だった案件の `emails` を廃止。タダメンマスタを1実行1回の読込に（`getStaffRows_`。起動時3〜4回 → 1回）。FullCalendar を SRI 付き遅延読込（アイドル時に先読み）にし、head での同期読込（描画ブロック）を解消。Babel の二重ダウンロード（版指定なし URL の preload）を解消。
 - **コールドスタートの約10秒を解消**（2026-11-26 テストデプロイの実測で発見。`_perf.schema` = 10,366ms / 初期表示 18.1秒）: スキーマ自動移行の「確認済み」をスクリプトプロパティ `SCHEMA_VERSION_APPLIED` に永続記録し、一致すれば確認を省く。v1.12.x までは CacheService の6時間の印だけで、6時間ごとに最初の利用者が全移行確認を待っていた。あわせてタダメンマスタの ROLE / IS_ACTIVE 補完を**メールがある行だけ**にし（従来はメールの無い空行にも D=staff / E=true を書き、最終行が 1,506 行まで伸びたまま毎回全行を読み書きしていた）、補完と管理者ロールの付与は変更があるときだけ書き込むようにした。既存の空行は手作業で行削除（RUNBOOK）。
-- **計測用 `perfProbeSheetsApi()`**（読むだけ・管理者が GAS エディタから実行）: Sheets API の一括読込と現行の読み方の所要時間、全シートの大きさを実行ログに出す。
+- **DB の温め（keep-warm）**: 冷えた DB を起こすのに約11秒かかり（テストデプロイ実測）、Sheets API の一括読込でも避けられなかったため、時間主導トリガー（5分ごと）が業務時間内だけ DB の先頭セルを読んで冷えさせない（`keepWarm`・`setupKeepWarmTrigger`・`removeKeepWarmTrigger`）。時間帯はスクリプトプロパティ `KEEP_WARM_HOURS`（既定 8-20）・`KEEP_WARM_DAYS`（既定 毎日）。
+- **計測用 `perfProbeSheetsApi()`（読むだけ・管理者が GAS エディタから実行）: Sheets API の一括読込と現行の読み方の所要時間、全シートの大きさを実行ログに出す。
 - **案件読込の内訳計測**: `_perf.casesDetail`（open / caseList / records / manual / settings / override / annualAdjust / chatLink / join）。v1.14.0 で検討する Sheets API 一括読込の判断材料。
 - **Zoom トークンのキャッシュ**: アクセストークンを ScriptCache に最長50分保持。401 時は1回だけ取り直す。
 - **計測**: `getInitialData` が区間ごとの処理時間 `_perf` を返し、実行ログと画面コンソール（`[perf] initial data`）に出す。
@@ -34,7 +35,7 @@
 - **GAS 配信で壊れない出力（2026-11-26 テストデプロイ @160〜@162 で発見）**: GAS は配信時に、実行される種類のインライン script の中身を加工する（行が詰まる）。同梱したアプリ本体の JS が壊れ、`Uncaught SyntaxError: Invalid or unexpected token` で起動しなかった。アプリ本体を `<script type="text/plain" id="tadasapo-app">` に入れ、小さな起動用 script が `(0, eval)` で実行する（v1.12 までの `text/babel` と同じく GAS に中身を加工させない）。調査の途中で疑った次の2点は単独では直らなかったが、予防策として残す: ① JS の `<script` を `\x3Cscript`（大文字小文字は維持）にし、`<script`・`</script` の形が残ればビルドを止める。② インライン JS を ASCII だけで出力し（esbuild `charset: 'ascii'`）、ASCII 以外が JS・CSS に残るか HTML 全体に BMP 外の文字があればビルドを止める。日本語を含む正規表現リテラル2か所（初回メールの相談内容ブロック除去）を `new RegExp('…')` に書き換え（挙動同一）。
 
 ### Tests
-- 単体: `build-deploy.test.js`（12件）・監査ログ伏せ字化 `redactAuditCell`（4件）・移行計画 `planSecretMigration`（3件）・check-sync 1件・guard 1行追加・`normalizeSpreadsheetId`（2件）・`schemaMigrationNeeded`（3件）・`buildBatchGetUrl`（1件）・`planStaffDefaults`（2件）（116 → 144件）。ASCII 出力の検査は旧設定（`charset: 'utf8'`）で、`<script` 無害化の検査は無害化を外したコードで、text/plain 埋め込みの検査は旧来の直接埋め込みで、それぞれ失敗・正しいコードで合格を確認。伏せ字化を壊すと失敗・戻すと合格を確認。
+- 単体: `build-deploy.test.js`（12件）・監査ログ伏せ字化 `redactAuditCell`（4件）・移行計画 `planSecretMigration`（3件）・check-sync 1件・guard 1行追加・`normalizeSpreadsheetId`（2件）・`schemaMigrationNeeded`（3件）・`buildBatchGetUrl`（1件）・`planStaffDefaults`（2件）・`isWithinKeepWarmWindow`（3件）（116 → 147件）。ASCII 出力の検査は旧設定（`charset: 'utf8'`）で、`<script` 無害化の検査は無害化を外したコードで、text/plain 埋め込みの検査は旧来の直接埋め込みで、それぞれ失敗・正しいコードで合格を確認。伏せ字化を壊すと失敗・戻すと合格を確認。
 - E2E: `13-secret-settings.spec.ts`（4件。68 → 72件）。password 表示を text にした壊れたコードで失敗・正しいコードで合格を確認。全72件を `dist/` で合格。
 
 ### Docs

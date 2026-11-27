@@ -834,6 +834,80 @@ function perfProbeSheetsApi() {
 }
 
 // ======================================================================
+// v1.13.0 DB の温め（keep-warm）: 冷えた DB を起こす約11秒を利用者に待たせない
+// ======================================================================
+// 時間帯はスクリプトプロパティで変更できる（DB を開かずに判定するため、設定シートではなくプロパティ）。
+//   KEEP_WARM_HOURS: 'H-H'（開始時以上・終了時未満。既定 '8-20'）
+//   KEEP_WARM_DAYS : 曜日 1=月 … 7=日 の範囲（既定 '1-7' = 毎日）
+const KEEP_WARM_FUNCTION_ = 'keepWarm';
+const KEEP_WARM_INTERVAL_MIN_ = 5;
+
+/** 範囲指定 'a-b' を [a, b] にする。不正なら既定値 */
+function parseRangeSpec_(spec, defLo, defHi, min, max) {
+  let m = String(spec == null ? '' : spec).trim().match(/^(\d{1,2})\s*-\s*(\d{1,2})$/);
+  if (!m) return [defLo, defHi];
+  let lo = parseInt(m[1], 10), hi = parseInt(m[2], 10);
+  if (lo < min || hi > max || lo > hi) return [defLo, defHi];
+  return [lo, hi];
+}
+
+/**
+ * 温める時間帯か（純粋関数）。hour: 0〜23、isoDay: 1=月 … 7=日。
+ * 時間は 開始以上・終了未満、曜日は両端を含む。
+ */
+function isWithinKeepWarmWindow_(hour, isoDay, hoursSpec, daysSpec) {
+  let h = parseRangeSpec_(hoursSpec, 8, 20, 0, 24);
+  let d = parseRangeSpec_(daysSpec, 1, 7, 1, 7);
+  return hour >= h[0] && hour < h[1] && isoDay >= d[0] && isoDay <= d[1];
+}
+
+/**
+ * 時間主導トリガーから呼ばれる（setupKeepWarmTrigger で設定）。時間帯外は DB を開かずに終わる。
+ * 時間帯内は IMPORTRANGE を含むシートの先頭セルだけを読み、DB を冷えさせない。
+ * 所要時間を実行ログに出す（数秒以上なら冷えていた＝間隔が長すぎる目安）。
+ */
+function keepWarm() {
+  let now = new Date();
+  let hour = parseInt(Utilities.formatDate(now, 'Asia/Tokyo', 'H'), 10);
+  let isoDay = parseInt(Utilities.formatDate(now, 'Asia/Tokyo', 'u'), 10);
+  let props = getScriptProps_();
+  if (!isWithinKeepWarmWindow_(hour, isoDay, props.KEEP_WARM_HOURS, props.KEEP_WARM_DAYS)) return;
+  let t = Date.now();
+  let ss = SpreadsheetApp.openById(getSpreadsheetId_());
+  [SHEET_NAMES.CASES, SHEET_NAMES.CHAT_LINKS, SHEET_NAMES.STAFF].forEach(function(n) {
+    let sh = ss.getSheetByName(n);
+    if (sh) sh.getRange(1, 1).getValue();
+  });
+  console.log(JSON.stringify({ keepWarm: Date.now() - t }));
+}
+
+/** keepWarm の時間主導トリガーを（作り直して）1つだけ設定する。管理者が GAS エディタから実行。トリガーは実行した人のアカウントで動く */
+function setupKeepWarmTrigger() {
+  requireAdmin_();
+  removeKeepWarmTrigger_();
+  ScriptApp.newTrigger(KEEP_WARM_FUNCTION_).timeBased().everyMinutes(KEEP_WARM_INTERVAL_MIN_).create();
+  let msg = 'keepWarm トリガーを設定しました（' + KEEP_WARM_INTERVAL_MIN_ + '分ごと。実行者: ' + Session.getActiveUser().getEmail() + '）';
+  console.log(msg);
+  return msg;
+}
+
+/** keepWarm のトリガーを削除する（管理者が GAS エディタから実行） */
+function removeKeepWarmTrigger() {
+  requireAdmin_();
+  let n = removeKeepWarmTrigger_();
+  console.log('keepWarm トリガーを ' + n + ' 件削除しました');
+  return n;
+}
+
+function removeKeepWarmTrigger_() {
+  let n = 0;
+  ScriptApp.getProjectTriggers().forEach(function(tr) {
+    if (tr.getHandlerFunction() === KEEP_WARM_FUNCTION_) { ScriptApp.deleteTrigger(tr); n++; }
+  });
+  return n;
+}
+
+// ======================================================================
 // 初期データ取得
 // ======================================================================
 function getInitialData() {

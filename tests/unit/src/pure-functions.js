@@ -388,7 +388,22 @@ function planStaffDefaults(rows) {
   return out;
 }
 
+// コード.js: parseRangeSpec_() / isWithinKeepWarmWindow_()（v1.13.0 DB の温め）
+function parseRangeSpec(spec, defLo, defHi, min, max) {
+  var m = String(spec == null ? '' : spec).trim().match(/^(\d{1,2})\s*-\s*(\d{1,2})$/);
+  if (!m) return [defLo, defHi];
+  var lo = parseInt(m[1], 10), hi = parseInt(m[2], 10);
+  if (lo < min || hi > max || lo > hi) return [defLo, defHi];
+  return [lo, hi];
+}
+function isWithinKeepWarmWindow(hour, isoDay, hoursSpec, daysSpec) {
+  var h = parseRangeSpec(hoursSpec, 8, 20, 0, 24);
+  var d = parseRangeSpec(daysSpec, 1, 7, 1, 7);
+  return hour >= h[0] && hour < h[1] && isoDay >= d[0] && isoDay <= d[1];
+}
+
 module.exports = {
+  isWithinKeepWarmWindow,
   planStaffDefaults,
   buildBatchGetUrl,
   getFiscalYear,

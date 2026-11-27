@@ -35,6 +35,7 @@ const {
   schemaMigrationNeeded,
   buildBatchGetUrl,
   planStaffDefaults,
+  isWithinKeepWarmWindow,
 } = require('./src/pure-functions');
 
 // ============================================================
@@ -860,5 +861,26 @@ describe('planStaffDefaults（タダメンマスタの補完計画）', () => {
     ]);
     expect(plan.roleChanged).toBe(false);
     expect(plan.activeChanged).toBe(false);
+  });
+});
+
+// ── v1.13.0: DB の温め（keep-warm）の時間帯判定 ──
+describe('isWithinKeepWarmWindow（DB を温める時間帯）', () => {
+  test('既定は毎日 8時以上・20時未満', () => {
+    expect(isWithinKeepWarmWindow(8, 1)).toBe(true);
+    expect(isWithinKeepWarmWindow(19, 7)).toBe(true);
+    expect(isWithinKeepWarmWindow(7, 3)).toBe(false);
+    expect(isWithinKeepWarmWindow(20, 3)).toBe(false);
+  });
+
+  test('プロパティで時間帯と曜日を変えられる（平日 9-18 時）', () => {
+    expect(isWithinKeepWarmWindow(9, 5, '9-18', '1-5')).toBe(true);
+    expect(isWithinKeepWarmWindow(10, 6, '9-18', '1-5')).toBe(false);
+    expect(isWithinKeepWarmWindow(18, 2, '9-18', '1-5')).toBe(false);
+  });
+
+  test('不正な指定は既定値（8-20・毎日）にする', () => {
+    expect(isWithinKeepWarmWindow(10, 6, 'abc', '7-1')).toBe(true);
+    expect(isWithinKeepWarmWindow(21, 6, '20-8', '')).toBe(false);
   });
 });

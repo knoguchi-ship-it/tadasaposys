@@ -122,6 +122,7 @@
 | プロパティ | 必須 | 設定方法 | 説明 |
 |---|---|---|---|
 | `SPREADSHEET_ID` | YES | GAS エディタで手入力（デプロイ前） | タダサポDB の ID。未設定なら全 API が明示エラーで止まる。スプレッドシートの URL（`…/d/<ID>/edit`）を貼っても ID を取り出して使う。ID の形でない値は「ID だけを入力」と案内するエラー（`normalizeSpreadsheetId_`） |
+| `KEEP_WARM_HOURS` / `KEEP_WARM_DAYS` | NO | GAS エディタで手入力（任意） | DB の温め（F-02）の時間帯。`H-H`（開始以上・終了未満。既定 `8-20`）と曜日 `1-7`（1=月…7=日。既定 `1-7`=毎日）。不正な指定は既定値 |
 | `SCHEMA_VERSION_APPLIED` | — | アプリが自動で書く（手入力しない） | スキーマ自動移行を適用済みの版。`SCHEMA_VERSION_` と一致すれば起動時の移行確認を省く（F-02）。削除すると次回起動時に移行確認を再実行する |
 | `ZOOM_ACCOUNT_ID` / `ZOOM_CLIENT_ID` / `ZOOM_CLIENT_SECRET` | NO* | 管理画面の設定管理「連携」（書込専用） | Zoom Server-to-Server OAuth |
 | `ZOOM_FIXED_URL` / `ZOOM_FIXED_PASS` | NO | 同上 | 「いつものタダスクID」の URL（`?pwd=` を含む）とパスコード |
@@ -404,6 +405,7 @@ HTML を返す Web App エントリポイント。v1.13.0〜 シートを読ま�
 起動時データ取得。`user` / `cases` / `masters` / `draftCaseIds` / `forcedCc` / `_perf` を返す。`ensureAttachmentSchema_()` でスキーマ自動マイグレーションを実行する。`_perf` は区間ごとの処理時間（ms: `schema` / `auth` / `cases` / `masters` / `drafts`、`cases` の内訳 `casesDetail`）で、実行ログにも JSON で出力する（v1.13.0）。
 - **移行確認の省略（v1.13.0）:** 適用済みの版をスクリプトプロパティ `SCHEMA_VERSION_APPLIED` に永続記録し、`SCHEMA_VERSION_` と一致すれば移行確認をしない（判定は純粋関数 `schemaMigrationNeeded_`）。v1.12.x までは確認済みの印を CacheService に6時間だけ持ったため、6時間ごとに最初の利用者が全移行確認（テストデプロイ実測 約10秒）を待った。移行はすべて冪等で、成功したときだけ記録する。`SCHEMA_VERSION_` を上げる（移行を追加する）と次回起動時に1回だけ走る。
 - タダメンマスタの ROLE / IS_ACTIVE 補完（`ensureStaffAdminSchema_`・計画は純粋関数 `planStaffDefaults_`）は、**メールがある行の空欄だけ**を補完し、変更があるときだけ書き込む。従来はメールの無い空行にも D=`staff` / E=`true` を書いたため、最終行が伸びたまま戻らず（本番で 1,506 行）、毎回その全行を読み書きしていた。既に書かれた空行は手作業で行削除する（RUNBOOK）。
+- **DB の温め `keepWarm()`（v1.13.0）:** 時間主導トリガー（5分ごと）が、時間帯内（`isWithinKeepWarmWindow_`・`KEEP_WARM_HOURS`/`KEEP_WARM_DAYS`）だけ IMPORTRANGE を含むシートとタダメンマスタの先頭セルを読み、DB を冷えさせない。時間帯外は DB を開かずに終わる。所要時間を実行ログに出す。設定は管理者が GAS エディタで `setupKeepWarmTrigger()`（作り直して1つだけ）、解除は `removeKeepWarmTrigger()`。トリガーは設定した人のアカウントで動き、その人の Apps Script 上限（トリガー実行時間 6時間/日）を使う（見込み 数分/日）。理由: テストデプロイ実測で、冷えた DB を起こすのに約11秒かかり、Sheets API でも避けられなかった（読み方ではなく DB を起こすコスト。IMPORTRANGE の再取得が主因と推定）。
 - **計測用 `perfProbeSheetsApi()`（v1.13.0・読むだけ）:** 管理者が GAS エディタから実行する。起動時に読むシート（`initialDataSheetNames_`）を Sheets API `values:batchGet`（1回の通信。URL は純粋関数 `buildBatchGetUrl_`）と現行の SpreadsheetApp（シートごと）で読み比べ、所要時間・行数と全シートのグリッドの大きさを実行ログに出す。値は出力しない。管理者確認は計測の後（先に DB を開くと冷えた状態を測れないため）。テストデプロイ実測で、冷えた DB を開くのに約11秒・シート1枚の読込に0.6〜0.8秒かかったため、v1.14.0（Sheets API 一括読込）の判断材料とする。
 
 ### F-03: `getAllCasesJoined()`

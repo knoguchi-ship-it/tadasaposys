@@ -9,7 +9,7 @@
 
 ## 📌 次の担当者へ（最初にこの節だけ読めば現状が掴めます）
 
-> **現在地:** v1.13.0 / 本番 @159（v1.12.13） / 単体 144件 / E2E 72件
+> **現在地:** v1.13.0 / 本番 @159（v1.12.13） / 単体 147件 / E2E 72件
 >
 > 版・本番デプロイ番号・テスト件数は**この1行だけ**に書く（本文に書き写さない。AI_RULES.md グランドルール6）。`npm run check` がこの行を package.json・実テスト・§1・§8 と照合する。最終確認 2026/11/25（単体・E2E 全合格、`npm run check` エラー0）。
 > ⚠️ デプロイ直後の運用確認として、GAS デプロイ管理画面で Webapp 設定（実行＝アクセスしているユーザー／アクセス＝NPO法人タダカヨ内の全員）をブラウザで目視確認すること（CLIでは確認不可）。
@@ -39,6 +39,9 @@
 5. `npm run deploy`
 6. GAS デプロイ管理画面で Webapp 設定を目視確認 → 本番で起動・案件表示・日程確定（Zoom）を確認
 7. 管理者で「設定管理 → 連携 → 秘密情報をプロパティへ移行」→ Zoom の Client Secret を再発行して入力（RUNBOOK §2-3-1）
+7-1. GAS エディタの「サービス」に Sheets API があることを確認（無ければ「＋」から追加。計測用 `perfProbeSheetsApi` が使う）
+7-2. 管理者アカウントで GAS エディタから `setupKeepWarmTrigger()` を1回実行（DB の温め。RUNBOOK §1-4-1）
+7-3. タダメンマスタの、最後のメンバーより下で D・E 列だけが入った空行を行ごと削除（RUNBOOK §6）
 8. 付いた @nn を報告 → 本節の「現在地」と §1 を更新
 
 ### 前々回完了したこと（v1.12.13）
@@ -735,7 +738,7 @@ G1（グランドルール見直し）は 2026/05/28 に完了。**2026/11/25 �
 - **本番URL（不変）**: `<WEBAPP_URL>` — GAS デプロイ管理画面
 - **固定 deploymentId**: `<DEPLOYMENT_ID>` — `.clasp.deploy.json`（Git 対象外）・`clasp deployments`
 - **GAS プロジェクト**: `<SCRIPT_ID>` — `.clasp.json`（Git 対象外）
-- **タダサポDB**: `<SPREADSHEET_ID>` — `コード.js` の定数（PropertiesService へ移行予定）
+- **タダサポDB**: `<SPREADSHEET_ID>` — スクリプトプロパティ `SPREADSHEET_ID`（v1.13.0〜）
 - **フォーム回答シート**: `<FORM_SHEET_ID>` — タダサポDB の案件リストの IMPORTRANGE 数式（案件リスト生成元）
 
 ---
