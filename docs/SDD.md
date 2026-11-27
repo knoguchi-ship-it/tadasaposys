@@ -645,7 +645,7 @@ React 19系混在で `Minified React error #31` が発生するため固定。v1
 
 - ランタイム: V8
 - タイムゾーン: `Etc/GMT-9`（JST）
-- 有効サービス: Gmail API v1 / Calendar API v3
+- 有効サービス: Gmail API v1 / Calendar API v3 / Sheets API v4（v1.13.0 追加。計測 `perfProbeSheetsApi` と v1.14.0 で検討する一括読込用。GAS エディタ「サービス」から追加すると、利用者からは見えないデフォルトの GCP プロジェクトでも API が有効になる）
 - Webapp: `executeAs: USER_ACCESSING` / `access: DOMAIN`
 - OAuth スコープ: mail / calendar / drive / spreadsheets / userinfo.email / script.external_request / script.scriptapp
 

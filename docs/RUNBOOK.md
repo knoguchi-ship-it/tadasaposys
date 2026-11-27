@@ -249,7 +249,7 @@ v1.13.0 より前（スクリプトプロパティ化以前）の版へ戻す場
 **よくある原因:**
 - スクリプトプロパティ `SPREADSHEET_ID` の未設定・誤り
 - 「設定」シートが存在しない → `setupSettingsSheet()` を実行
-- Gmail API / Calendar API が有効化されていない
+- Gmail API / Calendar API / Sheets API が有効化されていない（GAS エディタの「サービス」に3つとも並んでいるか確認。デフォルトの GCP プロジェクトは Cloud コンソールから開けないため、エディタから追加する）
 
 ### 5-2. ログインできない
 
