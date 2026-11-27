@@ -2,7 +2,7 @@
 
 **Project:** タダサポ管理システム
 **Version:** 1.13.0（本番未反映。本番は v1.12.13 @159）
-**Date:** 2026/11/25
+**Date:** 2026/11/27
 **Author:** Development Team
 
 ---
@@ -19,6 +19,56 @@
 > **2026/11/25 追記: グランドルールを改訂（G2・文書のみ・コード変更なし）。** ルールの正本を `AI_RULES.md` に一本化し、`CLAUDE.md`/`AGENTS.md` は入口だけ、RUNBOOK は参照だけにした（それまで三重記載で内容がずれていた）。追加: 作業前レビュー・変更手順・コマンド実行ポリシー（`clasp push`/`clasp deploy`/`git push` はユーザー確認必須、`git add`/`commit` は可、force push・`--no-verify`・`-i` なし deploy は禁止）・本番識別子/個人名を公開リポジトリに書かない方針・各ルールの「仕組み（導入済み／導入予定）」欄・`executionApi=MYSELF`。ステージング環境は設けない。deploymentId の実値はローカルの `.clasp.deploy.json`（Git 対象外）へ。**続く作業（導入予定）:** 共有設定の確認（ユーザー）→ PreToolUse フック・ブランチ保護・CI に Jest → 同期チェックの自動実行 → デプロイ用スクリプト → 既存文書・コード・テストからの本番識別子/個人名の除去。
 
 > **2026/11/25 追記（G3・ルール補強＋同期チェック導入・アプリの挙動変更なし）:** キャッチアップで照合が浅くなった反省から、AI_RULES.md「作業前レビュー」に**照合項目9つ**を明記し、うち機械化できるものを **`npm run check`（`tools/check-sync.js`）** に実装。版数（8ファイル）・この「現在地」行と §1/§8・`const IDX` と AI_RULES/SDD・ADR 件数・仕組みの実在・本番識別子/個人名の残存・origin との差を検査する（識別子は移行中のため警告、`npm run check:strict` でエラー）。個人名は Git 対象外の `.private-terms.local.txt`（1行1語）に登録して照合。`index.html` に版数 `<meta name="app-version">` を追加（同期対象なのに版数表記がなかったため）。AI_RULES の IDX 節に欠けていた `CASES_OVERRIDE`/`EMAIL`/`CHAT_LINK` を追加。同日、**フックを必要最小限で導入**: PreToolUse（禁止コマンドを拒否・push/deploy は確認）、SessionStart（`npm run check` の結果を文脈へ）、git pre-commit（`npm run check` エラーでコミット停止）、CI に Jest と `npm run check` を追加。Stop フックは重くなるため採用しない。あわせて文書の本番識別子を除去（残りは `コード.js` の `SPREADSHEET_ID` のみ）、SECURITY.md の共有設定の記述を AI_RULES の基準表に合わせて訂正、自動生成物（`playwright-report/`・`test-results/`）を Git 追跡から外し、古い `docs/RESTART_CHECKLIST.md`（v1.8.1）を削除。
+
+### ▶ 進行中（2026/11/26〜27）: v1.13.0 をテスト用デプロイで実機検証中 — **ここから再開する**
+
+本番 @159 は一切変えずに、**別 URL のテスト用デプロイ**で v1.13.0 を GAS 上で動かし、実測しながら直している。
+
+**今の状態（引き継ぎ時点）**
+
+| 項目 | 状態 |
+|---|---|
+| ブランチ | `feat/v1.13.0-perf-security`。**GitHub に未 push のコミットあり**（`46ec883` 以降。`git log origin/feat/v1.13.0-perf-security..HEAD` で確認）。push 後に PR の説明を更新する |
+| GAS の HEAD | `f22c8fd` のビルド（`dist/`）を push 済み。手元の `.clasp.json` は `rootDir: "dist"` |
+| テスト用デプロイ | **@164**（説明欄「【テスト・本番ではない】v1.13.0 1b20c70 / 本番は @159（v1.12.13）」）。`clasp list-deployments` で確認できる。ID は作業者の手元の `.clasp.deploy.json` の `test`。**検証が終わったら `clasp undeploy <テスト用ID>` で削除する**。PR マージまで GAS エディタから「新しいバージョン」でデプロイしない（HEAD が未マージの v1.13.0 のため） |
+| スクリプトプロパティ | `SPREADSHEET_ID` 設定済み（v1.13.0 は URL を貼っても動く）。`SCHEMA_VERSION_APPLIED` はアプリが自動で書く |
+| 高度なサービス | **Sheets API v4 を GAS エディタから追加済み**（手元の `appsscript.json` にも反映済み） |
+| DB の温めトリガー | `setupKeepWarmTrigger` を**検証担当のアカウントで実行してもらう段階**（実行済みなら「トリガー」に `keepWarm` が5分ごとで1つある）。テストが終わって不要なら `removeKeepWarmTrigger` |
+| 本番 | **@159（v1.12.13）のまま**。毎回 `clasp list-deployments` で確認済み |
+
+**テスト用デプロイで見つけて直したこと（いずれもローカルの E2E では再現しない＝GAS 実機でしか出ない）**
+
+1. **起動しない（`Uncaught SyntaxError: Invalid or unexpected token`）** → GAS は配信時に「実行される種類」のインライン script の中身を加工する（行が詰まる）。同梱した現代の JS が壊れた。**アプリ本体を `<script type="text/plain">` に入れ、起動用 script が `(0, eval)` で実行**する方式に変更（v1.12 の text/babel と同じく GAS に加工させない）。途中で疑った絵文字（ASCII 化）と `<script` 文字列（`\x3Cscript`）の対策は単独では直らなかったが予防として残した（ADR-013 に経緯）。
+2. **`SPREADSHEET_ID` に URL を貼って起動しない** → URL から ID を取り出すようにした（形が違えば案内つきエラー）。
+3. **コールドスタート 約10秒（`_perf.schema`）** → スキーマ移行の「確認済み」が CacheService の6時間だけだった。スクリプトプロパティ `SCHEMA_VERSION_APPLIED` に永続記録して解消（10,366ms → 157ms）。
+4. **タダメンマスタが 1,506 行**（実データは約305行） → 補完処理がメールの無い空行にも D=staff / E=true を書いていた。メールがある行だけに修正。**既存の空行は手作業で行削除が必要**（未実施の可能性あり。RUNBOOK §6）。
+
+**実測（テスト用デプロイ・案件203件）**
+
+| | 冷えた状態 | 温まった状態 |
+|---|---|---|
+| 画面がデータを受け取るまで（`htmlToDataMs`） | 18.1秒 | 9.1秒 |
+| 内訳: DB を最初に開く（`auth`） | 約11.8秒 | 約1.2秒 |
+| 内訳: 案件の読込（`cases`。シート8枚） | 約3.9秒 | 約4.9秒 |
+
+- `perfProbeSheetsApi`（計測用・読むだけ）で、**冷えた DB を起こす約11秒は Sheets API の一括読込でも避けられない**（読み方ではなく DB を起こすコスト）と判明。DB は合計約40万セルで小さい。IMPORTRANGE（`案件リスト`・`チャット連携`）の再取得が主因と推定。
+- 温まった状態でも、シート1枚の読込に 0.35〜0.7秒かかり、8〜9枚分が積み上がっている。
+- 対策として **DB の温め（`keepWarm`・5分ごと・既定 毎日8〜20時）** を入れた。効果は未確認。
+
+**次にやること（順番）**
+
+1. `keepWarm` の効果確認: GAS「実行数」で `{"keepWarm": ms}` が数百 ms 程度か（数秒以上が続くなら間隔が長い）。朝一番などにテスト用 URL を開き、`[perf] initial data` の `auth` が約1秒に下がっているか
+2. もう一度 `perfProbeSheetsApi` を**温まった状態で**実行し、Sheets API 一括読込（`api.batchGetMs`）と現行（`spreadsheetApp.totalMs` 約4〜6秒）を比べる。十分に速ければ **v1.14.0 で初期データの読込を Sheets API に切替**（日付の値を新旧で完全一致させる比較を必ず入れる。日付型の PK が案件キーになっているため。以前の重複バグの原因）
+3. 業務時間（`KEEP_WARM_HOURS`・`KEEP_WARM_DAYS`）を決めてスクリプトプロパティに設定（未設定なら毎日8〜20時）
+4. 検証が済んだら: GitHub へ push → PR の説明更新 → テスト用デプロイを `clasp undeploy` → デプロイ担当メンバーへデプロイ依頼（下の手順）
+5. 長期の選択肢: IMPORTRANGE をやめてフォーム送信トリガーで DB へ書き写す（DB を起こすコストと読込の遅さの根本対策。データの流れが変わるため ADR が必要）
+
+**検証中に見つけた別件（未対応）**
+
+- **古いデプロイが残っている**: @9「api-exec for schema setup」・@12「v1.9.3 attachment prod rollout」・@13「v1.9.4 force cc setting」・@27（説明なし）。URL を知っていれば古いコードで DB を操作できる可能性。内容を確認のうえ削除（undeploy）を推奨
+- **ガードの誤判定**: `.claude/hooks/guard.js` が、読み取り専用の `clasp deployments` や、ファイル名 `.clasp.deploy.json` を含むコマンドを「`-i` なしの `clasp deploy`」と判定して止める（安全側の誤り）。`clasp list-deployments` は通る。語の境界で照合するよう直すとよい
+- **npm audit**: jest@29.7.0 経由の開発用依存に既知の脆弱性5件（本番には載らない）。別 PR で `npm audit fix`
+- **画面コンソールの赤いエラー**（`jquery.min.js` の CSP・`allow-scripts and allow-same-origin` 等）は GAS の外枠ページ（Google 側）が出すもので、アプリ由来ではない（本番でも出る）
 
 ### 直近セッションで完了したこと（v1.13.0・本番未反映）
 
