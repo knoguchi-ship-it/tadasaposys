@@ -34,6 +34,7 @@ const {
   normalizeSpreadsheetId,
   schemaMigrationNeeded,
   buildBatchGetUrl,
+  planStaffDefaults,
 } = require('./src/pure-functions');
 
 // ============================================================
@@ -833,5 +834,31 @@ describe('buildBatchGetUrl（Sheets API values:batchGet の URL）', () => {
     expect(ranges).toEqual(["'タダメンマスタ'", "'O''Brien'"]);
     expect(url).toContain('valueRenderOption=UNFORMATTED_VALUE');
     expect(url).toContain('dateTimeRenderOption=SERIAL_NUMBER');
+  });
+});
+
+// ── v1.13.0: タダメンマスタの ROLE / IS_ACTIVE 補完（空行に書かない） ──
+describe('planStaffDefaults（タダメンマスタの補完計画）', () => {
+  // [ID, 氏名, メール, ROLE, IS_ACTIVE]（ダミー）
+  test('メールがある行の空欄だけを補完し、メールの無い空行には書かない', () => {
+    const plan = planStaffDefaults([
+      ['1', 'メンバーA', 'a@example.com', '', ''],
+      ['2', 'メンバーB', 'b@example.com', 'admin', false],
+      ['', '', '', '', ''],
+    ]);
+    expect(plan.role).toEqual([['staff'], ['admin'], ['']]);
+    expect(plan.active).toEqual([['true'], [false], ['']]);
+    expect(plan.roleChanged).toBe(true);
+    expect(plan.activeChanged).toBe(true);
+  });
+
+  test('補完の必要がなければ変更なし（書き込まない）。空行だけでも変更なし', () => {
+    const plan = planStaffDefaults([
+      ['1', 'メンバーA', 'a@example.com', 'staff', 'true'],
+      ['', '', '', '', ''],
+      ['', '', '', '', ''],
+    ]);
+    expect(plan.roleChanged).toBe(false);
+    expect(plan.activeChanged).toBe(false);
   });
 });

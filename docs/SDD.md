@@ -403,7 +403,7 @@ HTML を返す Web App エントリポイント。v1.13.0〜 シートを読ま�
 ### F-02: `getInitialData()`
 起動時データ取得。`user` / `cases` / `masters` / `draftCaseIds` / `forcedCc` / `_perf` を返す。`ensureAttachmentSchema_()` でスキーマ自動マイグレーションを実行する。`_perf` は区間ごとの処理時間（ms: `schema` / `auth` / `cases` / `masters` / `drafts`、`cases` の内訳 `casesDetail`）で、実行ログにも JSON で出力する（v1.13.0）。
 - **移行確認の省略（v1.13.0）:** 適用済みの版をスクリプトプロパティ `SCHEMA_VERSION_APPLIED` に永続記録し、`SCHEMA_VERSION_` と一致すれば移行確認をしない（判定は純粋関数 `schemaMigrationNeeded_`）。v1.12.x までは確認済みの印を CacheService に6時間だけ持ったため、6時間ごとに最初の利用者が全移行確認（テストデプロイ実測 約10秒）を待った。移行はすべて冪等で、成功したときだけ記録する。`SCHEMA_VERSION_` を上げる（移行を追加する）と次回起動時に1回だけ走る。
-- タダメンマスタの ROLE / IS_ACTIVE 補完（`ensureStaffAdminSchema_`）は、空欄があるときだけ書き込む（従来は毎回全行を書き直していた）。
+- タダメンマスタの ROLE / IS_ACTIVE 補完（`ensureStaffAdminSchema_`・計画は純粋関数 `planStaffDefaults_`）は、**メールがある行の空欄だけ**を補完し、変更があるときだけ書き込む。従来はメールの無い空行にも D=`staff` / E=`true` を書いたため、最終行が伸びたまま戻らず（本番で 1,506 行）、毎回その全行を読み書きしていた。既に書かれた空行は手作業で行削除する（RUNBOOK）。
 - **計測用 `perfProbeSheetsApi()`（v1.13.0・読むだけ）:** 管理者が GAS エディタから実行する。起動時に読むシート（`initialDataSheetNames_`）を Sheets API `values:batchGet`（1回の通信。URL は純粋関数 `buildBatchGetUrl_`）と現行の SpreadsheetApp（シートごと）で読み比べ、所要時間・行数と全シートのグリッドの大きさを実行ログに出す。値は出力しない。管理者確認は計測の後（先に DB を開くと冷えた状態を測れないため）。テストデプロイ実測で、冷えた DB を開くのに約11秒・シート1枚の読込に0.6〜0.8秒かかったため、v1.14.0（Sheets API 一括読込）の判断材料とする。
 
 ### F-03: `getAllCasesJoined()`

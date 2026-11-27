@@ -371,7 +371,25 @@ function buildBatchGetUrl(spreadsheetId, sheetNames) {
     + '/values:batchGet?' + ranges + '&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER';
 }
 
+// コード.js: planStaffDefaults_()（v1.13.0）
+// メールがある行だけ ROLE 空欄→'staff'、IS_ACTIVE 空欄→'true'。メールの無い行は触らない。
+// IDX.STAFF: NAME:1, EMAIL:2, ROLE:3, IS_ACTIVE:4
+function planStaffDefaults(rows) {
+  var STAFF = { EMAIL: 2, ROLE: 3, IS_ACTIVE: 4 };
+  var out = { role: [], active: [], roleChanged: false, activeChanged: false };
+  (rows || []).forEach(function(r) {
+    var hasEmail = String(r[STAFF.EMAIL] || '').trim() !== '';
+    var role = r[STAFF.ROLE], active = r[STAFF.IS_ACTIVE];
+    if (hasEmail && !String(role == null ? '' : role).trim()) { role = 'staff'; out.roleChanged = true; }
+    if (hasEmail && String(active == null ? '' : active).trim() === '') { active = 'true'; out.activeChanged = true; }
+    out.role.push([role == null ? '' : role]);
+    out.active.push([active == null ? '' : active]);
+  });
+  return out;
+}
+
 module.exports = {
+  planStaffDefaults,
   buildBatchGetUrl,
   getFiscalYear,
   caseFiscalYear,

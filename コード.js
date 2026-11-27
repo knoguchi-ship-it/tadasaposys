@@ -2916,19 +2916,32 @@ function ensureStaffAdminSchema_() {
   if (!activeHeader) sheet.getRange(1, IDX.STAFF.IS_ACTIVE + 1).setValue('IS_ACTIVE'); invalidateStaffRowsCache_();
 
   if (sheet.getLastRow() > 1) {
-    let roleRange = sheet.getRange(2, IDX.STAFF.ROLE + 1, sheet.getLastRow() - 1, 1);
-    let activeRange = sheet.getRange(2, IDX.STAFF.IS_ACTIVE + 1, sheet.getLastRow() - 1, 1);
-    let roleValues = roleRange.getValues();
-    let activeValues = activeRange.getValues();
-    let roleChanged = false, activeChanged = false;
-    for (let i = 0; i < roleValues.length; i++) {
-      if (!String(roleValues[i][0] || '').trim()) { roleValues[i][0] = 'staff'; roleChanged = true; }
-      if (String(activeValues[i][0] || '').trim() === '') { activeValues[i][0] = 'true'; activeChanged = true; }
-    }
-    // v1.13.0: 空欄があったときだけ書き込む（従来は毎回全行を書き直していた）
-    if (roleChanged) { roleRange.setValues(roleValues); invalidateStaffRowsCache_(); }
-    if (activeChanged) { activeRange.setValues(activeValues); invalidateStaffRowsCache_(); }
+    let n = sheet.getLastRow() - 1;
+    let rows = sheet.getRange(2, 1, n, IDX.STAFF.IS_ACTIVE + 1).getValues();
+    let plan = planStaffDefaults_(rows);
+    // v1.13.0: メールがある行の空欄だけを補完し、変更があったときだけ書き込む。
+    // 従来はメールの無い空行にも D=staff / E=true を書き、最終行が伸びたまま戻らなかった（1,506 行の原因）
+    if (plan.roleChanged) { sheet.getRange(2, IDX.STAFF.ROLE + 1, n, 1).setValues(plan.role); invalidateStaffRowsCache_(); }
+    if (plan.activeChanged) { sheet.getRange(2, IDX.STAFF.IS_ACTIVE + 1, n, 1).setValues(plan.active); invalidateStaffRowsCache_(); }
   }
+}
+
+/**
+ * タダメンマスタの ROLE / IS_ACTIVE の補完計画（純粋関数・v1.13.0）。
+ * メール（IDX.STAFF.EMAIL）がある行だけ、ROLE 空欄→'staff'、IS_ACTIVE 空欄→'true' にする。メールの無い行は触らない。
+ * 返り値: { role: [[v]], active: [[v]], roleChanged, activeChanged }（role/active はそのまま setValues できる形）
+ */
+function planStaffDefaults_(rows) {
+  let out = { role: [], active: [], roleChanged: false, activeChanged: false };
+  (rows || []).forEach(function(r) {
+    let hasEmail = String(r[IDX.STAFF.EMAIL] || '').trim() !== '';
+    let role = r[IDX.STAFF.ROLE], active = r[IDX.STAFF.IS_ACTIVE];
+    if (hasEmail && !String(role == null ? '' : role).trim()) { role = 'staff'; out.roleChanged = true; }
+    if (hasEmail && String(active == null ? '' : active).trim() === '') { active = 'true'; out.activeChanged = true; }
+    out.role.push([role == null ? '' : role]);
+    out.active.push([active == null ? '' : active]);
+  });
+  return out;
 }
 
 function migrateAdminEmailsToStaffRoles_() {
