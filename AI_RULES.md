@@ -10,7 +10,7 @@
 
 介護事業所向け無料 IT サポート管理システム。GAS 上の React SPA で、Google スプレッドシートをデータストアとして使用。
 
-- **現行バージョン:** v1.13.0
+- **現行バージョン:** v1.14.0
 - **詳細設計（仕様の正本）:** `docs/SDD.md`
 - **引き継ぎ書:** `docs/HANDOVER.md`
 - **運用手順:** `docs/RUNBOOK.md`
@@ -263,6 +263,7 @@ DRY原則を守り、共通化できる処理を重複実装しない。新設�
 
 仕組み:
 - 導入済み: GitHub Actions（`.github/workflows/playwright.yml`）が push / PR で単体テスト・`npm run check`・E2E を実行
+- 導入済み: 単体テスト `tests/unit/snapshot-write-guard.test.js`（v1.14.0・ADR-015）。`コード.js` の公開関数が、すべて「書込＝`runWrite_` で包む（完成品の世代を更新）」か「読むだけ」に分類されていることを検査する。書込を行う公開関数を追加したら包む（包み忘れると、その書込が次の起動に最大10分反映されない）
 - 導入予定: `master` のブランチ保護で CI 合格を必須にする
 
 ### 6. ドキュメント・文字コード
@@ -453,7 +454,7 @@ npm run deploy
 | `CLAUDE.md` / `AGENTS.md` | Claude Code / Codex の入口（本ファイルを読ませるだけ） | AI |
 | `docs/SDD.md` | システム詳細設計書（仕様の正本） | AI・開発者 |
 | `docs/HANDOVER.md` | 引き継ぎ書（現在地・残作業） | 開発者 |
-| `docs/ADR.md` | アーキテクチャ判断記録（ADR-001〜014） | AI・開発者 |
+| `docs/ADR.md` | アーキテクチャ判断記録（ADR-001〜015） | AI・開発者 |
 | `docs/RUNBOOK.md` | 運用手順書（デプロイ・障害対応） | 開発者・運用者 |
 | `docs/Manual.md` | 操作マニュアル | エンドユーザー |
 | `docs/RD.md` | 要件定義 | 参照用 |

@@ -1,7 +1,7 @@
 # 開発者向け引継ぎ資料 (HANDOVER.md)
 
 **Project:** タダサポ管理システム
-**Version:** 1.13.0（本番未反映。本番は v1.12.13 @159）
+**Version:** 1.14.0（本番未反映。本番は v1.12.13 @159）
 **Date:** 2026/11/27
 **Author:** Development Team
 
@@ -9,7 +9,7 @@
 
 ## 📌 次の担当者へ（最初にこの節だけ読めば現状が掴めます）
 
-> **現在地:** v1.13.0 / 本番 @159（v1.12.13） / 単体 147件 / E2E 72件
+> **現在地:** v1.14.0 / 本番 @159（v1.12.13） / 単体 180件 / E2E 75件
 >
 > 版・本番デプロイ番号・テスト件数は**この1行だけ**に書く（本文に書き写さない。AI_RULES.md グランドルール6）。`npm run check` がこの行を package.json・実テスト・§1・§8 と照合する。最終確認 2026/11/25（単体・E2E 全合格、`npm run check` エラー0）。
 > ⚠️ デプロイ直後の運用確認として、GAS デプロイ管理画面で Webapp 設定（実行＝アクセスしているユーザー／アクセス＝NPO法人タダカヨ内の全員）をブラウザで目視確認すること（CLIでは確認不可）。
@@ -20,7 +20,24 @@
 
 > **2026/11/25 追記（G3・ルール補強＋同期チェック導入・アプリの挙動変更なし）:** キャッチアップで照合が浅くなった反省から、AI_RULES.md「作業前レビュー」に**照合項目9つ**を明記し、うち機械化できるものを **`npm run check`（`tools/check-sync.js`）** に実装。版数（8ファイル）・この「現在地」行と §1/§8・`const IDX` と AI_RULES/SDD・ADR 件数・仕組みの実在・本番識別子/個人名の残存・origin との差を検査する（識別子は移行中のため警告、`npm run check:strict` でエラー）。個人名は Git 対象外の `.private-terms.local.txt`（1行1語）に登録して照合。`index.html` に版数 `<meta name="app-version">` を追加（同期対象なのに版数表記がなかったため）。AI_RULES の IDX 節に欠けていた `CASES_OVERRIDE`/`EMAIL`/`CHAT_LINK` を追加。同日、**フックを必要最小限で導入**: PreToolUse（禁止コマンドを拒否・push/deploy は確認）、SessionStart（`npm run check` の結果を文脈へ）、git pre-commit（`npm run check` エラーでコミット停止）、CI に Jest と `npm run check` を追加。Stop フックは重くなるため採用しない。あわせて文書の本番識別子を除去（残りは `コード.js` の `SPREADSHEET_ID` のみ）、SECURITY.md の共有設定の記述を AI_RULES の基準表に合わせて訂正、自動生成物（`playwright-report/`・`test-results/`）を Git 追跡から外し、古い `docs/RESTART_CHECKLIST.md`（v1.8.1）を削除。
 
-### ▶ 進行中（2026/11/26〜27）: v1.13.0 をテスト用デプロイで実機検証中 — **ここから再開する**
+### ▶ 進行中（2026/11/27〜）: v1.14.0「初期データの完成品配信」— **ここから再開する**
+
+keepWarm（DB の温め）では効果が薄かったため、画面を開くたびに全シートを読み直して結合・集計する方式をやめ、組み立て済みの「完成品（スナップショット）」を ScriptCache から配る方式にした（ADR-015・SDD F-02）。利用者合意: 反映遅れは5分以内＋「最新に更新」、保存先は CacheService のみ、定期作り直しは業務時間のみ。
+
+| 項目 | 状態 |
+|---|---|
+| ブランチ | `feat/v1.14.0-snapshot`（`feat/v1.13.0-perf-security` の上。ローカルのみ・未 push） |
+| 実装 | 完成品の保存・読出し・世代番号による無効化（書込を行う公開関数 39個を `runWrite_` で包む）・`keepWarm` を完成品の作り直しに変更・「最新に更新」ボタン・下書きバッジの遅延取得（`getMyDraftCaseIds`）・Sheets API 一括読込（`SNAPSHOT_READ_MODE=sheetsApi`、既定オフ）・診断 `diagnoseSheetsApiRead`（`perfProbeSheetsApi` を置き換え） |
+| テスト | ローカルの単体・E2E は合格（冒頭の現在地）。**GAS 実機では未検証** |
+
+**次にやること（順番）**
+1. テスト用デプロイ（@164）を v1.14.0 のビルドで更新して実機確認（`clasp push` / `clasp deploy -i <テスト用ID>` はユーザー確認のうえ）。見ること: ①2回目以降の起動で `[perf] initial data` の `server.ms` が `snapshotRead` と `auth` だけ（`rebuild` が無い）こと、②担当などの書込後に別タブで開くと反映されていること、③「最新に更新」、④実行ログの `keepWarm` の `detail`（`saved.chunks`・`discarded`）
+2. 管理者アカウントで `diagnoseSheetsApiRead()` を数回実行し、`ok: true` なら `SNAPSHOT_READ_MODE=sheetsApi` に切り替えて `keepWarm` の `detail.read` を比べる（RUNBOOK §1-4-3）
+3. 検証が済んだら v1.13.0 と合わせて PR → テスト用デプロイを `clasp undeploy` → デプロイ担当へ依頼
+
+---
+
+### 前回（2026/11/26〜27）: v1.13.0 をテスト用デプロイで実機検証
 
 本番 @159 は一切変えずに、**別 URL のテスト用デプロイ**で v1.13.0 を GAS 上で動かし、実測しながら直している。
 
@@ -90,8 +107,8 @@
 5. `npm run deploy`
 6. GAS デプロイ管理画面で Webapp 設定を目視確認 → 本番で起動・案件表示・日程確定（Zoom）を確認
 7. 管理者で「設定管理 → 連携 → 秘密情報をプロパティへ移行」→ Zoom の Client Secret を再発行して入力（RUNBOOK §2-3-1）
-7-1. GAS エディタの「サービス」に Sheets API があることを確認（無ければ「＋」から追加。計測用 `perfProbeSheetsApi` が使う）
-7-2. 管理者アカウントで GAS エディタから `setupKeepWarmTrigger()` を1回実行（DB の温め。RUNBOOK §1-4-1）
+7-1. GAS エディタの「サービス」に Sheets API があることを確認（無ければ「＋」から追加。v1.14.0 の `diagnoseSheetsApiRead`・一括読込が使う）
+7-2. 管理者アカウントで GAS エディタから `setupKeepWarmTrigger()` を1回実行（v1.14.0〜 完成品の作り直し。RUNBOOK §1-4-1）
 7-3. タダメンマスタの、最後のメンバーより下で D・E 列だけが入った空行を行ごと削除（RUNBOOK §6）
 8. 付いた @nn を報告 → 本節の「現在地」と §1 を更新
 
@@ -224,7 +241,7 @@ tadasaposys/
 └── docs/
     ├── SDD.md              ← 設計書
     ├── HANDOVER.md         ← 本ドキュメント
-    ├── ADR.md              ← アーキテクチャ判断記録（ADR-001〜014）
+    ├── ADR.md              ← アーキテクチャ判断記録（ADR-001〜015）
     ├── RUNBOOK.md          ← 運用手順書
     ├── Manual.md           ← 操作マニュアル
     ├── RD.md               ← 要件定義
@@ -321,7 +338,8 @@ inProgress/completed → cancelled
 | 関数 | 説明 |
 |------|------|
 | `doGet()` | Web App エントリポイント（初期データHTML埋め込み） |
-| `getInitialData()` | 起動時データ取得 |
+| `getInitialData(forceRefresh)` | 起動時データ取得（v1.14.0〜 完成品を ScriptCache から返す。`true` で作り直し） |
+| `getMyDraftCaseIds()` | 下書きを持つ案件IDの一覧（v1.14.0〜 画面表示後に取得） |
 | `getAllCasesJoined()` | 全案件結合データ取得 |
 | `assignCase(caseId, user, tools)` | 案件アサイン（メール送信なし） |
 | `assignAndSendEmail(...)` | アサイン＋初回メール送信 |
@@ -442,6 +460,7 @@ npm run test:report
 - `11-closing-email`: サポート終了メール（送信前に編集・OFF で開かない）（2件）
 - `12-chat-link`: 申込通知チャットへのリンク（3件）
 - `13-secret-settings`: 秘密情報の書込専用設定（password 表示・移行・食い違いを消さない・保存後に値を返さない）（4件）
+- `14-snapshot-refresh`: 初期データの完成品と「最新に更新」（時点表示・更新・更新後も下書きバッジが残る）（3件）
 
 E2E は既定で `dist/`（本番ビルド）を検証する。原本を検証するときは `E2E_TARGET=src npm test`。
 
@@ -584,6 +603,7 @@ npm run deploy   # 検査 → テスト → ビルド → 確認入力 → clasp
 | **v1.12.10** | 2026/06/16 | メール下書きの再編集・送信導線を追加（不具合修正）: 保存済み下書き（特に既存スレッドへの返信）が案件詳細から一覧・再編集・送信できなかった問題を、案件詳細の「下書き一覧」新設で解消（`index.html`）。種別/件名/本文プレビュー/更新日時を表示し「開く」でメールモーダル復元→再編集・送信、「削除」で破棄。未対応案件でも読込。保存/送信/削除と「下書きあり」バッジを同期。メールモーダル閉じるボタンに `aria-label` 付与。バックエンド変更なし（既存 `listDraftsForCase` 等を利用）。E2E `10-draft-list.spec.ts`（2件）追加・E2E 61→63件・単体92件 全PASS。**@156 デプロイ済み（固定 deploymentId / URL 不変）** |
 | **v1.12.11** | 2026/06/16 | サポート終了メールの送信機能を追加: 完了報告モーダルに「サポート終了メールを送信する」チェック（既定ON）を新設し、完了と同時に相談者へ終了連絡メールを既存スレッドへ返信送信（無ければ新規・サブ担当を自動CC・ステータス追加変更なし・送信失敗は非致死）。件名/本文は設定キー `MAIL_CLOSING_SUBJECT`/`MAIL_CLOSING_BODY` で編集可能（設定管理「メール」タブ）。送信は既存 `sendCaseEmail`/`sendNewCaseEmail` を再利用（DRY）。E2E `11-closing-email.spec.ts`（2件）追加・E2E 63→65件・単体92件 全PASS。**@157 デプロイ済み（固定 deploymentId / URL 不変）** |
 | **v1.12.12** | 2026/06/16 | サポート終了メールを「送信前に編集」する方式へ変更: v1.12.11 のテンプレ自動送信を、完了報告後にメール作成モーダルを開きログイン中メンバーが件名・本文をその場で書き換えて送信する方式に（既存スレッドへ返信／無ければ新規・×で閉じれば送信なし・下書き保存可）。メールモーダルに新モード `closing` を追加し送信は既存 `sendCaseEmail`/`sendNewCaseEmail` を再利用（`handleSendEmail` reply-or-new 分岐に合流・DRY）。テンプレ初期値は管理設定で編集可（v1.12.11）。バックエンド変更なし（フロントのみ）。E2E `11-closing-email.spec.ts` を新フローへ更新・E2E 65件・単体92件 全PASS。**@158 デプロイ済み（固定 deploymentId / URL 不変）** |
+| **v1.14.0** | 2026/11/27 | 初期データの完成品配信（ADR-015）: 組み立て済みの案件一覧等を ScriptCache から返し DB を開かない。書込を行う公開関数を `runWrite_` で包み世代番号で無効化、`keepWarm` が5分ごとに作り直し、「最新に更新」ボタン、下書きバッジの遅延取得、Sheets API 一括読込（既定オフ・診断後に切替）。文字化け修正。単体180件・E2E75件。**本番未反映** |
 | **v1.12.13** | 2026/10/10 | 申込通知チャットへのリンク: 案件詳細「相談内容」横に「チャットを開く」。申込通知 bot（回答スプシの別GAS）が Webhook 応答のスレッド名を「チャット連携」シートへ記録 → タダサポへ IMPORTRANGE（参照のみ・SDD S-10）→ `getAllCasesJoined` が申込日時（壁時計）+正規化メールで突合し `chatThreadUrl` を付与。bot の Webhook URL をスクリプトプロパティへ移行。単体98件・E2E +3。**@159 デプロイ済み（固定 deploymentId / URL 不変）。bot 側反映済み** |
 
 ---
@@ -778,7 +798,7 @@ G1（グランドルール見直し）は 2026/05/28 に完了。**2026/11/25 �
 
 ### 6. 困ったとき
 
-- **設計の意図を知りたい**: `docs/ADR.md`（ADR-001〜014）
+- **設計の意図を知りたい**: `docs/ADR.md`（ADR-001〜015）
 - **データモデルの詳細**: `docs/SDD.md` §1
 - **デプロイ事故対応**: `docs/RUNBOOK.md` §4-5
 - **コードの場所を探す**: `コード.js` は約4500行・1ファイル / `index.html` は約5400行・1ファイル（モックデータも含む）。`docs/HANDOVER.md` §5 にバックエンド関数一覧あり

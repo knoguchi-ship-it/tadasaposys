@@ -1,8 +1,15 @@
-# システム詳細設計書 (SDD) — タダサポ管理システム v1.13.0
+# システム詳細設計書 (SDD) — タダサポ管理システム v1.14.0
 
-**Version:** 1.13.0
-**Date:** 2026/11/25
+**Version:** 1.14.0
+**Date:** 2026/11/27
 **Status:** Released（本番反映待ち）
+
+> **v1.14.0 追補（初期データの完成品配信。ADR-015）**
+> - **完成品（スナップショット）:** `getInitialData` は、案件一覧・マスタ・自動CC・認証用のタダメンマスタ行・設定値（秘密情報キーを除く）を組み立て済みの JSON として CacheService（ScriptCache）から返し、**DB を開かない**。完成品が無い・古い（`SNAPSHOT_MAX_AGE_MIN`・既定10分）・世代違いのときだけその場で作り直す（F-02）。
+> - **作り直し:** 書込を行う公開関数は `runWrite_` で包み、終了時に世代（スクリプトプロパティ `SNAPSHOT_GEN`）を更新して完成品を無効にする。時間主導トリガー `keepWarm`（5分ごと・業務時間のみ）が完成品を作り直す（DB の温めも兼ねる）。画面右上の「最新に更新」で即時に作り直す（`getInitialData(true)`）。
+> - **下書きバッジ:** 利用者ごとに違うため完成品から外し、画面表示後に `getMyDraftCaseIds()` で取得する（F-02b）。
+> - **Sheets API 一括読込（段階導入）:** スクリプトプロパティ `SNAPSHOT_READ_MODE=sheetsApi` で、作り直し時の読込を `values:batchGet` 1往復（＋日時判定用の並列1往復）にする。既定は従来の SpreadsheetApp。切替前に `diagnoseSheetsApiRead()` で全セル一致を確認する（v1.13.0 の計測用 `perfProbeSheetsApi` を置き換え）。
+> - **その他:** `getMasters().spreadsheetUrl` を ID から組み立てる（DB を開かない）。日程連絡メールの既定文面の文字化けを修正。
 
 > **v1.13.0 追補（読込速度とセキュリティ。ADR-013・ADR-014）**
 > - **本番ビルド**: 原本 `index.html` から `npm run build`（`tools/build.js`）で `dist/` を生成し、clasp は `dist/` を push する。JSX は事前変換、React 18.2.0・lucide-react 0.330.0 は同梱、Tailwind は使用クラスのみの CSS を埋め込み。本番は esm.sh・unpkg・Tailwind CDN を使わない（TC-01・TC-03）。デプロイは `npm run deploy`（`tools/deploy.js`）に一本化。
@@ -401,12 +408,25 @@ pending/sending → disabled（予約送信機能廃止により未送信のま�
 ### F-01: `doGet()`
 HTML を返す Web App エントリポイント。v1.13.0〜 シートを読まずに `createHtmlOutputFromFile('index')` を即返す（ADR-013）。`XFrameOptionsMode` は既定（他サイトへの埋め込み不可）。初期データはページ先頭の script が `google.script.run.getInitialData()` を先行発行し、`window.__INITIAL_DATA_PROMISE__` としてアプリへ渡す（v1.12.x までの `window.__INITIAL_DATA__` 埋め込みは廃止）。
 
-### F-02: `getInitialData()`
-起動時データ取得。`user` / `cases` / `masters` / `draftCaseIds` / `forcedCc` / `_perf` を返す。`ensureAttachmentSchema_()` でスキーマ自動マイグレーションを実行する。`_perf` は区間ごとの処理時間（ms: `schema` / `auth` / `cases` / `masters` / `drafts`、`cases` の内訳 `casesDetail`）で、実行ログにも JSON で出力する（v1.13.0）。
-- **移行確認の省略（v1.13.0）:** 適用済みの版をスクリプトプロパティ `SCHEMA_VERSION_APPLIED` に永続記録し、`SCHEMA_VERSION_` と一致すれば移行確認をしない（判定は純粋関数 `schemaMigrationNeeded_`）。v1.12.x までは確認済みの印を CacheService に6時間だけ持ったため、6時間ごとに最初の利用者が全移行確認（テストデプロイ実測 約10秒）を待った。移行はすべて冪等で、成功したときだけ記録する。`SCHEMA_VERSION_` を上げる（移行を追加する）と次回起動時に1回だけ走る。
-- タダメンマスタの ROLE / IS_ACTIVE 補完（`ensureStaffAdminSchema_`・計画は純粋関数 `planStaffDefaults_`）は、**メールがある行の空欄だけ**を補完し、変更があるときだけ書き込む。従来はメールの無い空行にも D=`staff` / E=`true` を書いたため、最終行が伸びたまま戻らず（本番で 1,506 行）、毎回その全行を読み書きしていた。既に書かれた空行は手作業で行削除する（RUNBOOK）。
-- **DB の温め `keepWarm()`（v1.13.0）:** 時間主導トリガー（5分ごと）が、時間帯内（`isWithinKeepWarmWindow_`・`KEEP_WARM_HOURS`/`KEEP_WARM_DAYS`）だけ IMPORTRANGE を含むシートとタダメンマスタの先頭セルを読み、DB を冷えさせない。時間帯外は DB を開かずに終わる。所要時間を実行ログに出す。設定は管理者が GAS エディタで `setupKeepWarmTrigger()`（作り直して1つだけ）、解除は `removeKeepWarmTrigger()`。トリガーは設定した人のアカウントで動き、その人の Apps Script 上限（トリガー実行時間 6時間/日）を使う（見込み 数分/日）。理由: テストデプロイ実測で、冷えた DB を起こすのに約11秒かかり、Sheets API でも避けられなかった（読み方ではなく DB を起こすコスト。IMPORTRANGE の再取得が主因と推定）。
-- **計測用 `perfProbeSheetsApi()`（v1.13.0・読むだけ）:** 管理者が GAS エディタから実行する。起動時に読むシート（`initialDataSheetNames_`）を Sheets API `values:batchGet`（1回の通信。URL は純粋関数 `buildBatchGetUrl_`）と現行の SpreadsheetApp（シートごと）で読み比べ、所要時間・行数と全シートのグリッドの大きさを実行ログに出す。値は出力しない。管理者確認は計測の後（先に DB を開くと冷えた状態を測れないため）。テストデプロイ実測で、冷えた DB を開くのに約11秒・シート1枚の読込に0.6〜0.8秒かかったため、v1.14.0（Sheets API 一括読込）の判断材料とする。
+### F-02: `getInitialData(forceRefresh)`
+起動時データ取得。`user` / `cases` / `masters` / `forcedCc` / `snapshot` / `_perf` を返す（v1.14.0〜 `draftCaseIds` は返さない。F-02b）。`forceRefresh === true`（画面の「最新に更新」）のときは完成品を使わず作り直す。
+
+- **完成品（スナップショット）配信（v1.14.0・ADR-015）:** 完成品が使えれば DB を開かずに返す。使える条件（純粋関数 `snapshotUsable_`）は、形式 `SNAPSHOT_FORMAT_` が一致・完成品の世代＝スクリプトプロパティ `SNAPSHOT_GEN`・作成から `SNAPSHOT_MAX_AGE_MIN` 分（スクリプトプロパティ・既定10）以内。使えなければその場で作り直してから返す（`rebuildSnapshot_`）。
+  - 完成品の中身: `cases`（F-03 の結果）・`masters`（F-14）・`forcedCc`・`staffRows`（タダメンマスタの全行。認証に使う）・`settings`（設定シートの値。秘密情報キー `SECRET_SETTING_KEYS_` は除く）・`gen`・`builtAt`（ms）・`readMode`（実際に使った読み方）。
+  - 保存: JSON を gzip → Base64 にし、90,000 文字ごとに分割して ScriptCache に保存（1項目 100KB 上限のため。純粋関数 `splitIntoChunks_`）。キーは `snap:meta`（世代・作成時刻・分割数）と `snap:<世代>:<番号>`。保存期限 6時間。
+  - 認証: 完成品の `staffRows`・`settings` を実行内キャッシュ（`getStaffRows_`・`loadSettings_`）に入れ、従来の `getStaffByEmail` / `getStaffRoleByEmail_` / `isAdminEmail_` で判定する（SEC-01・SEC-02 は不変）。
+  - `snapshot`: `{ builtAt, source: 'cache' | 'rebuild', readMode }`。画面右上に作成時刻（「HH:MM 時点」）を出す。
+  - `_perf`（ms）: 完成品を使ったとき `snapshotRead`・`auth`、作り直したとき `rebuild`（内訳 `rebuildDetail`: `schema`・`read`・`cases`（内訳 `casesDetail`）・`masters`・`save`）。実行ログにも JSON で出す。
+- **作り直し `rebuildSnapshot_(reason)`:** ①`ensureAttachmentSchema_()`（移行確認）→ ②作り始めの世代を読む（無ければ発行）→ ③起動時のシート（`initialDataSheetNames_`）を読む（読み方は下記）→ ④F-03・F-14 等で組み立て → ⑤世代を読み直し、変わっていなければ保存（変わっていれば保存せず、組み立てた結果はその呼び出しにだけ返す）。同時に複数人が作り直してもよい（世代で正しさを保つ。ロックは取らない）。
+- **無効化（書込後）:** 書込を行う公開関数は `function X(...) { return runWrite_(X_impl_, arguments); }` の形で包む。`runWrite_` は入れ子を数え、一番外側の終了時（例外時も）に `SpreadsheetApp.flush()` → `SNAPSHOT_GEN` を新しいトークン（時刻＋乱数）に替える。どの公開関数が書込か読むだけかは `tests/unit/snapshot-write-guard.test.js` が `コード.js` を走査して検査する（未分類の公開関数があると失敗）。下書きの保存・削除は完成品に影響しないため包まない。
+- **定期作り直し `keepWarm()`:** 時間主導トリガー（5分ごと）が、時間帯内（`isWithinKeepWarmWindow_`・スクリプトプロパティ `KEEP_WARM_HOURS`/`KEEP_WARM_DAYS`、既定 毎日8〜20時）だけ `rebuildSnapshot_('trigger')` を実行する（DB の温めも兼ねる）。時間帯外は DB を開かない。所要時間を実行ログに出す。設定は管理者が GAS エディタで `setupKeepWarmTrigger()`（作り直して1つだけ）、解除は `removeKeepWarmTrigger()`。トリガーは設定した人のアカウント・権限で動く。
+- **読み方 `SNAPSHOT_READ_MODE`（スクリプトプロパティ）:** `spreadsheetApp`（既定）はシートごとに `getDataRange().getValues()`。`sheetsApi` は、メタ情報（タイムゾーン・シート名）を1回取得し、存在するシートだけを `values:batchGet` で2回並列（`UrlFetchApp.fetchAll`）に読む。1回目は `valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER`、2回目は同 `FORMATTED_STRING`。1回目が数値で2回目が文字列のセルを日時と判定し、スプレッドシートのタイムゾーンで `Date` に戻す（純粋関数 `mergeApiValues_`・`serialToDate_`）。行は最長の行の幅まで `''` で埋め、`getValues()` と同じ形にする。読んだ値は実行内の `readSheetValues_` が返す（`withPrefetchedSheets_` の間だけ）。Sheets API が失敗したら、その回は SpreadsheetApp で読み直し、実行ログに警告を出す。
+- **`diagnoseSheetsApiRead()`（管理者が GAS エディタで実行・読むだけ）:** 同じシートを Sheets API と SpreadsheetApp で読み、全セルを比較する（日時は `getTime()` と `String()` の両方。純粋関数 `compareSheetRows_`）。シートごとの行数・列数・不一致件数・不一致の位置と型（値は出さない）・所要時間を実行ログに出す。全シートで不一致0件を数回確認してから `SNAPSHOT_READ_MODE=sheetsApi` に切り替える。戻すときはプロパティを消す（または `spreadsheetApp`）。
+- **移行確認の省略（v1.13.0）:** 適用済みの版をスクリプトプロパティ `SCHEMA_VERSION_APPLIED` に永続記録し、`SCHEMA_VERSION_` と一致すれば移行確認をしない（判定は純粋関数 `schemaMigrationNeeded_`）。移行はすべて冪等で、成功したときだけ記録する。`SCHEMA_VERSION_` を上げる（移行を追加する）と次回の作り直し時に1回だけ走る。
+- タダメンマスタの ROLE / IS_ACTIVE 補完（`ensureStaffAdminSchema_`・計画は純粋関数 `planStaffDefaults_`）は、**メールがある行の空欄だけ**を補完し、変更があるときだけ書き込む（v1.13.0）。
+
+### F-02b: `getMyDraftCaseIds()`（v1.14.0）
+ログイン中メンバーの下書きを持つ案件IDの一覧（下書きバッジ用）。画面表示後に非同期で取得する（失敗しても画面は止めない）。読むだけ。
 
 ### F-03: `getAllCasesJoined()`
 案件リスト + 案件手動追加 + 案件補正 + サポート記録を結合し、削除済み案件を除外して返す（v1.13.0〜 メール履歴は結合しない。案件の `emails` は廃止）。各案件に `currentFiscalYearCount`（今年度累計利用回数）を付与する。v1.12.13 からフォーム案件には「チャット連携」シートから `chatThreadUrl`（申込通知スレッドURL・なければ `null`）も付与する（S-10）。
@@ -559,6 +579,10 @@ CC 設定のドライラン検証。`MAIL_DRY_RUN=true` が前提。
 ### SEC-07: 秘密情報・本番識別子（v1.13.0・ADR-014）
 `SPREADSHEET_ID` と Zoom 連携の秘密情報はスクリプトプロパティに保存し、コード・シート・画面・監査ログに値を出さない（S-00）。移行後は Zoom の Client Secret を再発行する。
 
+### SEC-07b: 初期データの完成品（v1.14.0・ADR-015）
+- 完成品（案件・タダメンマスタ・設定値）は ScriptCache に保存する。スクリプトのコードからのみ読め、最長6時間で消える。利用者の端末（localStorage 等）には保存しない。秘密情報キーは完成品に入れない。
+- 起動時の認証は完成品のタダメンマスタ行で行う。シートを直接編集してメンバーを無効化した場合、起動（閲覧）の拒否は最大 `SNAPSHOT_MAX_AGE_MIN` 分遅れる（受容リスク）。書込操作は従来どおり毎回シートで権限を確認する（`getActor_`）。アプリからの無効化（F-18）は書込として完成品を無効にするため即時。
+
 ### SEC-08: 埋め込み・供給網（v1.13.0・ADR-013）
 - Webapp は他サイトへの iframe 埋め込みを許可しない（`XFrameOptionsMode` 既定）。
 - 本番は React・Tailwind を同梱し、実行時に esm.sh・unpkg・Tailwind CDN を読まない。外部から読むのは FullCalendar（SRI 付き）と Google Fonts のみ。
@@ -647,7 +671,7 @@ React 19系混在で `Minified React error #31` が発生するため固定。v1
 
 - ランタイム: V8
 - タイムゾーン: `Etc/GMT-9`（JST）
-- 有効サービス: Gmail API v1 / Calendar API v3 / Sheets API v4（v1.13.0 追加。計測 `perfProbeSheetsApi` と v1.14.0 で検討する一括読込用。GAS エディタ「サービス」から追加すると、利用者からは見えないデフォルトの GCP プロジェクトでも API が有効になる）
+- 有効サービス: Gmail API v1 / Calendar API v3 / Sheets API v4（v1.13.0 追加。v1.14.0 の一括読込 `SNAPSHOT_READ_MODE=sheetsApi`・`diagnoseSheetsApiRead` 用。呼び出しは `UrlFetchApp` で行う。GAS エディタ「サービス」から追加すると、利用者からは見えないデフォルトの GCP プロジェクトでも API が有効になる）
 - Webapp: `executeAs: USER_ACCESSING` / `access: DOMAIN`
 - OAuth スコープ: mail / calendar / drive / spreadsheets / userinfo.email / script.external_request / script.scriptapp
 
@@ -681,6 +705,7 @@ React 19系混在で `Minified React error #31` が発生するため固定。v1
 | **v1.12.1** | 予約送信機能を廃止。旧トリガー互換は未送信キューを `disabled` 化し、即時送信・下書き保存は継続 |
 | **v1.12.13** | 申込通知チャットへのリンク（S-10 チャット連携・`chatThreadUrl`・案件詳細「チャットを開く」） |
 | **v1.13.0** | 本番ビルド方式・起動の並列化・読込量削減（ADR-013）、秘密情報と `SPREADSHEET_ID` のスクリプトプロパティ化（ADR-014）、埋め込み禁止・`executionApi=MYSELF` |
+| **v1.14.0** | 初期データの完成品配信（ScriptCache・世代番号で無効化・5分ごとの作り直し・「最新に更新」）、Sheets API 一括読込の段階導入、下書きバッジの遅延取得（ADR-015） |
 
 ---
 

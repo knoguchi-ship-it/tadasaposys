@@ -33,7 +33,6 @@ const {
   planSecretMigration,
   normalizeSpreadsheetId,
   schemaMigrationNeeded,
-  buildBatchGetUrl,
   planStaffDefaults,
   isWithinKeepWarmWindow,
 } = require('./src/pure-functions');
@@ -827,16 +826,7 @@ describe('schemaMigrationNeeded（スキーマ移行確認の要否）', () => {
 });
 
 // ── v1.13.0: 計測用 Sheets API 一括読込の URL ──
-describe('buildBatchGetUrl（Sheets API values:batchGet の URL）', () => {
-  test('シート名を引用符で囲んで URL エンコードし、書式なし・シリアル日時で受け取る', () => {
-    const url = buildBatchGetUrl('dummy-id', ['タダメンマスタ', "O'Brien"]);
-    expect(url.startsWith('https://sheets.googleapis.com/v4/spreadsheets/dummy-id/values:batchGet?')).toBe(true);
-    const ranges = new URL(url).searchParams.getAll('ranges');
-    expect(ranges).toEqual(["'タダメンマスタ'", "'O''Brien'"]);
-    expect(url).toContain('valueRenderOption=UNFORMATTED_VALUE');
-    expect(url).toContain('dateTimeRenderOption=SERIAL_NUMBER');
-  });
-});
+// buildBatchGetUrl_ は v1.14.0 から tests/unit/snapshot.test.js（コード.js から直接取り出して検査）
 
 // ── v1.13.0: タダメンマスタの ROLE / IS_ACTIVE 補完（空行に書かない） ──
 describe('planStaffDefaults（タダメンマスタの補完計画）', () => {

@@ -1,5 +1,5 @@
 /**
- * タダサポ管理システム - Backend Logic (v1.13.0)
+ * タダサポ管理システム - Backend Logic (v1.14.0)
  *
  * 概要:
  * - Google Spreadsheets をデータベースとして利用
@@ -262,7 +262,8 @@ function planSecretMigration_(sheetVals, propVals, keys) {
  * - 監査ログにはキー名と件数だけを記録する（値は記録しない）
  * 冪等: 何度実行しても結果は同じ。
  */
-function migrateSecretsToProperties() {
+function migrateSecretsToProperties() { return runWrite_(migrateSecretsToPropertiesImpl_, arguments); }
+function migrateSecretsToPropertiesImpl_() {
   let actor = requireAdmin_();
   return withScriptLock_(function() {
     let settings = loadSettings_();
@@ -284,9 +285,8 @@ let _staffRowsCache = null;
 
 function getStaffRows_() {
   if (_staffRowsCache) return _staffRowsCache;
-  let ss = getSpreadsheet_();
-  let sheet = ss.getSheetByName(SHEET_NAMES.STAFF);
-  _staffRowsCache = (sheet && sheet.getLastRow() > 1) ? sheet.getDataRange().getValues() : [];
+  let data = readSheetValues_(SHEET_NAMES.STAFF); // v1.14.0: 一括読込の値があればそれを使う
+  _staffRowsCache = (data && data.length > 1) ? data : [];
   return _staffRowsCache;
 }
 
@@ -302,13 +302,11 @@ function invalidateStaffRowsCache_() {
 function loadSettings_() {
   if (_settingsCache) return _settingsCache;
 
-  let ss = getSpreadsheet_();
-  let sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
-  if (!sheet) {
+  let data = readSheetValues_(SHEET_NAMES.SETTINGS); // v1.14.0: 一括読込の値があればそれを使う
+  if (!data) {
     throw new Error('「設定」シートが見つかりません。GASエディタで setupSettingsSheet 関数を実行してください。');
   }
 
-  let data = sheet.getDataRange().getValues();
   let settings = {};
   for (let i = 1; i < data.length; i++) {
     let key = String(data[i][0]).trim();
@@ -377,12 +375,16 @@ function isMailDryRun_() {
   return raw === 'true' || raw === '1' || raw === 'yes' || raw === 'on';
 }
 
-function parsePositiveIntegerSetting_(key, defaultValue) {
-  let raw = String(getSetting_(key, String(defaultValue)) || '').trim();
-  let num = Number(raw);
+/** 正の整数に解釈できればその値、できなければ既定値（純粋関数。v1.14.0 で設定読込から分離） */
+function parsePositiveIntegerOrDefault_(raw, defaultValue) {
+  let num = Number(String(raw == null ? '' : raw).trim());
   if (!isFinite(num)) return Number(defaultValue);
   let intNum = Math.floor(num);
   return intNum > 0 ? intNum : Number(defaultValue);
+}
+
+function parsePositiveIntegerSetting_(key, defaultValue) {
+  return parsePositiveIntegerOrDefault_(getSetting_(key, String(defaultValue)), defaultValue);
 }
 
 function getAnnualUsageLimit_() {
@@ -747,94 +749,417 @@ function doGet() {
 }
 
 // ======================================================================
-// v1.13.0 計測: 初期データの読み方の比較（読むだけ。書き込みなし）
+// v1.14.0 初期データの完成品（スナップショット）— ADR-015
+//   誰が開いても同じになる「案件一覧・マスタ・認証用のタダメンマスタ行・設定値」を組み立て済みの
+//   JSON として ScriptCache に置き、getInitialData は DB を開かずに返す。
+//   有効性は世代番号（スクリプトプロパティ SNAPSHOT_GEN）で判定し、書込のたびに世代を替える（runWrite_）。
+//   作り直しは: 書込後の最初の起動・keepWarm トリガー（5分ごと）・「最新に更新」・完成品が無い/古いとき。
+//   ※純粋関数のテスト同期先: tests/unit/src/pure-functions.js
 // ======================================================================
+const SNAPSHOT_FORMAT_ = 1;                 // 完成品の形を変えたら上げる（古い形を読まない）
+const SNAPSHOT_GEN_PROP_ = 'SNAPSHOT_GEN';
+const SNAPSHOT_READ_MODE_PROP_ = 'SNAPSHOT_READ_MODE';   // 'sheetsApi' で一括読込。既定は SpreadsheetApp
+const SNAPSHOT_MAX_AGE_PROP_ = 'SNAPSHOT_MAX_AGE_MIN';   // 完成品を使う最大の経過分数（既定 10）
+const SNAPSHOT_MAX_AGE_DEFAULT_MIN_ = 10;
+const SNAPSHOT_META_KEY_ = 'snap:meta';
+const SNAPSHOT_CHUNK_CHARS_ = 90000;        // ScriptCache は1項目 100KB まで
+const SNAPSHOT_TTL_SEC_ = 21600;            // ScriptCache の上限（6時間）
 
-/** 起動時に読むシート（getInitialData が読む順） */
+/** 完成品の材料として読むシート（作り直しで読む順） */
 function initialDataSheetNames_() {
   return [SHEET_NAMES.STAFF, SHEET_NAMES.CASES, SHEET_NAMES.RECORDS, SHEET_NAMES.CASES_MANUAL,
-    SHEET_NAMES.SETTINGS, SHEET_NAMES.CASES_OVERRIDE, SHEET_NAMES.ANNUAL_ADJUST, SHEET_NAMES.CHAT_LINKS,
-    SHEET_NAMES.EMAIL_DRAFTS];
+    SHEET_NAMES.SETTINGS, SHEET_NAMES.CASES_OVERRIDE, SHEET_NAMES.ANNUAL_ADJUST, SHEET_NAMES.CHAT_LINKS];
+}
+
+/** スプレッドシートの URL を ID から組み立てる（DB を開かない） */
+function spreadsheetUrlFromId_(id) {
+  return 'https://docs.google.com/spreadsheets/d/' + id + '/edit';
+}
+
+// ---------- 書込の検知（世代番号） ----------
+
+/** 現在の世代（毎回スクリプトプロパティから最新を読む。実行内キャッシュは使わない） */
+function readSnapshotGen_() {
+  return String(PropertiesService.getScriptProperties().getProperty(SNAPSHOT_GEN_PROP_) || '');
+}
+
+/** 世代を新しいトークンに替える（読み→加算をしないのでロック不要） */
+function bumpSnapshotGen_() {
+  let gen = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  PropertiesService.getScriptProperties().setProperty(SNAPSHOT_GEN_PROP_, gen);
+  _scriptPropsCache = null;
+  return gen;
+}
+
+/** 完成品を無効にする（書込を確定させてから世代を替える）。失敗しても書込そのものは止めない */
+function invalidateSnapshot_() {
+  try { SpreadsheetApp.flush(); } catch (e) { /* 未使用なら何もしない */ }
+  try { bumpSnapshotGen_(); } catch (e) {
+    console.warn('[snapshot] 世代の更新に失敗（完成品は SNAPSHOT_MAX_AGE_MIN 分以内に作り直される）: ' + e.message);
+  }
+}
+
+/**
+ * 書込を行う公開関数の包み（v1.14.0）。一番外側の終了時に、成功・失敗を問わず完成品を無効にする
+ * （途中まで書いて失敗した場合も古い完成品を配らないため）。公開関数は
+ *   function X() { return runWrite_(XImpl_, arguments); }
+ * の形で包む。分類は tests/unit/snapshot-write-guard.test.js が検査する。
+ */
+let _writeDepth = 0;
+function runWrite_(impl, args) {
+  _writeDepth++;
+  try {
+    return impl.apply(null, args);
+  } finally {
+    _writeDepth--;
+    if (_writeDepth === 0) invalidateSnapshot_();
+  }
+}
+
+// ---------- 純粋関数 ----------
+
+/** 文字列を size 文字ごとに分割する（純粋関数） */
+function splitIntoChunks_(s, size) {
+  let out = [];
+  let str = String(s == null ? '' : s);
+  for (let i = 0; i < str.length; i += size) out.push(str.slice(i, i + size));
+  if (!out.length) out.push('');
+  return out;
+}
+
+/**
+ * 完成品のメタ情報が使えるか（純粋関数）。
+ * 形式一致・世代一致・作成から maxAgeMs 以内（時計のずれは1分まで許す）・分割数が正。
+ */
+function snapshotUsable_(meta, gen, nowMs, maxAgeMs, format) {
+  if (!meta || typeof meta !== 'object') return false;
+  if (meta.f !== format) return false;
+  if (!gen || meta.gen !== gen) return false;
+  if (typeof meta.builtAt !== 'number' || !(meta.n > 0) || !meta.prefix) return false;
+  let age = nowMs - meta.builtAt;
+  return age >= -60000 && age <= maxAgeMs;
+}
+
+/** 設定値から秘密情報キーを除いた写しを返す（純粋関数。完成品に秘密を入れない） */
+function stripSecretSettings_(settings, secretKeys) {
+  let out = {};
+  Object.keys(settings || {}).forEach(function(k) {
+    if (secretKeys.indexOf(k) === -1) out[k] = settings[k];
+  });
+  return out;
+}
+
+/** 'Z' 形式のオフセット（+0900 / -05:00）をミリ秒にする（純粋関数） */
+function parseTzOffset_(z) {
+  let m = String(z == null ? '' : z).match(/^([+-])(\d{2}):?(\d{2})$/);
+  if (!m) return 0;
+  let v = (parseInt(m[2], 10) * 60 + parseInt(m[3], 10)) * 60000;
+  return m[1] === '-' ? -v : v;
+}
+
+/**
+ * スプレッドシートのシリアル値（1899-12-30 起点の日数・スプレッドシートのタイムゾーンの壁時計）を Date にする（純粋関数）。
+ * offsetAt(ms) はその瞬間のタイムゾーンのオフセット(ms)を返す関数。夏時間の境目のため2回合わせる。
+ */
+function serialToDate_(serial, offsetAt) {
+  let wall = Math.round((Number(serial) - 25569) * 86400000);
+  let off = offsetAt(wall);
+  let t = wall - off;
+  let off2 = offsetAt(t);
+  if (off2 !== off) t = wall - off2;
+  return new Date(t);
+}
+
+/**
+ * Sheets API の2回分の値（日時=シリアル値／日時=書式付き文字列）を、getValues() と同じ形の2次元配列にする（純粋関数）。
+ * - 1回目が数値で2回目が文字列のセル = 日時セル → toDate(シリアル値)
+ * - 欠けたセル（API は行末の空セル・空行を省く）は '' で埋め、全行を最長の行の幅に揃える
+ */
+function mergeApiValues_(serialRows, fmtRows, toDate) {
+  let rows = serialRows || [];
+  let fmts = fmtRows || [];
+  let width = 0;
+  rows.forEach(function(r) { if (r && r.length > width) width = r.length; });
+  return rows.map(function(r, i) {
+    let row = r || [];
+    let f = fmts[i] || [];
+    let out = new Array(width);
+    for (let c = 0; c < width; c++) {
+      let v = row[c];
+      if (v === undefined || v === null) out[c] = '';
+      else if (typeof v === 'number' && typeof f[c] === 'string') out[c] = toDate(v);
+      else out[c] = v;
+    }
+    return out;
+  });
+}
+
+function cellKind_(v) {
+  if (v === undefined || v === null || v === '') return 'empty';
+  if (v && typeof v.getTime === 'function') return 'date';
+  return typeof v;
+}
+
+/**
+ * 2つの2次元配列をセルごとに比べる（純粋関数）。日時は getTime() が同じなら一致。
+ * 不一致は件数と、先頭 maxSamples 件の位置（1始まり）と型だけを返す（値は返さない＝個人情報を出さない）。
+ */
+function compareSheetRows_(a, b, maxSamples) {
+  let A = a || [], B = b || [];
+  let width = function(rows) { let w = 0; rows.forEach(function(r) { if (r && r.length > w) w = r.length; }); return w; };
+  let res = { rowsA: A.length, rowsB: B.length, colsA: width(A), colsB: width(B), mismatches: 0, samples: [] };
+  let rows = Math.max(A.length, B.length), cols = Math.max(res.colsA, res.colsB);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      let va = (A[r] || [])[c], vb = (B[r] || [])[c];
+      if (va === undefined || va === null) va = '';
+      if (vb === undefined || vb === null) vb = '';
+      let ka = cellKind_(va), kb = cellKind_(vb);
+      let same = (ka === 'date' && kb === 'date') ? va.getTime() === vb.getTime() : (ka !== 'date' && kb !== 'date' && va === vb);
+      if (!same) {
+        res.mismatches++;
+        if (res.samples.length < (maxSamples || 0)) res.samples.push({ row: r + 1, col: c + 1, kindA: ka, kindB: kb });
+      }
+    }
+  }
+  return res;
+}
+
+// ---------- 読込（SpreadsheetApp / Sheets API 一括） ----------
+
+let _prefetched = null; // { sheets: { シート名: 2次元配列 | null（シート無し） }, timeZone }
+
+/** 作り直しの間だけ、先に一括で読んだ値を readSheetValues_ から返す */
+function withPrefetchedSheets_(src, fn) {
+  if (!src || !src.sheets) return fn();
+  let prev = _prefetched;
+  _prefetched = src;
+  try { return fn(); } finally { _prefetched = prev; }
+}
+
+/** シートの全値（getDataRange().getValues() と同じ形）。シートが無ければ null */
+function readSheetValues_(name) {
+  if (_prefetched && Object.prototype.hasOwnProperty.call(_prefetched.sheets, name)) return _prefetched.sheets[name];
+  let sheet = getSpreadsheet_().getSheetByName(name);
+  return sheet ? sheet.getDataRange().getValues() : null;
+}
+
+function getSpreadsheetTimeZone_() {
+  if (_prefetched && _prefetched.timeZone) return _prefetched.timeZone;
+  return getSpreadsheet_().getSpreadsheetTimeZone();
 }
 
 /**
  * Sheets API values:batchGet の URL を組み立てる（純粋関数）。
- * シート名は A1 表記の引用符で囲み（' は '' に）、URL エンコードする。値は書式なし・日時はシリアル値で受け取る。
+ * シート名は A1 表記の引用符で囲み（' は '' に）、URL エンコードする。値は書式なし。
+ * 日時は dateTimeRenderOption（既定 SERIAL_NUMBER。FORMATTED_STRING で書式付き文字列）。
  */
-function buildBatchGetUrl_(spreadsheetId, sheetNames) {
+function buildBatchGetUrl_(spreadsheetId, sheetNames, dateTimeRenderOption) {
   let ranges = sheetNames.map(function(n) {
     return 'ranges=' + encodeURIComponent("'" + String(n).replace(/'/g, "''") + "'");
   }).join('&');
   return 'https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(spreadsheetId)
-    + '/values:batchGet?' + ranges + '&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER';
+    + '/values:batchGet?' + ranges + '&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption='
+    + (dateTimeRenderOption || 'SERIAL_NUMBER');
+}
+
+function sheetsApiRequest_(url) {
+  return { url: url, headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true };
+}
+
+function assertHttpOk_(res, label) {
+  let code = res.getResponseCode();
+  if (code !== 200) throw new Error(label + ' HTTP ' + code + ': ' + res.getContentText().slice(0, 200));
 }
 
 /**
- * 計測用（管理者が GAS エディタから実行。結果は実行ログ）。
- * 起動時に読むシートを ① Sheets API の一括読込（1回の通信）と ② 現行の SpreadsheetApp（シートごと）で読み、
- * 所要時間と行数を比べる。あわせて全シートの行数・列数（グリッドの大きさ）を出す（DB の重さの把握用）。
- * 値そのものはログに出さない。冷えた状態と温まった状態を比べるため、時間をおいて2回実行する。
+ * Sheets API でシートを読む。メタ情報（タイムゾーン・シート名）を1回取り、存在するシートだけを
+ * batchGet で2回並列に読む（日時判定のため）。返り値 { timeZone, sheets: { 名前: 2次元配列 | null } }
  */
-function perfProbeSheetsApi() {
-  // 管理者確認は計測の後に行う（先に行うと DB が開かれ、冷えた状態を測れない）。
-  // 読むのは実行者が元々読めるデータだけで、値は返さず出力もしない。
+function fetchSheetsViaApi_(names) {
   let id = getSpreadsheetId_();
-  let names = initialDataSheetNames_();
-  let headers = { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() };
-  let result = { api: {}, spreadsheetApp: {}, rows: {}, sheets: [] };
-
-  // ① Sheets API（先に実行し、冷えた状態の値を取る）
-  let t = Date.now();
-  let res = UrlFetchApp.fetch(buildBatchGetUrl_(id, names), { headers: headers, muteHttpExceptions: true });
-  result.api.batchGetMs = Date.now() - t;
-  result.api.status = res.getResponseCode();
-  let apiRows = {};
-  if (result.api.status === 200) {
-    let body = JSON.parse(res.getContentText());
-    (body.valueRanges || []).forEach(function(vr, i) { apiRows[names[i]] = (vr.values || []).length; });
-    result.api.bytes = res.getContentText().length;
-  } else {
-    result.api.error = res.getContentText().slice(0, 300);
-  }
-
-  // ② 現行（SpreadsheetApp。シートごとに読む）
-  t = Date.now();
-  let ss = SpreadsheetApp.openById(id);
-  result.spreadsheetApp.openMs = Date.now() - t;
-  let total = result.spreadsheetApp.openMs;
-  names.forEach(function(n) {
-    let t1 = Date.now();
-    let sh = ss.getSheetByName(n);
-    let rows = sh ? sh.getDataRange().getValues().length : 0;
-    let ms = Date.now() - t1;
-    total += ms;
-    result.spreadsheetApp[n] = ms;
-    result.rows[n] = { spreadsheetApp: rows, api: apiRows[n] };
-  });
-  result.spreadsheetApp.totalMs = total;
-
-  // 全シートのグリッドの大きさ（値は読まない）
-  t = Date.now();
-  let meta = UrlFetchApp.fetch('https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(id)
-    + '?fields=' + encodeURIComponent('sheets(properties(title,gridProperties(rowCount,columnCount)))'),
-    { headers: headers, muteHttpExceptions: true });
-  result.metaMs = Date.now() - t;
-  if (meta.getResponseCode() === 200) {
-    (JSON.parse(meta.getContentText()).sheets || []).forEach(function(s) {
-      let g = s.properties.gridProperties || {};
-      result.sheets.push({ title: s.properties.title, rows: g.rowCount, cols: g.columnCount, cells: (g.rowCount || 0) * (g.columnCount || 0) });
+  let base = 'https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(id);
+  let metaRes = UrlFetchApp.fetchAll([
+    sheetsApiRequest_(base + '?fields=' + encodeURIComponent('properties.timeZone,sheets.properties.title'))
+  ])[0];
+  assertHttpOk_(metaRes, 'Sheets API meta');
+  let meta = JSON.parse(metaRes.getContentText());
+  let tz = meta.properties && meta.properties.timeZone;
+  if (!tz) throw new Error('Sheets API meta: timeZone がありません');
+  let titles = {};
+  (meta.sheets || []).forEach(function(s) { titles[s.properties.title] = true; });
+  let present = names.filter(function(n) { return titles[n]; });
+  let sheets = {};
+  names.forEach(function(n) { if (!titles[n]) sheets[n] = null; });
+  if (present.length) {
+    let res = UrlFetchApp.fetchAll([
+      sheetsApiRequest_(buildBatchGetUrl_(id, present, 'SERIAL_NUMBER')),
+      sheetsApiRequest_(buildBatchGetUrl_(id, present, 'FORMATTED_STRING'))
+    ]);
+    assertHttpOk_(res[0], 'Sheets API batchGet(serial)');
+    assertHttpOk_(res[1], 'Sheets API batchGet(formatted)');
+    let serial = JSON.parse(res[0].getContentText()).valueRanges || [];
+    let fmt = JSON.parse(res[1].getContentText()).valueRanges || [];
+    let offsetAt = function(ms) { return parseTzOffset_(Utilities.formatDate(new Date(ms), tz, 'Z')); };
+    let toDate = function(v) { return serialToDate_(v, offsetAt); };
+    present.forEach(function(n, i) {
+      sheets[n] = mergeApiValues_((serial[i] || {}).values || [], (fmt[i] || {}).values || [], toDate);
     });
-    result.sheets.sort(function(a, b) { return b.cells - a.cells; });
-    result.totalCells = result.sheets.reduce(function(a, s) { return a + s.cells; }, 0);
   }
+  return { timeZone: tz, sheets: sheets };
+}
 
+/** 作り直し用の読込。SNAPSHOT_READ_MODE=sheetsApi なら一括、失敗したら SpreadsheetApp に戻す */
+function readInitialSheets_() {
+  let mode = String(getScriptProps_()[SNAPSHOT_READ_MODE_PROP_] || '').trim();
+  if (mode !== 'sheetsApi') return { mode: 'spreadsheetApp', sheets: null, timeZone: null };
+  try {
+    let r = fetchSheetsViaApi_(initialDataSheetNames_());
+    return { mode: 'sheetsApi', sheets: r.sheets, timeZone: r.timeZone };
+  } catch (e) {
+    console.warn('[snapshot] Sheets API の一括読込に失敗。SpreadsheetApp で読み直します: ' + e.message);
+    return { mode: 'spreadsheetApp(fallback)', sheets: null, timeZone: null };
+  }
+}
+
+// ---------- 保存・読出し（ScriptCache） ----------
+
+function saveSnapshot_(snap) {
+  let json = JSON.stringify(snap);
+  let b64 = Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(json, 'application/json')).getBytes());
+  let parts = splitIntoChunks_(b64, SNAPSHOT_CHUNK_CHARS_);
+  // 同じ世代で作り直しても分割片が混ざらないよう、作成ごとに別の接頭辞にする
+  let prefix = 'snap:' + snap.gen + ':' + snap.builtAt.toString(36) + ':';
+  let kv = {};
+  parts.forEach(function(p, i) { kv[prefix + i] = p; });
+  let cache = CacheService.getScriptCache();
+  cache.putAll(kv, SNAPSHOT_TTL_SEC_);
+  // メタ情報は最後に書く（分割片が揃ってから見えるように）
+  cache.put(SNAPSHOT_META_KEY_, JSON.stringify({
+    f: SNAPSHOT_FORMAT_, gen: snap.gen, builtAt: snap.builtAt, n: parts.length, prefix: prefix
+  }), SNAPSHOT_TTL_SEC_);
+  return { chunks: parts.length, chars: b64.length };
+}
+
+function loadSnapshot_(gen, nowMs, maxAgeMs) {
+  try {
+    let cache = CacheService.getScriptCache();
+    let meta = JSON.parse(cache.get(SNAPSHOT_META_KEY_) || 'null');
+    if (!snapshotUsable_(meta, gen, nowMs, maxAgeMs, SNAPSHOT_FORMAT_)) return null;
+    let keys = [];
+    for (let i = 0; i < meta.n; i++) keys.push(meta.prefix + i);
+    let got = cache.getAll(keys);
+    let parts = [];
+    for (let i = 0; i < keys.length; i++) {
+      if (got[keys[i]] == null) return null; // 一部が消えていたら作り直す
+      parts.push(got[keys[i]]);
+    }
+    let bytes = Utilities.base64Decode(parts.join(''));
+    let json = Utilities.ungzip(Utilities.newBlob(bytes, 'application/x-gzip')).getDataAsString('UTF-8');
+    let snap = JSON.parse(json);
+    return (snap && snap.f === SNAPSHOT_FORMAT_ && snap.gen === gen) ? snap : null;
+  } catch (e) {
+    console.warn('[snapshot] 読出しに失敗（作り直します）: ' + e.message);
+    return null;
+  }
+}
+
+function snapshotMaxAgeMs_(props) {
+  return parsePositiveIntegerOrDefault_(props[SNAPSHOT_MAX_AGE_PROP_], SNAPSHOT_MAX_AGE_DEFAULT_MIN_) * 60000;
+}
+
+// ---------- 作り直し ----------
+
+/**
+ * 完成品を作り直して保存し、作った完成品を返す。
+ * 作り始めと保存直前で世代が変わっていたら（途中で書込があった）、保存せずにその呼び出しにだけ返す。
+ * 同時に複数人が作り直してもよい（世代で正しさを保つため、ロックは取らない）。
+ */
+function rebuildSnapshot_(reason, perfOut) {
+  let p = perfOut || {};
+  let t0 = Date.now();
+  let lap = function(name) { let now = Date.now(); p[name] = now - t0; t0 = now; };
+
+  ensureAttachmentSchema_(); // 移行（書込）は世代を読む前に済ませる
+  lap('schema');
+  let gen = readSnapshotGen_() || bumpSnapshotGen_();
+  let src = readInitialSheets_();
+  lap('read');
+
+  let snap = withPrefetchedSheets_(src, function() {
+    let casesDetail = {};
+    let cases = getAllCasesJoined(casesDetail);
+    p.casesDetail = casesDetail;
+    lap('cases');
+    let masters = getMasters();
+    let forcedCc = getForcedCc_() || '';
+    let staffRows = getStaffRows_();
+    let settings = stripSecretSettings_(loadSettings_(), SECRET_SETTING_KEYS_);
+    lap('masters');
+    return {
+      f: SNAPSHOT_FORMAT_, gen: gen, builtAt: Date.now(), reason: reason, readMode: src.mode,
+      cases: cases, masters: masters, forcedCc: forcedCc, staffRows: staffRows, settings: settings
+    };
+  });
+
+  if (readSnapshotGen_() === gen) {
+    try { p.saved = saveSnapshot_(snap); } catch (e) { console.warn('[snapshot] 保存に失敗: ' + e.message); }
+  } else {
+    p.discarded = true; // 作っている間に書込があった。次の起動で作り直す
+  }
+  lap('save');
+  p.readMode = src.mode;
+  return snap;
+}
+
+/** 完成品のタダメンマスタ行・設定値を実行内キャッシュに入れる（認証を DB なしで行うため） */
+function primeFromSnapshot_(snap) {
+  _staffRowsCache = snap.staffRows || [];
+  _settingsCache = snap.settings || {};
+}
+
+// ---------- 診断（管理者が GAS エディタから実行・読むだけ） ----------
+
+/**
+ * Sheets API 一括読込と SpreadsheetApp の読込を全セルで比べる（SNAPSHOT_READ_MODE=sheetsApi に切り替える前に実行）。
+ * シートごとの行数・列数・不一致件数・不一致の位置と型、所要時間を実行ログに出す。値は出さない。
+ * 全シート不一致0件（ok: true）を数回確認してから切り替える。
+ */
+function diagnoseSheetsApiRead() {
   requireAdmin_();
+  let names = initialDataSheetNames_();
+  let t = Date.now();
+  let api = fetchSheetsViaApi_(names);
+  let apiMs = Date.now() - t;
+  t = Date.now();
+  let ss = getSpreadsheet_();
+  let sa = {};
+  names.forEach(function(n) {
+    let sh = ss.getSheetByName(n);
+    sa[n] = sh ? sh.getDataRange().getValues() : null;
+  });
+  let result = {
+    apiMs: apiMs, spreadsheetAppMs: Date.now() - t,
+    timeZone: { api: api.timeZone, spreadsheetApp: ss.getSpreadsheetTimeZone() },
+    sheets: {}, totalMismatches: 0
+  };
+  names.forEach(function(n) {
+    if (api.sheets[n] === null || sa[n] === null) {
+      result.sheets[n] = { missing: { api: api.sheets[n] === null, spreadsheetApp: sa[n] === null } };
+      if ((api.sheets[n] === null) !== (sa[n] === null)) result.totalMismatches++;
+      return;
+    }
+    let c = compareSheetRows_(sa[n], api.sheets[n], 5);
+    result.sheets[n] = c;
+    result.totalMismatches += c.mismatches;
+  });
+  result.ok = result.totalMismatches === 0 && result.timeZone.api === result.timeZone.spreadsheetApp;
   console.log(JSON.stringify(result, null, 1));
   return result;
 }
 
 // ======================================================================
-// v1.13.0 DB の温め（keep-warm）: 冷えた DB を起こす約11秒を利用者に待たせない
+// v1.13.0 DB の温め（keep-warm）→ v1.14.0〜 完成品の定期作り直し（DB の温めも兼ねる）
 // ======================================================================
 // 時間帯はスクリプトプロパティで変更できる（DB を開かずに判定するため、設定シートではなくプロパティ）。
 //   KEEP_WARM_HOURS: 'H-H'（開始時以上・終了時未満。既定 '8-20'）
@@ -863,8 +1188,8 @@ function isWithinKeepWarmWindow_(hour, isoDay, hoursSpec, daysSpec) {
 
 /**
  * 時間主導トリガーから呼ばれる（setupKeepWarmTrigger で設定）。時間帯外は DB を開かずに終わる。
- * 時間帯内は IMPORTRANGE を含むシートの先頭セルだけを読み、DB を冷えさせない。
- * 所要時間を実行ログに出す（数秒以上なら冷えていた＝間隔が長すぎる目安）。
+ * v1.14.0〜 時間帯内は完成品（スナップショット）を作り直す（ADR-015）。IMPORTRANGE で入るフォーム申込や
+ * シートの直接編集はこれで画面に反映される。DB も温まる。所要時間と内訳を実行ログに出す。
  */
 function keepWarm() {
   let now = new Date();
@@ -873,12 +1198,9 @@ function keepWarm() {
   let props = getScriptProps_();
   if (!isWithinKeepWarmWindow_(hour, isoDay, props.KEEP_WARM_HOURS, props.KEEP_WARM_DAYS)) return;
   let t = Date.now();
-  let ss = SpreadsheetApp.openById(getSpreadsheetId_());
-  [SHEET_NAMES.CASES, SHEET_NAMES.CHAT_LINKS, SHEET_NAMES.STAFF].forEach(function(n) {
-    let sh = ss.getSheetByName(n);
-    if (sh) sh.getRange(1, 1).getValue();
-  });
-  console.log(JSON.stringify({ keepWarm: Date.now() - t }));
+  let detail = {};
+  rebuildSnapshot_('trigger', detail);
+  console.log(JSON.stringify({ keepWarm: Date.now() - t, detail: detail }));
 }
 
 /** keepWarm の時間主導トリガーを（作り直して）1つだけ設定する。管理者が GAS エディタから実行。トリガーは実行した人のアカウントで動く */
@@ -910,44 +1232,55 @@ function removeKeepWarmTrigger_() {
 // ======================================================================
 // 初期データ取得
 // ======================================================================
-function getInitialData() {
-  // v1.13.0 B0: 区間ごとの処理時間を計測し、実行ログ（Cloud Logging）と画面のコンソールに出す
+/**
+ * 起動時データ（F-02）。v1.14.0〜 完成品（スナップショット）が使えれば DB を開かずに返す（ADR-015）。
+ * forceRefresh === true（画面の「最新に更新」）のときは完成品を使わず作り直す。
+ * 下書きバッジは利用者ごとに違うため含めない（getMyDraftCaseIds で別に取る）。
+ */
+function getInitialData(forceRefresh) {
+  // 区間ごとの処理時間を計測し、実行ログ（Cloud Logging）と画面のコンソールに出す
   let t0 = Date.now();
   let perf = {};
   let lap = function(name) { let now = Date.now(); perf[name] = now - t0; t0 = now; };
+  let force = forceRefresh === true;
 
-  ensureAttachmentSchema_();
-  lap('schema');
+  let props = getScriptProps_();
+  let snap = force ? null : loadSnapshot_(String(props[SNAPSHOT_GEN_PROP_] || ''), Date.now(), snapshotMaxAgeMs_(props));
+  let source = 'cache';
+  lap('snapshotRead');
+  if (!snap) {
+    let detail = {};
+    snap = rebuildSnapshot_(force ? 'manual' : 'miss', detail);
+    source = 'rebuild';
+    lap('rebuild');
+    perf.rebuildDetail = detail;
+  }
+  primeFromSnapshot_(snap);
 
   let userEmail = normalizeEmail_(Session.getActiveUser().getEmail());
   let staff = getStaffByEmail(userEmail);
-
   if (!staff) {
     throw new Error('アクセス権限がありません。管理者によりタダメンマスタへの登録が必要です。');
   }
-
   let role = getStaffRoleByEmail_(userEmail) || (isAdminEmail_(userEmail) ? 'admin' : 'staff');
   let isAdmin = role === 'admin';
   lap('auth');
-  let casesDetail = {};
-  let cases = getAllCasesJoined(casesDetail);
-  lap('cases');
-  perf.casesDetail = casesDetail;
-  let masters = getMasters();
-  lap('masters');
-  // v1.11.0: 下書きを持つ案件IDの一覧（バッジ表示用）
-  let draftCaseIds = listDraftCaseIdsForUser_(userEmail);
-  lap('drafts');
-  console.log(JSON.stringify({ perf: 'getInitialData', ms: perf, cases: cases.length }));
+  console.log(JSON.stringify({ perf: 'getInitialData', source: source, ms: perf, cases: snap.cases.length }));
 
   return {
     _perf: perf,
     user: { name: staff.name, email: userEmail, isAdmin: isAdmin, role: role },
-    cases: cases,
-    masters: masters,
-    draftCaseIds: draftCaseIds,
-    forcedCc: getForcedCc_() || ''
+    cases: snap.cases,
+    masters: snap.masters,
+    forcedCc: snap.forcedCc || '',
+    snapshot: { builtAt: snap.builtAt, source: source, readMode: snap.readMode }
   };
+}
+
+/** ログイン中メンバーの下書きを持つ案件IDの一覧（F-02b・下書きバッジ用。画面表示後に取得する） */
+function getMyDraftCaseIds() {
+  let actor = getActor_();
+  return listDraftCaseIdsForUser_(actor.email);
 }
 
 // ======================================================================
@@ -1065,12 +1398,11 @@ function buildChatThreadUrl_(threadName) {
 
 // チャット連携シートを読み、突合キー → スレッドURL のマップを返す。
 // シート未作成・IMPORTRANGE 未接続でも案件表示は止めない（空マップ）。同一キーは後勝ち。
-function getChatLinkMap_(ss, timeZone) {
+function getChatLinkMap_(timeZone) {
   let map = {};
   try {
-    let sheet = ss.getSheetByName(SHEET_NAMES.CHAT_LINKS);
-    if (!sheet || sheet.getLastRow() < 2) return map;
-    let data = sheet.getDataRange().getValues();
+    let data = readSheetValues_(SHEET_NAMES.CHAT_LINKS);
+    if (!data || data.length < 2) return map;
     for (let i = 1; i < data.length; i++) {
       let url = buildChatThreadUrl_(data[i][IDX.CHAT_LINK.THREAD_NAME]);
       let key = chatLinkKey_(data[i][IDX.CHAT_LINK.SUBMITTED_AT], data[i][IDX.CHAT_LINK.EMAIL], timeZone);
@@ -1089,23 +1421,21 @@ function getAllCasesJoined(perfOut) {
   // v1.13.0: perfOut（任意）に区間ごとの処理時間を書き込む（getInitialData の _perf.casesDetail）
   let t0 = Date.now();
   let lap = function(name) { if (!perfOut) return; let now = Date.now(); perfOut[name] = now - t0; t0 = now; };
-  let ss = getSpreadsheet_();
+  // v1.14.0: 読込は readSheetValues_ 経由（完成品の作り直しでは Sheets API の一括読込の値を使える）
   // スプレッドシートのタイムゾーンを取得（dateLabel の整形に使用）
-  let ssTimeZone = ss.getSpreadsheetTimeZone();
-  let caseSheet = ss.getSheetByName(SHEET_NAMES.CASES);
-  let recordSheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
+  let ssTimeZone = getSpreadsheetTimeZone_();
   lap('open');
 
-  let caseData = caseSheet.getDataRange().getValues();
+  let caseData = readSheetValues_(SHEET_NAMES.CASES);
+  if (!caseData) throw new Error('「' + SHEET_NAMES.CASES + '」シートが見つかりません。');
   lap('caseList');
-  let recordData = recordSheet.getDataRange().getValues();
+  let recordData = readSheetValues_(SHEET_NAMES.RECORDS);
+  if (!recordData) throw new Error('「' + SHEET_NAMES.RECORDS + '」シートが見つかりません。');
   lap('records');
 
   // 手動追加案件シートを読み込み、案件リストとマージ（ヘッダ行を除いた行配列を結合）
-  let manualSheet = ss.getSheetByName(SHEET_NAMES.CASES_MANUAL);
-  let manualRows = (manualSheet && manualSheet.getLastRow() > 1)
-    ? manualSheet.getDataRange().getValues().slice(1)
-    : [];
+  let manualData = readSheetValues_(SHEET_NAMES.CASES_MANUAL);
+  let manualRows = (manualData && manualData.length > 1) ? manualData.slice(1) : [];
   lap('manual');
   let allCaseRows = caseData.slice(1).concat(manualRows);
 
@@ -1123,7 +1453,7 @@ function getAllCasesJoined(perfOut) {
   lap('settings');
 
   // 案件補正マップを読み込む（管理者が修正した値を案件リストに上書き表示するため）
-  let overrideMap = getCasesOverrideMap_(ss);
+  let overrideMap = getCasesOverrideMap_();
   // Stage4: フラグON時は補正マップのキーも結合キー（case_id）へ正準化して引けるようにする
   let overrideLookup = overrideMap;
   if (readViaMap) {
@@ -1133,11 +1463,11 @@ function getAllCasesJoined(perfOut) {
 
   // 年間利用補正マップ（管理者が手動修正した利用回数の補正量。キー=正規化メール+'_'+年度）— v1.12.4
   lap('override');
-  let annualAdjustMap = getAnnualAdjustmentMap_(ss);
+  let annualAdjustMap = getAnnualAdjustmentMap_();
   lap('annualAdjust');
 
   // 申込通知チャットのスレッドリンク（v1.12.13。フォーム案件のみ・取得失敗時は空）
-  let chatLinkMap = getChatLinkMap_(ss, ssTimeZone);
+  let chatLinkMap = getChatLinkMap_(ssTimeZone);
   lap('chatLink');
 
   // v1.13.0: メール履歴（本文つき）の全件読込を廃止。joined の emails はフロントで未使用だった
@@ -1285,7 +1615,8 @@ function getAllCasesJoined(perfOut) {
 // ======================================================================
 // 案件アサイン
 // ======================================================================
-function assignCase(caseId, user, tools) {
+function assignCase() { return runWrite_(assignCaseImpl_, arguments); }
+function assignCaseImpl_(caseId, user, tools) {
   let actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, true);
 
@@ -1343,7 +1674,8 @@ function assignCase(caseId, user, tools) {
  * 日程・URL・記録をリセットし、次回対応の準備を行う。
  * supportCount >= 3 の場合はエラー。
  */
-function reopenCase(caseId, user) {
+function reopenCase() { return runWrite_(reopenCaseImpl_, arguments); }
+function reopenCaseImpl_(caseId, user) {
   let actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, false);
 
@@ -1414,7 +1746,8 @@ function reopenCase(caseId, user) {
  * supportCount が1の場合はエラー（1回目は取り消せない）。
  * 担当者本人・サブ担当・管理者が実行可能。
  */
-function rollbackCurrentRound(caseId) {
+function rollbackCurrentRound() { return runWrite_(rollbackCurrentRoundImpl_, arguments); }
+function rollbackCurrentRoundImpl_(caseId) {
   let actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, false);
 
@@ -1474,7 +1807,8 @@ function rollbackCurrentRound(caseId) {
  * 案件をキャンセルする。担当者本人・サブ担当・管理者が実行可能。
  * 未アサインの案件は管理者のみキャンセル可能。
  */
-function cancelCase(caseId) {
+function cancelCase() { return runWrite_(cancelCaseImpl_, arguments); }
+function cancelCaseImpl_(caseId) {
   let actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, false);
 
@@ -1521,17 +1855,20 @@ function ensureAttachmentSchema_() {
   if (isSchemaApplied_()) return;
 
   try {
-    ensureAdminSchema_();
-    addForcedCcSetting();
-    addMailDryRunSetting();
-    addUsageLimitSettings();
-    addAttachmentFolderSetting();
-    addAttachmentsColumnToRecords();
-    addCaseLimitOverrideColumnsToRecords();
-    addToolsColumnToRecords();
-    addSubStaffColumnToRecords();
-    addMissingEmailSettings_();
-    addScheduleZoomSettings();  // v1.11.7: 日程・Zoom予約関連の設定キー追加
+    // v1.14.0: 移行全体を1つの書込として包む（完成品の世代更新を最後に1回だけにする）
+    runWrite_(function() {
+      ensureAdminSchema_();
+      addForcedCcSetting();
+      addMailDryRunSetting();
+      addUsageLimitSettings();
+      addAttachmentFolderSetting();
+      addAttachmentsColumnToRecords();
+      addCaseLimitOverrideColumnsToRecords();
+      addToolsColumnToRecords();
+      addSubStaffColumnToRecords();
+      addMissingEmailSettings_();
+      addScheduleZoomSettings();  // v1.11.7: 日程・Zoom予約関連の設定キー追加
+    }, []);
   } catch (e) {
     throw new Error('添付機能の初期化に失敗しました。管理者に連絡してください。詳細: ' + e.message);
   }
@@ -1582,7 +1919,7 @@ function addMissingEmailSettings_() {
     toAdd.push(['MAIL_SCHEDULE_SUBJECT', '日程確定メール件名', 'タダサポ｜サポート日程のご連絡', '', '日程確定時に送信するメールの件名。使用可能タグ: {{名前}} {{事業所名}} {{担当者名}}']);
   }
   if (!existingKeys['MAIL_SCHEDULE_BODY']) {
-    toAdd.push(['MAIL_SCHEDULE_BODY', '日程確定メール本文', '{{名前}} 様\n\nいつもお世話になっております。\nタダサポ担当の{{担当者���}}です。\n\nサポート日程が決まりましたのでご連絡い��します。\n\n----------------\n【サポート日程】\n日時：{{日程}}\n方法：{{対応方法}}\n{{URL}}\n----------------\n\n当日はどうぞよろしく��願いいたします。\nご不明な点がございましたらお気軽にご連絡ください。', '', '日程確定時のメール本文テンプレー���。使用可能タグ: {{名前}} {{事業所名}} {{担当者名}} {{日程}} {{対応方��}} {{URL}}']);
+    toAdd.push(['MAIL_SCHEDULE_BODY', '日程確定メール本文', '{{名前}} 様\n\nいつもお世話になっております。\nタダサポ担当の{{担当者名}}です。\n\nサポート日程が決まりましたのでご連絡いたします。\n\n----------------\n【サポート日程】\n日時：{{日程}}\n方法：{{対応方法}}\n{{URL}}\n----------------\n\n当日はどうぞよろしくお願いいたします。\nご不明な点がございましたらお気軽にご連絡ください。', '', '日程確定時のメール本文テンプレート。使用可能タグ: {{名前}} {{事業所名}} {{担当者名}} {{日程}} {{対応方法}} {{URL}}']);
   }
   if (!existingKeys['MAIL_CLOSING_SUBJECT']) {
     toAdd.push(['MAIL_CLOSING_SUBJECT', 'サポート終了メール件名', 'タダサポ｜サポート完了のお知らせ', '', '完了報告時に「サポート終了メールを送信する」を選んだ際に送信するメールの件名。使用可能タグ: {{名前}} {{事業所名}} {{担当者名}}']);
@@ -1591,7 +1928,7 @@ function addMissingEmailSettings_() {
     toAdd.push(['MAIL_CLOSING_BODY', 'サポート終了メール本文', '{{名前}} 様\n\nこの度はタダサポをご利用いただき、誠にありがとうございました。\n{{事業所名}} 様へのサポートは今回をもちまして完了とさせていただきます。\n\nまたお困りごとがございましたら、いつでもお気軽にご相談ください。\n今後ともタダサポをよろしくお願いいたします。\n\n{{担当者名}}', '', '完了報告時に送信するサポート終了メールの本文テンプレート。使用可能タグ: {{名前}} {{事業所名}} {{担当者名}}']);
   }
   if (!existingKeys['SUPPORT_TOOLS']) {
-    toAdd.push(['SUPPORT_TOOLS', '対応ツール一覧', 'Word・Excel,Windows（基本操作）,LINEWORKS,Google（基本操作）,Google Workspace,AI（ChatGPT、Gemini 他）,ケアプランデータ連携システム,介護ソフト,その他', '', 'カン��区切りで管理。フォームの対応ツー���選択肢に使用']);
+    toAdd.push(['SUPPORT_TOOLS', '対応ツール一覧', 'Word・Excel,Windows（基本操作）,LINEWORKS,Google（基本操作）,Google Workspace,AI（ChatGPT、Gemini 他）,ケアプランデータ連携システム,介護ソフト,その他', '', 'カンマ区切りで管理。フォームの対応ツール選択肢に使用']);
   }
 
   if (!toAdd.length) return;
@@ -1618,7 +1955,8 @@ function addMissingEmailSettings_() {
  * 年間利用回数超過のため案件を対応不可にする。
  * 回数超過メールを送信し、ステータスを rejected に変更する。
  */
-function declineCase(caseId, user, subject, body, cc, bcc) {
+function declineCase() { return runWrite_(declineCaseImpl_, arguments); }
+function declineCaseImpl_(caseId, user, subject, body, cc, bcc) {
   let actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, true);
 
@@ -1730,7 +2068,7 @@ function recordEmail_(caseId, user, recipientEmail, subject, body) {
 function getRecipientEmail_(caseId) {
   let ss = getSpreadsheet_();
   // 案件補正シートのメール補正を優先チェック
-  let overrideMap = getCasesOverrideMap_(ss);
+  let overrideMap = getCasesOverrideMap_();
   let ovr = overrideMap[String(caseId)];
   if (ovr && ovr.email !== null) return ovr.email;
 
@@ -2011,7 +2349,8 @@ function getAllStaffEmails_() {
  * 案件を担当し、初回メールを送信する。
  * Gmail API でスレッドIDを取得し、サポート記録に保存する。
  */
-function assignAndSendEmail(caseId, user, subject, body, cc, bcc, tools) {
+function assignAndSendEmail() { return runWrite_(assignAndSendEmailImpl_, arguments); }
+function assignAndSendEmailImpl_(caseId, user, subject, body, cc, bcc, tools) {
   let actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, true);
 
@@ -2039,7 +2378,8 @@ function assignAndSendEmail(caseId, user, subject, body, cc, bcc, tools) {
  * 案件に対して新規メールを送信する（新しいスレッドを作成）。
  * 「メール送信」ボタンから呼ばれる。
  */
-function sendNewCaseEmail(caseId, user, subject, body, cc, bcc) {
+function sendNewCaseEmail() { return runWrite_(sendNewCaseEmailImpl_, arguments); }
+function sendNewCaseEmailImpl_(caseId, user, subject, body, cc, bcc) {
   let actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, false);
 
@@ -2060,7 +2400,8 @@ function sendNewCaseEmail(caseId, user, subject, body, cc, bcc) {
  * 案件の既存スレッドに返信する。
  * threadIdを指定して呼ばれる。
  */
-function sendCaseEmail(caseId, user, subject, body, threadId, cc, bcc) {
+function sendCaseEmail() { return runWrite_(sendCaseEmailImpl_, arguments); }
+function sendCaseEmailImpl_(caseId, user, subject, body, threadId, cc, bcc) {
   let actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, false);
 
@@ -2616,7 +2957,8 @@ function trashRemovedAttachments_(existingAttachments, keepIdMap) {
 // ======================================================================
 // サポート記録の更新（方法別: Meet / Zoom / その他）
 // ======================================================================
-function updateSupportRecord(recordData) {
+function updateSupportRecord() { return runWrite_(updateSupportRecordImpl_, arguments); }
+function updateSupportRecordImpl_(recordData) {
   let actor = getActor_();
   ensureCaseEditableByActor_(recordData.timestamp, actor, false);
 
@@ -2900,7 +3242,7 @@ function getMasters() {
       'その他'
     ],
     allStaff: allStaff,
-    spreadsheetUrl: getSpreadsheet_().getUrl(),
+    spreadsheetUrl: spreadsheetUrlFromId_(getSpreadsheetId_()), // v1.14.0: DB を開かない
     limits: {
       annual: getAnnualUsageLimit_(),
       caseSupport: getCaseUsageLimit_()
@@ -2937,7 +3279,7 @@ function getMasters() {
       closingSubject: getSetting_('MAIL_CLOSING_SUBJECT', 'タダサポ｜サポート完了のお知らせ'),
       closingBody: getSetting_('MAIL_CLOSING_BODY', '{{名前}} 様\n\nこの度はタダサポをご利用いただき、誠にありがとうございました。\n{{事業所名}} 様へのサポートは今回をもちまして完了とさせていただきます。\n\nまたお困りごとがございましたら、いつでもお気軽にご相談ください。\n今後ともタダサポをよろしくお願いいたします。\n\n{{担当者名}}'),
       scheduleSubject: getSetting_('MAIL_SCHEDULE_SUBJECT', 'タダサポ｜サポート日程のご連絡'),
-      scheduleBody: getSetting_('MAIL_SCHEDULE_BODY', '{{名前}} 様\n\nいつもお世話になっており���す。\nタダサポ担当���{{担当者名}}です。\n\nサポ��ト日程が決まり��したのでご連絡いたしま���。\n\n----------------\n【���ポート日程】\n日時：{{日程}}\n方法：{{対応方法}}\n{{URL}}\n----------------\n\n当日はどうぞよろしくお願いいたします。\nご不明な点がございましたらお気軽にご連絡ください。')
+      scheduleBody: getSetting_('MAIL_SCHEDULE_BODY', '{{名前}} 様\n\nいつもお世話になっております。\nタダサポ担当の{{担当者名}}です。\n\nサポート日程が決まりましたのでご連絡いたします。\n\n----------------\n【サポート日程】\n日時：{{日程}}\n方法：{{対応方法}}\n{{URL}}\n----------------\n\n当日はどうぞよろしくお願いいたします。\nご不明な点がございましたらお気軽にご連絡ください。')
     }
   };
 }
@@ -3096,7 +3438,8 @@ function getAdminPanelData() {
   };
 }
 
-function upsertStaffMember(payload) {
+function upsertStaffMember() { return runWrite_(upsertStaffMemberImpl_, arguments); }
+function upsertStaffMemberImpl_(payload) {
   let actor = requireAdmin_();
   ensureAdminSchema_();
   if (!payload) throw new Error('payload が必要です。');
@@ -3156,7 +3499,8 @@ function upsertStaffMember(payload) {
   return listStaffMembers_();
 }
 
-function deactivateStaffMember(email) {
+function deactivateStaffMember() { return runWrite_(deactivateStaffMemberImpl_, arguments); }
+function deactivateStaffMemberImpl_(email) {
   let actor = requireAdmin_();
   ensureAdminSchema_();
   let target = normalizeEmail_(email);
@@ -3237,7 +3581,8 @@ function buildEditableSettingsForClient_() {
   return out;
 }
 
-function updateSettingsAdmin(patch) {
+function updateSettingsAdmin() { return runWrite_(updateSettingsAdminImpl_, arguments); }
+function updateSettingsAdminImpl_(patch) {
   let actor = requireAdmin_();
   ensureAdminSchema_();
   if (!patch || typeof patch !== 'object') throw new Error('patch が必要です。');
@@ -3304,7 +3649,8 @@ function updateSettingsAdmin(patch) {
   return { settings: buildEditableSettingsForClient_(), secretStatus: getSecretStatus_() };
 }
 
-function reassignCaseAdmin(caseId, staffEmail) {
+function reassignCaseAdmin() { return runWrite_(reassignCaseAdminImpl_, arguments); }
+function reassignCaseAdminImpl_(caseId, staffEmail) {
   let actor = requireAdmin_();
   ensureAdminSchema_();
   let targetEmail = normalizeEmail_(staffEmail);
@@ -3398,7 +3744,8 @@ function reassignCaseAdmin(caseId, staffEmail) {
  * 書式も他の行に合わせて整える。
  * GASエディタからこの関数を手動実行してください。
  */
-function fixSettingsSheet() {
+function fixSettingsSheet() { return runWrite_(fixSettingsSheetImpl_, arguments); }
+function fixSettingsSheetImpl_() {
   let ss = getSpreadsheet_();
   let sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
   if (!sheet) { Logger.log('設定シートが見つかりません。'); return; }
@@ -3489,10 +3836,9 @@ function ensureCasesOverrideSheet_(ss) {
  * 案件補正シートを読み込み、{ caseId: { email, officeName, ... } } 形式のマップを返す。
  * 値が空文字のフィールドは null として返す（「補正なし」扱い）。
  */
-function getCasesOverrideMap_(ss) {
-  let sheet = ss.getSheetByName(SHEET_NAMES.CASES_OVERRIDE);
-  if (!sheet || sheet.getLastRow() < 2) return {};
-  let data = sheet.getDataRange().getValues();
+function getCasesOverrideMap_() {
+  let data = readSheetValues_(SHEET_NAMES.CASES_OVERRIDE);
+  if (!data || data.length < 2) return {};
   let map = {};
   for (let i = 1; i < data.length; i++) {
     let pk = String(data[i][IDX.CASES_OVERRIDE.PK]);
@@ -3532,10 +3878,9 @@ function ensureAnnualUsageAdjustmentSheet_(ss) {
 /**
  * 年間利用補正マップを返す。キー = 正規化メール + '_' + 年度、値 = 補正量(整数, 負値可)。
  */
-function getAnnualAdjustmentMap_(ss) {
-  let sheet = ss.getSheetByName(SHEET_NAMES.ANNUAL_ADJUST);
-  if (!sheet || sheet.getLastRow() < 2) return {};
-  let data = sheet.getDataRange().getValues();
+function getAnnualAdjustmentMap_() {
+  let data = readSheetValues_(SHEET_NAMES.ANNUAL_ADJUST);
+  if (!data || data.length < 2) return {};
   let map = {};
   for (let i = 1; i < data.length; i++) {
     let email = normalizeEmail_(data[i][IDX.ANNUAL_ADJUST.EMAIL]);
@@ -3581,7 +3926,8 @@ function upsertAnnualAdjustment_(ss, email, fiscalYear, adjustment, actorEmail) 
  * @param {number} desiredCount 目的の今年度利用数（0以上の整数）
  * @returns {{ email:string, fiscalYear:number, base:number, adjustment:number, effective:number }}
  */
-function setAnnualUsageCountAdmin(caseId, desiredCount) {
+function setAnnualUsageCountAdmin() { return runWrite_(setAnnualUsageCountAdminImpl_, arguments); }
+function setAnnualUsageCountAdminImpl_(caseId, desiredCount) {
   let actor = requireAdmin_();
   let n = Number(desiredCount);
   if (!isFinite(n) || n < 0) throw new Error('今年度利用数は0以上の整数で指定してください。');
@@ -3601,7 +3947,7 @@ function setAnnualUsageCountAdmin(caseId, desiredCount) {
   let fy = caseFiscalYear_(caseId);
 
   // base（自動計算値） = 現在の表示値（effective） − 既存補正量
-  let adjMap = getAnnualAdjustmentMap_(ss);
+  let adjMap = getAnnualAdjustmentMap_();
   let key = email + '_' + fy;
   let existingAdj = adjMap[key] || 0;
   let base = (Number(target.currentFiscalYearCount) || 0) - existingAdj;
@@ -3657,7 +4003,8 @@ function ensureCasesManualSheet_(ss) {
  * 管理者が新規案件を手動追加する。
  * PKは "manual_" + UNIXミリ秒 で生成するため重複は発生しない。
  */
-function addManualCase(payload) {
+function addManualCase() { return runWrite_(addManualCaseImpl_, arguments); }
+function addManualCaseImpl_(payload) {
   let actor = requireAdmin_();
   if (!payload.email)         throw new Error('メールアドレスは必須です。');
   if (!payload.officeName)    throw new Error('介護事業所名は必須です。');
@@ -3715,7 +4062,8 @@ function ensureRecordRowForCase_(sheet, caseId) {
 }
 
 // サブ担当更新（メイン担当者 or 管理者のみ）
-function updateSubStaff(caseId, subStaffArray) {
+function updateSubStaff() { return runWrite_(updateSubStaffImpl_, arguments); }
+function updateSubStaffImpl_(caseId, subStaffArray) {
   let actor = getActor_();
   let ss = getSpreadsheet_();
   let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
@@ -3764,7 +4112,8 @@ function updateSubStaff(caseId, subStaffArray) {
  * @param {string} newUrl - 新しいURL（空文字で削除）
  * @returns {object} { meetUrl }
  */
-function updateMeetUrl(caseId, newUrl) {
+function updateMeetUrl() { return runWrite_(updateMeetUrlImpl_, arguments); }
+function updateMeetUrlImpl_(caseId, newUrl) {
   let actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, false);
 
@@ -3856,7 +4205,8 @@ function updateMeetUrl(caseId, newUrl) {
  * @param {object} patch - 更新するフィールド
  * @returns {object} 更新後の supportHistory 配列
  */
-function updateSupportHistory(caseId, roundIndex, patch) {
+function updateSupportHistory() { return runWrite_(updateSupportHistoryImpl_, arguments); }
+function updateSupportHistoryImpl_(caseId, roundIndex, patch) {
   let actor = getActor_();
   ensureCaseEditableByActor_(caseId, actor, false);
 
@@ -4143,7 +4493,8 @@ function adminTransitionStatus_(recordSheet, rowIndex, fromStatus, toStatus, act
 // ======================================================================
 // setCaseStatusAdmin — adminTransitionStatus_ へ委譲
 // ======================================================================
-function setCaseStatusAdmin(caseId, status) {
+function setCaseStatusAdmin() { return runWrite_(setCaseStatusAdminImpl_, arguments); }
+function setCaseStatusAdminImpl_(caseId, status) {
   let actor = requireAdmin_();
   ensureAdminSchema_();
 
@@ -4174,7 +4525,8 @@ function setCaseStatusAdmin(caseId, status) {
   return result;
 }
 
-function deleteCaseAdmin(caseId) {
+function deleteCaseAdmin() { return runWrite_(deleteCaseAdminImpl_, arguments); }
+function deleteCaseAdminImpl_(caseId) {
   let actor = requireAdmin_();
   let ss = getSpreadsheet_();
 
@@ -4253,7 +4605,8 @@ function deleteCaseAdmin(caseId) {
   return;
 }
 
-function updateCaseDataAdmin(caseId, payload) {
+function updateCaseDataAdmin() { return runWrite_(updateCaseDataAdminImpl_, arguments); }
+function updateCaseDataAdminImpl_(caseId, payload) {
   let actor = requireAdmin_();
   ensureAdminSchema_();
   if (!payload || typeof payload !== 'object') throw new Error('payload が不正です。');
@@ -4462,7 +4815,8 @@ function updateCaseDataAdmin(caseId, payload) {
   return;
 }
 
-function setupSettingsSheet() {
+function setupSettingsSheet() { return runWrite_(setupSettingsSheetImpl_, arguments); }
+function setupSettingsSheetImpl_() {
   let ss = getSpreadsheet_();
   let existing = ss.getSheetByName(SHEET_NAMES.SETTINGS);
   if (existing) {
@@ -4596,7 +4950,8 @@ function setupSettingsSheet() {
  * 初回 setupSettingsSheet 実行後に本機能が追加された場合に使用。
  * GASエディタからこの関数を実行してください。
  */
-function addEmailTemplates() {
+function addEmailTemplates() { return runWrite_(addEmailTemplatesImpl_, arguments); }
+function addEmailTemplatesImpl_() {
   let ss = getSpreadsheet_();
   let sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
   if (!sheet) {
@@ -4664,7 +5019,8 @@ function addEmailTemplates() {
  * 既存の設定シートに MAIL_FORCE_CC 行を追加するヘルパー。
  * 既に存在する場合はスキップする。
  */
-function addForcedCcSetting() {
+function addForcedCcSetting() { return runWrite_(addForcedCcSettingImpl_, arguments); }
+function addForcedCcSettingImpl_() {
   let ss = getSpreadsheet_();
   let sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
   if (!sheet) {
@@ -4724,7 +5080,8 @@ function addForcedCcSetting() {
  * 既存の設定シートに MAIL_DRY_RUN 行を追加するヘルパー。
  * 既に存在する場合はスキップする。
  */
-function addMailDryRunSetting() {
+function addMailDryRunSetting() { return runWrite_(addMailDryRunSettingImpl_, arguments); }
+function addMailDryRunSettingImpl_() {
   let ss = getSpreadsheet_();
   let sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
   if (!sheet) {
@@ -4776,7 +5133,8 @@ function addMailDryRunSetting() {
   Logger.log('MAIL_DRY_RUN の設定行を追加しました。');
 }
 
-function addUsageLimitSettings() {
+function addUsageLimitSettings() { return runWrite_(addUsageLimitSettingsImpl_, arguments); }
+function addUsageLimitSettingsImpl_() {
   let ss = getSpreadsheet_();
   let sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
   if (!sheet) {
@@ -4843,7 +5201,8 @@ function addUsageLimitSettings() {
   }
 }
 
-function addAttachmentFolderSetting() {
+function addAttachmentFolderSetting() { return runWrite_(addAttachmentFolderSettingImpl_, arguments); }
+function addAttachmentFolderSettingImpl_() {
   let ss = getSpreadsheet_();
   let sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
   if (!sheet) {
@@ -4893,7 +5252,8 @@ function addAttachmentFolderSetting() {
  * サポート記録シートに ATTACHMENTS 列（O列）を追加する。
  * 既に存在する場合はスキップ。
  */
-function addAttachmentsColumnToRecords() {
+function addAttachmentsColumnToRecords() { return runWrite_(addAttachmentsColumnToRecordsImpl_, arguments); }
+function addAttachmentsColumnToRecordsImpl_() {
   let ss = getSpreadsheet_();
   let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
   if (!sheet) {
@@ -4946,7 +5306,8 @@ function addAttachmentsColumnToRecords() {
  * 1) 設定シートへ ATTACHMENT_FOLDER_ID を追加
  * 2) サポート記録へ ATTACHMENTS 列を追加
  */
-function addCaseLimitOverrideColumnsToRecords() {
+function addCaseLimitOverrideColumnsToRecords() { return runWrite_(addCaseLimitOverrideColumnsToRecordsImpl_, arguments); }
+function addCaseLimitOverrideColumnsToRecordsImpl_() {
   let ss = getSpreadsheet_();
   let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
   if (!sheet) throw new Error('「サポート記録」シートが見つかりません。');
@@ -4970,7 +5331,8 @@ function addCaseLimitOverrideColumnsToRecords() {
  * サポート記録シートに TOOLS 列（R列 = 18列目）を追加する。
  * 既に存在する場合はスキップする。
  */
-function addToolsColumnToRecords() {
+function addToolsColumnToRecords() { return runWrite_(addToolsColumnToRecordsImpl_, arguments); }
+function addToolsColumnToRecordsImpl_() {
   let ss = getSpreadsheet_();
   let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
   if (!sheet) throw new Error('「サポート記録」シートが見つかりません。');
@@ -4986,7 +5348,8 @@ function addToolsColumnToRecords() {
   }
 }
 
-function addSubStaffColumnToRecords() {
+function addSubStaffColumnToRecords() { return runWrite_(addSubStaffColumnToRecordsImpl_, arguments); }
+function addSubStaffColumnToRecordsImpl_() {
   let ss = getSpreadsheet_();
   let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
   if (!sheet) throw new Error('「サポート記録」シートが見つかりません。');
@@ -5002,7 +5365,8 @@ function addSubStaffColumnToRecords() {
   }
 }
 
-function setupAttachmentFeatureSchema() {
+function setupAttachmentFeatureSchema() { return runWrite_(setupAttachmentFeatureSchemaImpl_, arguments); }
+function setupAttachmentFeatureSchemaImpl_() {
   ensureAdminSchema_();
   addForcedCcSetting();
   addMailDryRunSetting();
@@ -5226,11 +5590,13 @@ function listDraftCaseIdsForUser_(userEmail) {
 
 const SCHEDULED_DISABLED_NOTE = '予約送信機能廃止により未送信のまま無効化しました';
 
-function scheduleEmail(payload) {
+function scheduleEmail() { return runWrite_(scheduleEmailImpl_, arguments); }
+function scheduleEmailImpl_(payload) {
   throw new Error('予約送信機能は廃止されました。下書き保存または即時送信を利用してください。');
 }
 
-function cancelScheduledEmail(queueId) {
+function cancelScheduledEmail() { return runWrite_(cancelScheduledEmailImpl_, arguments); }
+function cancelScheduledEmailImpl_(queueId) {
   throw new Error('予約送信機能は廃止されました。未送信予約は管理者が disablePendingScheduledEmails() で無効化してください。');
 }
 
@@ -5246,7 +5612,8 @@ function listScheduledCaseIdsForUser_(userEmail) {
  * 既存の未送信予約を disabled にする。メール送信・案件更新は行わない。
  * 本番反映後に手動実行できるほか、残存トリガーから呼ばれても安全。
  */
-function disablePendingScheduledEmails() {
+function disablePendingScheduledEmails() { return runWrite_(disablePendingScheduledEmailsImpl_, arguments); }
+function disablePendingScheduledEmailsImpl_() {
   return disablePendingScheduledEmails_();
 }
 
@@ -5288,7 +5655,8 @@ function sendScheduledRow_(s) {
  * GASエディタからこの関数を1回だけ手動実行してください。
  * 既に存在するキーはスキップされます。
  */
-function addScheduleZoomSettings() {
+function addScheduleZoomSettings() { return runWrite_(addScheduleZoomSettingsImpl_, arguments); }
+function addScheduleZoomSettingsImpl_() {
   let ss = getSpreadsheet_();
   let sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
   if (!sheet) {
@@ -5600,7 +5968,8 @@ function runCaseKeyMigrationDiagnosis() {
 
 // 案件キーマップ Backfill。管理者のみ。dryRun=true（既定）は計画のみ・書込ゼロ。
 //   dryRun=false で実書込（破壊的＝本番データ追記）。監査ログに結果を記録する。
-function runCaseKeyBackfill(dryRun) {
+function runCaseKeyBackfill() { return runWrite_(runCaseKeyBackfillImpl_, arguments); }
+function runCaseKeyBackfillImpl_(dryRun) {
   let actor = requireAdmin_();
   let isDry = dryRun !== false; // 既定 true（安全側）。明示的に false のときだけ実書込
   let report = backfillCaseKeyMap_({ dryRun: isDry });

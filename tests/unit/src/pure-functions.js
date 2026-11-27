@@ -362,15 +362,6 @@ function schemaMigrationNeeded(appliedProp, cachedVersion, currentVersion) {
     && String(cachedVersion == null ? '' : cachedVersion).trim() !== cur;
 }
 
-// コード.js: buildBatchGetUrl_()（v1.13.0 計測）
-function buildBatchGetUrl(spreadsheetId, sheetNames) {
-  var ranges = sheetNames.map(function(n) {
-    return 'ranges=' + encodeURIComponent("'" + String(n).replace(/'/g, "''") + "'");
-  }).join('&');
-  return 'https://sheets.googleapis.com/v4/spreadsheets/' + encodeURIComponent(spreadsheetId)
-    + '/values:batchGet?' + ranges + '&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=SERIAL_NUMBER';
-}
-
 // コード.js: planStaffDefaults_()（v1.13.0）
 // メールがある行だけ ROLE 空欄→'staff'、IS_ACTIVE 空欄→'true'。メールの無い行は触らない。
 // IDX.STAFF: NAME:1, EMAIL:2, ROLE:3, IS_ACTIVE:4
@@ -405,7 +396,6 @@ function isWithinKeepWarmWindow(hour, isoDay, hoursSpec, daysSpec) {
 module.exports = {
   isWithinKeepWarmWindow,
   planStaffDefaults,
-  buildBatchGetUrl,
   getFiscalYear,
   caseFiscalYear,
   canonicalNaturalKey,
