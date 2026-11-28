@@ -9,6 +9,7 @@
 > - **作り直し:** 書込を行う公開関数は `runWrite_` で包み、終了時に世代（スクリプトプロパティ `SNAPSHOT_GEN`）を更新して完成品を無効にする。時間主導トリガー `keepWarm`（5分ごと・業務時間のみ）が完成品を作り直す（DB の温めも兼ねる）。画面右上の「最新に更新」で即時に作り直す（`getInitialData(true)`）。
 > - **下書きバッジ:** 利用者ごとに違うため完成品から外し、画面表示後に `getMyDraftCaseIds()` で取得する（F-02b）。
 > - **Sheets API 一括読込（段階導入）:** スクリプトプロパティ `SNAPSHOT_READ_MODE=sheetsApi` で、作り直し時の読込を `values:batchGet` 1往復（＋日時判定用の並列1往復）にする。既定は従来の SpreadsheetApp。切替前に `diagnoseSheetsApiRead()` で全セル一致を確認する（v1.13.0 の計測用 `perfProbeSheetsApi` を置き換え）。
+> - **バックエンドの役割別ファイル（ADR-016）:** バックエンドは `gas/` の12ファイル（`00_管理者メニュー`・`01_定数と設定`・`02_認証と共通`・`03_完成品`・`04_初期データ`・`05_案件操作`・`06_メール`・`07_日程と会議`・`08_記録`・`09_管理者操作`・`10_移行と案件キー`・`11_廃止機能`）。GAS エディタから手で実行する関数は `00_管理者メニュー` だけに置く。処理の中身・公開関数の名前と引数は変えない（予約送信の廃止スタブ3個のみ削除）。
 > - **公開関数の権限確認（SEC-01b）:** 画面から呼べる公開関数（名前が `_` で終わらない関数）は、すべてサーバー側でタダメン確認（`getActor_`）または管理者確認（`requireAdmin_`・`runAdminWrite_`）を行う。内部専用の `getStaffByEmail_`・`getMasters_`・`getFiscalYear_`・`createZoomMeeting_`・`createGoogleMeetEvent_` は非公開にした。GAS エディタから実行する保守用関数（`add…Setting` 等）は管理者のみ実行でき、通常操作中の自動移行（`ensureAttachmentSchema_`）は本体（`…Impl_`）を直接呼ぶ。
 > - **その他:** `getMasters_().spreadsheetUrl` を ID から組み立てる（DB を開かない）。日程連絡メールの既定文面の文字化けを修正。
 
@@ -564,7 +565,7 @@ CC 設定のドライラン検証。`MAIL_DRY_RUN=true` が前提。
 実行ユーザーのメールアドレスがタダメンマスタに存在しない・無効の場合、全処理をブロックしエラーを返す。
 
 ### SEC-01b: 公開関数の権限確認（v1.14.0）
-GAS では名前が `_` で終わらないトップレベル関数は、画面の `google.script.run` から組織内の誰でも呼べる。そのため公開関数はすべて、本体（または `…Impl_`）でタダメン確認（`getActor_` / `getStaffByEmail_`）か管理者確認（`requireAdmin_` / `runAdminWrite_`）を行う。内部からしか使わない関数は公開しない（名前を `_` で終える）。例外は `doGet`（HTML のみ）・`keepWarm`（トリガー用。データを返さない）・`setupSettingsSheet`（初回構築用。設定シートが無いときだけ作る）・廃止スタブ（`scheduleEmail`・`cancelScheduledEmail`・`listScheduledForCase`）のみ。GAS エディタから実行する保守用の書込関数は `function X() { return runAdminWrite_(XImpl_, arguments); }`（管理者確認 → `runWrite_`）の形にし、通常操作中の自動移行は `XImpl_` を直接呼ぶ。`tests/unit/public-auth-guard.test.js` が `コード.js` を走査して検査する。
+GAS では名前が `_` で終わらないトップレベル関数は、画面の `google.script.run` から組織内の誰でも呼べる。そのため公開関数はすべて、本体（または `…Impl_`）でタダメン確認（`getActor_` / `getStaffByEmail_`）か管理者確認（`requireAdmin_` / `runAdminWrite_`）を行う。内部からしか使わない関数は公開しない（名前を `_` で終える）。例外は `doGet`（HTML のみ）・`keepWarm`（トリガー用。データを返さない）・`setupSettingsSheet`（初回構築用。設定シートが無いときだけ作る）のみ（予約送信の廃止スタブ `scheduleEmail`・`cancelScheduledEmail`・`listScheduledForCase` は v1.14.0 で削除）。GAS エディタから実行する保守用の書込関数は `function X() { return runAdminWrite_(XImpl_, arguments); }`（管理者確認 → `runWrite_`）の形にし、通常操作中の自動移行は `XImpl_` を直接呼ぶ。`tests/unit/public-auth-guard.test.js` が `gas/` を走査して検査する。
 
 ### SEC-02: 管理者権限
 権限判定はバックエンドで強制する。`ROLE=admin` を優先し、後方互換として `ADMIN_EMAILS` も管理者判定に利用。管理者操作は監査ログへ記録する。

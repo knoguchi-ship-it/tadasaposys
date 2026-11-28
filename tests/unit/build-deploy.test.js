@@ -82,6 +82,21 @@ describe('本番ビルド', () => {
     expect(() => new Function(js)).not.toThrow(); // text/plain の中身はそのまま JS として解析できる
   }, 120000);
 
+  test('バックエンド（gas/*.js）は名前を変えずに dist/ 直下へすべてコピーされ、旧 コード.js は出ない（ADR-016）', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const { build, isDistFresh } = require('../../tools/build');
+    build();
+    const root = path.join(__dirname, '../..');
+    const gas = fs.readdirSync(path.join(root, 'gas')).filter((f) => f.endsWith('.js')).sort();
+    const dist = fs.readdirSync(path.join(root, 'dist')).filter((f) => f.endsWith('.js')).sort();
+    expect(dist).toEqual(gas);
+    gas.forEach((f) => expect(fs.readFileSync(path.join(root, 'dist', f), 'utf8'))
+      .toBe(fs.readFileSync(path.join(root, 'gas', f), 'utf8')));
+    expect(fs.existsSync(path.join(root, 'dist', 'コード.js'))).toBe(false);
+    expect(isDistFresh()).toBe(true);
+  }, 120000);
+
   test('GAS が加工する「実行される種類」のインライン script は小さな起動用だけ（アプリ本体は text/plain に入れる）', () => {
     const html = require('fs').readFileSync(require('path').join(__dirname, '../../dist/index.html'), 'utf8');
     const executable = [...html.matchAll(/<script(\s[^>]*)?>([\s\S]*?)<\/script>/gi)]

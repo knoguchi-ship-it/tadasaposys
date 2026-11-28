@@ -9,7 +9,7 @@
 
 ## 📌 次の担当者へ（最初にこの節だけ読めば現状が掴めます）
 
-> **現在地:** v1.14.0 / 本番 @159（v1.12.13） / 単体 184件 / E2E 75件
+> **現在地:** v1.14.0 / 本番 @159（v1.12.13） / 単体 190件 / E2E 75件
 >
 > 版・本番デプロイ番号・テスト件数は**この1行だけ**に書く（本文に書き写さない。AI_RULES.md グランドルール6）。`npm run check` がこの行を package.json・実テスト・§1・§8 と照合する。最終確認 2026/11/28（単体・E2E 全合格、`npm run check` エラー0）。
 > ⚠️ デプロイ直後の運用確認として、GAS デプロイ管理画面で Webapp 設定（実行＝アクセスしているユーザー／アクセス＝NPO法人タダカヨ内の全員）をブラウザで目視確認すること（CLIでは確認不可）。
@@ -29,11 +29,12 @@ keepWarm（DB の温め）では効果が薄かったため、画面を開くた
 | ブランチ | `feat/v1.14.0-snapshot`（`feat/v1.13.0-perf-security` の上。ローカルのみ・未 push） |
 | 実装 | 完成品の保存・読出し・世代番号による無効化（書込を行う公開関数 39個を `runWrite_` で包む）・`keepWarm` を完成品の作り直しに変更・「最新に更新」ボタン・下書きバッジの遅延取得（`getMyDraftCaseIds`）・Sheets API 一括読込（`SNAPSHOT_READ_MODE=sheetsApi`、既定オフ）・診断 `diagnoseSheetsApiRead`（`perfProbeSheetsApi` を置き換え） |
 | 権限確認の是正（2026/11/28） | 権限確認の無い公開関数が約25個あったのを是正（SDD SEC-01b）。内部専用5関数を非公開化（`getStaffByEmail_` 等）、画面から呼ぶ `getAllCasesJoined`・`getScheduleAvailability`・`checkScheduleConflict` にタダメン確認、GAS エディタで実行する保守用関数に管理者確認（`runAdminWrite_`）。検査は `tests/unit/public-auth-guard.test.js` |
+| バックエンドの分割（2026/11/28） | `コード.js` を `gas/` の役割別12ファイルに分割（ADR-016）。手で実行する関数は `gas/00_管理者メニュー.js`。処理の中身は不変（全宣言がコメント以外一致を機械確認）。**テスト用デプロイ @165 は分割前**。次に push すると GAS 上の旧「コード」は12ファイルに置き換わる（`clasp push --force` がファイル一式を置き換えるため。GAS エディタを開き直す） |
 | テスト | ローカルの単体・E2E は合格（冒頭の現在地）。**GAS 実機では未検証** |
 | 完成品の作り直しトリガー（`keepWarm`） | **使う（2026/11/28 利用者判断：冷えた状態からの起動が重いため）**。2026/11/27 に一度停止したため、管理者アカウントで `setupKeepWarmTrigger()` を実行して再設定する（未実施） |
 
 **次にやること（順番）**
-0. 管理者アカウントで GAS エディタから `setupKeepWarmTrigger()` を実行し、`keepWarm` トリガー（5分ごと）を再設定する
+0. 分割版をテスト用デプロイに反映（`npm run build` → `clasp push --force` → `clasp deploy -i <テスト用ID>`。ユーザー確認のうえ）。そのあと管理者アカウントで GAS エディタの `00_管理者メニュー` を開き `setupKeepWarmTrigger()` を実行し、`keepWarm` トリガー（5分ごと）を再設定する
 1. **（2026/11/27 済）テスト用デプロイを @165（v1.14.0 8a16b18）に更新。** 実機確認（`clasp push` / `clasp deploy -i <テスト用ID>` はユーザー確認のうえ）。見ること: ①2回目以降の起動で `[perf] initial data` の `server.ms` が `snapshotRead` と `auth` だけ（`rebuild` が無い）こと、②担当などの書込後に別タブで開くと反映されていること、③「最新に更新」、④実行ログの `keepWarm` の `detail`（`saved.chunks`・`discarded`）
 2. 管理者アカウントで `diagnoseSheetsApiRead()` を数回実行し、`ok: true` なら `SNAPSHOT_READ_MODE=sheetsApi` に切り替えて `keepWarm` の `detail.read` を比べる（RUNBOOK §1-4-3）
 3. 検証が済んだら v1.13.0 と合わせて PR → テスト用デプロイを `clasp undeploy` → デプロイ担当へ依頼
@@ -211,7 +212,7 @@ keepWarm（DB の温め）では効果が薄かったため、画面を開くた
 ```
 tadasaposys/
 ├── index.html              ← フロントエンドの原本（React SPA、5700行超。開発時はブラウザ内 Babel）
-├── コード.js               ← バックエンド（GAS、5200行超）
+├── gas/                    ← バックエンド（GAS。役割別の12ファイル。00_管理者メニュー.js が手で実行する関数。ADR-016）
 ├── dist/                   ← 本番ビルド成果物（npm run build。Git 対象外。clasp はここを push）
 ├── appsscript.json         ← GASマニフェスト
 ├── AI_RULES.md             ← AI エージェント共通の開発指示（グランドルールの正本）
@@ -244,7 +245,7 @@ tadasaposys/
 └── docs/
     ├── SDD.md              ← 設計書
     ├── HANDOVER.md         ← 本ドキュメント
-    ├── ADR.md              ← アーキテクチャ判断記録（ADR-001〜015）
+    ├── ADR.md              ← アーキテクチャ判断記録（ADR-001〜016）
     ├── RUNBOOK.md          ← 運用手順書
     ├── Manual.md           ← 操作マニュアル
     ├── RD.md               ← 要件定義
@@ -313,7 +314,7 @@ tadasaposys/
 | 予約送信キュー | v1.12.1で予約送信廃止。既存キュー履歴・無効化確認用（16列） |
 | 年間利用補正 | 管理者による年度利用回数の手動補正（メール+年度→補正量。5列）（v1.12.4） |
 
-### IDX定数（`コード.js` の `const IDX`）
+### IDX定数（`gas/01_定数と設定.js` の `const IDX`）
 
 一覧は `AI_RULES.md` データモデル節、列の詳細は `docs/SDD.md` §1（本書には書き写さない。`npm run check` がコードと両文書を照合する）。
 
@@ -334,7 +335,7 @@ inProgress/completed → cancelled
 
 ---
 
-## 5. バックエンド関数一覧（コード.js）
+## 5. バックエンド関数一覧（gas/。v1.14.0〜 役割別ファイル。各ファイル先頭のコメントに担当範囲）
 
 ### 公開関数（google.script.run 経由）
 
@@ -533,7 +534,7 @@ npm run deploy   # 検査 → テスト → ビルド → 確認入力 → clasp
 
 ### 設計変更時の更新対象
 
-1. `コード.js` — バックエンドロジック
+1. `gas/` — バックエンドロジック（役割別。手で実行する関数は `00_管理者メニュー.js`）
 2. `index.html` — フロントエンドUI + モックデータ
 3. `docs/SDD.md` — 設計書（データモデル・関数仕様）
 4. `docs/HANDOVER.md` — 本ドキュメント
@@ -543,7 +544,7 @@ npm run deploy   # 検査 → テスト → ビルド → 確認入力 → clasp
 
 ### バージョン管理ルール
 
-- `コード.js` 先頭コメント・`index.html`・SDD・HANDOVER・Manual・CHANGELOG・AI_RULES.md・package.json のバージョンは常に一致させること
+- `gas/01_定数と設定.js` 先頭コメント・`index.html`・SDD・HANDOVER・Manual・CHANGELOG・AI_RULES.md・package.json のバージョンは常に一致させること
 - 現行: 冒頭の「現在地」を参照（`npm run check` が全対象の一致を検査）
 
 ### 🔒 デプロイ時の絶対グランドルール（正本は AI_RULES.md）
@@ -774,7 +775,7 @@ backup ブランチの3修正を本番ラインへ統合し、リポジトリを
 
 実施コマンド:
 ```bash
-clasp push --force   # appsscript.json / index.html / コード.js の3ファイル
+clasp push --force   # dist/ の appsscript.json / index.html / バックエンド一式（gas/ からビルドでコピー）
 clasp deploy -i <DEPLOYMENT_ID> -d "v1.12.2"
 # → @148。clasp deployments で固定IDのみ(新規なし)を確認済み
 ```
@@ -801,10 +802,10 @@ G1（グランドルール見直し）は 2026/05/28 に完了。**2026/11/25 �
 
 ### 6. 困ったとき
 
-- **設計の意図を知りたい**: `docs/ADR.md`（ADR-001〜015）
+- **設計の意図を知りたい**: `docs/ADR.md`（ADR-001〜016）
 - **データモデルの詳細**: `docs/SDD.md` §1
 - **デプロイ事故対応**: `docs/RUNBOOK.md` §4-5
-- **コードの場所を探す**: `コード.js` は約4500行・1ファイル / `index.html` は約5400行・1ファイル（モックデータも含む）。`docs/HANDOVER.md` §5 にバックエンド関数一覧あり
+- **コードの場所を探す**: バックエンドは `gas/` の役割別ファイル（v1.14.0〜。手で実行する関数は `00_管理者メニュー.js`）/ `index.html` は約5400行・1ファイル（モックデータも含む）。`docs/HANDOVER.md` §5 にバックエンド関数一覧あり
 
 ### 7. 連絡先・関連リソース
 

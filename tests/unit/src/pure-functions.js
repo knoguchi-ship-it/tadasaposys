@@ -1,21 +1,21 @@
 /**
- * コード.js から抽出したピュア関数群（GAS依存なし）
+ * gas/ から抽出したピュア関数群（GAS依存なし）
  * 単体テスト用に CommonJS として export する。
  *
- * ⚠️ コード.js の対応関数を変更した場合は本ファイルも同期して更新すること。
+ * ⚠️ gas/ の対応関数を変更した場合は本ファイルも同期して更新すること。
  */
 
 'use strict';
 
 // ── 年度計算 ────────────────────────────────────────────────
-// コード.js: getFiscalYear_()
+// gas/: getFiscalYear_()
 function getFiscalYear_(dateObj) {
   var d = new Date(dateObj);
   if (isNaN(d.getTime())) return 0;
   return d.getMonth() < 3 ? d.getFullYear() - 1 : d.getFullYear();
 }
 
-// コード.js: caseFiscalYear_()
+// gas/: caseFiscalYear_()
 // 案件PKから年度を求める。手動追加案件のPK "manual_<エポックミリ秒>" にも対応する。
 function caseFiscalYear(pkRaw) {
   if (pkRaw && typeof pkRaw.getTime === 'function') return getFiscalYear_(pkRaw);
@@ -27,13 +27,13 @@ function caseFiscalYear(pkRaw) {
   return getFiscalYear_(s);
 }
 
-// コード.js: annualUsageKey_()
+// gas/: annualUsageKey_()
 // 年間利用回数の集計キー。メール正規化 + 案件PKの年度で構成する。
 function annualUsageKey(email, pkRaw) {
   return normalizeEmail(email) + '_' + caseFiscalYear(pkRaw);
 }
 
-// コード.js / index.html: 今年度利用数の実効値（v1.12.4）
+// gas/ / index.html: 今年度利用数の実効値（v1.12.4）
 // 自動計算値(base) + 管理者補正(adjustment)。0 未満にはしない。
 function effectiveAnnualCount(base, adjustment) {
   var v = (Number(base) || 0) + (Number(adjustment) || 0);
@@ -41,7 +41,7 @@ function effectiveAnnualCount(base, adjustment) {
 }
 
 // ── 入力バリデーション ────────────────────────────────────
-// コード.js: parseNullablePositiveInteger_()
+// gas/: parseNullablePositiveInteger_()
 function parseNullablePositiveInteger(value) {
   if (value === null || value === undefined || String(value).trim() === '') return null;
   var num = Number(value);
@@ -51,12 +51,12 @@ function parseNullablePositiveInteger(value) {
   return intNum;
 }
 
-// コード.js: normalizeEmail_()
+// gas/: normalizeEmail_()
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
-// コード.js: parseBoolean_()
+// gas/: parseBoolean_()
 function parseBoolean(v, defaultValue) {
   if (v === true || v === false) return v;
   var raw = String(v || '').trim().toLowerCase();
@@ -65,7 +65,7 @@ function parseBoolean(v, defaultValue) {
 }
 
 // ── セキュリティ ──────────────────────────────────────────
-// コード.js: sanitizeForSheet_()
+// gas/: sanitizeForSheet_()
 // 参考: OWASP A03:2025 スプレッドシート数式インジェクション対策
 function sanitizeForSheet(value) {
   if (typeof value !== 'string') return value;
@@ -77,7 +77,7 @@ function sanitizeForSheet(value) {
 }
 
 // ── 上限値計算ヘルパー ────────────────────────────────────
-// コード.js: parsePositiveIntegerSetting_() の相当処理
+// gas/: parsePositiveIntegerSetting_() の相当処理
 function parsePositiveIntegerOrDefault(raw, defaultValue) {
   var num = Number(String(raw || '').trim());
   if (!isFinite(num)) return Number(defaultValue);
@@ -86,7 +86,7 @@ function parsePositiveIntegerOrDefault(raw, defaultValue) {
 }
 
 // ── 日程・カレンダー（v1.11.7）────────────────────────────
-// コード.js: parseDisplayCalendarsJson_()
+// gas/: parseDisplayCalendarsJson_()
 function parseDisplayCalendarsJson(raw) {
   if (!raw) return [];
   var parsed;
@@ -102,7 +102,7 @@ function parseDisplayCalendarsJson(raw) {
   return result;
 }
 
-// コード.js: eventsOverlap_()
+// gas/: eventsOverlap_()
 function eventsOverlap(aStart, aEnd, bStart, bEnd) {
   var as = (aStart instanceof Date) ? aStart.getTime() : new Date(aStart).getTime();
   var ae = (aEnd instanceof Date) ? aEnd.getTime() : new Date(aEnd).getTime();
@@ -111,7 +111,7 @@ function eventsOverlap(aStart, aEnd, bStart, bEnd) {
   return as < be && ae > bs;
 }
 
-// コード.js: computeBufferedWindow_()
+// gas/: computeBufferedWindow_()
 function computeBufferedWindow(start, durationMin, bufferMin) {
   var s = (start instanceof Date) ? new Date(start.getTime()) : new Date(start);
   var dur = Math.max(0, Number(durationMin) || 0);
@@ -125,7 +125,7 @@ function computeBufferedWindow(start, durationMin, bufferMin) {
   };
 }
 
-// コード.js: getScheduleBufferMin_() のパース部分
+// gas/: getScheduleBufferMin_() のパース部分
 // 空文字・null・undefined は default を返す（GAS側は getSetting_ がdefault適用するためここに来ない想定）
 function parseScheduleBufferMin(raw, defaultValue) {
   var s = String(raw == null ? '' : raw).trim();
@@ -142,7 +142,7 @@ function parseScheduleBufferMin(raw, defaultValue) {
 // 戻る」バグ（行109に書き行110を表示）が再発する。
 // ============================================================
 
-// コード.js: 書込経路の行選択（最初の一致のインデックス）
+// gas/: 書込経路の行選択（最初の一致のインデックス）
 function selectFirstRecordIndexByFk(fkList, caseId) {
   var key = String(caseId);
   for (var i = 0; i < fkList.length; i++) {
@@ -151,7 +151,7 @@ function selectFirstRecordIndexByFk(fkList, caseId) {
   return -1;
 }
 
-// コード.js: getAllCasesJoined の recordMap 構築（最初の一致を採用）
+// gas/: getAllCasesJoined の recordMap 構築（最初の一致を採用）
 function buildRecordMapFirstWins(records) {
   var map = {};
   for (var i = 0; i < records.length; i++) {
@@ -170,7 +170,7 @@ function buildRecordMapFirstWins(records) {
 // すべて同一 case_id に収束することがバグ根治の不変条件。
 // ============================================================
 
-// コード.js: canonicalNaturalKey_()
+// gas/: canonicalNaturalKey_()
 // 案件PK（Date | "manual_<epoch>" | 日時文字列）を正準形へ。
 // 返り値: { sourceType:'form'|'manual', epoch:number, canonical:string } | null
 // 不正値（パース不能）は null を返し、呼び出し側でスキップ＝安全停止する。
@@ -195,14 +195,14 @@ function canonicalNaturalKey(pkRaw) {
   return { sourceType: 'form', epoch: dt, canonical: String(dt) };
 }
 
-// コード.js: buildCaseId_()
+// gas/: buildCaseId_()
 // 決定的サロゲートキー。同じ epoch から常に同じ case_id が再現するため
 // バックフィルが冪等になる（2026 idempotent-backfill ベストプラクティス）。
 function buildCaseId(epoch) {
   return 'case_' + epoch;
 }
 
-// S1 Stage4: 読み取り結合キー。コード.js: joinKeyForRead_() と同期。
+// S1 Stage4: 読み取り結合キー。gas/: joinKeyForRead_() と同期。
 // viaMap=false は従来どおり String(raw)（後方互換）。viaMap=true は正準 case_id。
 // 同一案件の日付PK表記ブレ（Date と各種文字列表現）を epoch で吸収して同一キーへ収束させる。
 // パース不能は String(raw) にフォールバック。
@@ -232,7 +232,7 @@ function makeReentrantLock(lock) {
   };
 }
 
-// S1 Stage3: Backfill 計画ロジック（純粋）。コード.js: planBackfill_() と同期。
+// S1 Stage3: Backfill 計画ロジック（純粋）。gas/: planBackfill_() と同期。
 // 既存登録スキップ・バッチ内重複自然キーの dedup・case_id 衝突の連番回避を行う。
 // 同じ入力で常に同じ計画を返し、既に全登録済みなら toCreate=[]（再実行で冪等）。
 //   cases: [{ sourceType, canonical, epoch, email }]
@@ -265,7 +265,7 @@ function planCaseKeyBackfill(cases, existingKeySet, usedCaseIds) {
 }
 
 // ── v1.12.13 申込通知チャットのスレッドリンク ──────────────────
-// コード.js: normalizeSubmittedAtLabel_()
+// gas/: normalizeSubmittedAtLabel_()
 // 申込日時を 'yyyy/MM/dd HH:mm:ss' の壁時計文字列へ正規化する。解釈不能は ''。
 function normalizeSubmittedAtLabel(value, timeZone) {
   if (value && typeof value.getTime === 'function') {
@@ -279,13 +279,13 @@ function normalizeSubmittedAtLabel(value, timeZone) {
   return m[1] + '/' + pad(m[2]) + '/' + pad(m[3]) + ' ' + pad(m[4]) + ':' + pad(m[5]) + ':' + pad(m[6] || '0');
 }
 
-// コード.js: chatLinkKey_()
+// gas/: chatLinkKey_()
 function chatLinkKey(submittedAt, email, timeZone) {
   var label = normalizeSubmittedAtLabel(submittedAt, timeZone);
   return label ? label + '|' + normalizeEmail(email) : '';
 }
 
-// コード.js: buildChatThreadUrl_()
+// gas/: buildChatThreadUrl_()
 function buildChatThreadUrl(threadName) {
   var m = String(threadName == null ? '' : threadName).trim()
     .match(/^spaces\/([A-Za-z0-9_-]+)\/threads\/([A-Za-z0-9_-]+)$/);
@@ -293,7 +293,7 @@ function buildChatThreadUrl(threadName) {
 }
 
 /**
- * コード.js: redactAuditCell_()
+ * gas/: redactAuditCell_()
  * 監査ログの JSON セル1つから秘密情報を伏せ字にする（v1.13.0）。純粋関数。
  * - JSON オブジェクトなら、秘密情報キーの値だけを '[REDACTED]' にする（'(設定済み)' 等の状態表記は残す）
  * - JSON でない・オブジェクトでない場合は、既知の秘密値（8文字以上）を部分一致で伏せる
@@ -323,7 +323,7 @@ function redactAuditCell(cell, secretKeys, secretValues) {
 }
 
 /**
- * コード.js: planSecretMigration_()
+ * gas/: planSecretMigration_()
  * 秘密情報の移行計画を立てる（純粋関数・v1.13.0）。本物の値を絶対に失わないことを最優先にする。
  *   シート空                      → 何もしない
  *   プロパティ空                  → move（プロパティへコピーし、シートを空にする）
@@ -344,7 +344,7 @@ function planSecretMigration(sheetVals, propVals, keys) {
   return out;
 }
 
-// コード.js: normalizeSpreadsheetId_()（v1.13.0）
+// gas/: normalizeSpreadsheetId_()（v1.13.0）
 // SPREADSHEET_ID プロパティの値を ID に正規化。URL が貼られても ID を取り出す。空なら ''、ID の形でなければ null。
 function normalizeSpreadsheetId(raw) {
   var s = String(raw == null ? '' : raw).trim();
@@ -354,7 +354,7 @@ function normalizeSpreadsheetId(raw) {
   return /^[A-Za-z0-9_-]{20,}$/.test(s) ? s : null;
 }
 
-// コード.js: schemaMigrationNeeded_()（v1.13.0）
+// gas/: schemaMigrationNeeded_()（v1.13.0）
 // 永続記録（スクリプトプロパティ）か CacheService の印のどちらかが現行版なら移行確認は不要。
 function schemaMigrationNeeded(appliedProp, cachedVersion, currentVersion) {
   var cur = String(currentVersion);
@@ -362,7 +362,7 @@ function schemaMigrationNeeded(appliedProp, cachedVersion, currentVersion) {
     && String(cachedVersion == null ? '' : cachedVersion).trim() !== cur;
 }
 
-// コード.js: planStaffDefaults_()（v1.13.0）
+// gas/: planStaffDefaults_()（v1.13.0）
 // メールがある行だけ ROLE 空欄→'staff'、IS_ACTIVE 空欄→'true'。メールの無い行は触らない。
 // IDX.STAFF: NAME:1, EMAIL:2, ROLE:3, IS_ACTIVE:4
 function planStaffDefaults(rows) {
@@ -379,7 +379,7 @@ function planStaffDefaults(rows) {
   return out;
 }
 
-// コード.js: parseRangeSpec_() / isWithinKeepWarmWindow_()（v1.13.0 DB の温め）
+// gas/: parseRangeSpec_() / isWithinKeepWarmWindow_()（v1.13.0 DB の温め）
 function parseRangeSpec(spec, defLo, defHi, min, max) {
   var m = String(spec == null ? '' : spec).trim().match(/^(\d{1,2})\s*-\s*(\d{1,2})$/);
   if (!m) return [defLo, defHi];

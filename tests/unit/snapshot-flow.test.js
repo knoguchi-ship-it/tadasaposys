@@ -1,5 +1,5 @@
 /**
- * v1.14.0 完成品（スナップショット）の流れを、GAS の各サービスを模した環境で コード.js ごと動かして検査する（ADR-015）。
+ * v1.14.0 完成品（スナップショット）の流れを、GAS の各サービスを模した環境で gas/ ごと動かして検査する（ADR-015）。
  * 純粋関数の単体テストでは見つからない「未定義の関数呼び出し」「DB を開いてしまう」等を、GAS へ出す前に見つけるため。
  *   ① 完成品が無ければ作り直す ② 2回目は DB を開かずに配る ③ 書込後は作り直す ④ 「最新に更新」
  *   ⑤ Sheets API 一括読込でも同じ案件になる（DB を開かない） ⑥ 診断が一致を報告する ⑦ 非スタッフは拒否
@@ -12,7 +12,9 @@ const path = require('path');
 const vm = require('vm');
 const zlib = require('zlib');
 
-const SRC = fs.readFileSync(path.join(__dirname, '..', '..', 'コード.js'), 'utf8');
+const { readBackendFiles } = require('./src/extract-gas');
+// GAS と同じく、ファイルごとに別スクリプトとして名前順に評価する（読込順への依存があれば失敗する）
+const FILES = readBackendFiles();
 const TZ_OFF = 9 * 3600000; // スプレッドシートのタイムゾーン Asia/Tokyo（夏時間なし）
 const pad = (n) => String(n).padStart(2, '0');
 
@@ -102,7 +104,8 @@ function createEnv() {
     },
   };
   vm.createContext(ctx);
-  vm.runInContext(SRC + '\n;globalThis.__t = { getInitialData, runWrite_, diagnoseSheetsApiRead, SCHEMA_VERSION_,'
+  FILES.forEach((f) => vm.runInContext(f.source, ctx, { filename: f.name }));
+  vm.runInContext('globalThis.__t = { getInitialData, runWrite_, diagnoseSheetsApiRead, SCHEMA_VERSION_,'
     + ' reset() { _settingsCache = null; _staffRowsCache = null; _spreadsheetCache = null; _scriptPropsCache = null; _prefetched = null; } };', ctx);
   props.SCHEMA_VERSION_APPLIED = ctx.__t.SCHEMA_VERSION_; // 移行は済んでいる前提
   const t = ctx.__t;
@@ -111,7 +114,7 @@ function createEnv() {
   return { t, run, stats, props, cache, setActiveEmail: (e) => { activeEmail = e; } };
 }
 
-describe('完成品（スナップショット）の流れ（GAS を模した環境で コード.js を実行）', () => {
+describe('完成品（スナップショット）の流れ（GAS を模した環境で gas/ を実行）', () => {
   const env = createEnv();
   const { t, run, stats, props, cache } = env;
   let first;

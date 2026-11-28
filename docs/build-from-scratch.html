@@ -350,7 +350,7 @@
     <div class="diagram">
       <div class="flowrow">
         <div class="node cont"><div class="node-title">フロントエンド SPA</div><div class="node-sub"><code>index.html</code> — React 18.2.0 + Babel in-browser + Tailwind（CDN）。モックデータ内蔵で単体動作可</div></div>
-        <div class="node cont"><div class="node-title">バックエンド GAS</div><div class="node-sub"><code>コード.js</code> — Web App エントリ <code>doGet()</code> と <code>google.script.run</code> 公開関数群（V8）</div></div>
+        <div class="node cont"><div class="node-title">バックエンド GAS</div><div class="node-sub"><code>gas/</code>（役割別ファイル）— Web App エントリ <code>doGet()</code> と <code>google.script.run</code> 公開関数群（V8）</div></div>
       </div>
       <div class="arrow">▼ Apps Script Advanced Services / SpreadsheetApp</div>
       <div class="flowrow">
@@ -414,7 +414,7 @@
     <h2 id="data">4. データモデル（ER 概要）</h2>
     <p>
       データストアは単一の Google スプレッドシート。<strong>全シート左詰め・ギャップなし</strong>で、列番号は
-      <code>コード.js</code> 約 30 行目の <code>IDX</code> 定数が唯一の参照元です。完全な列定義は <code>docs/SDD.md §1</code>。
+      <code>gas/01_定数と設定.js</code> の <code>IDX</code> 定数が唯一の参照元です。完全な列定義は <code>docs/SDD.md §1</code>。
     </p>
 
     <div class="er-grid">
@@ -576,7 +576,7 @@ clasp login
       <div class="phase-body">
         <ul>
           <li><code>index.html</code> … フロントエンド（React SPA・モックデータ内蔵の単一ファイル）</li>
-          <li><code>コード.js</code> … バックエンド（GAS）</li>
+          <li><code>gas/</code> … バックエンド（GAS。役割別の12ファイル。手で実行する関数は <code>00_管理者メニュー.js</code>）</li>
           <li><code>appsscript.json</code> … マニフェスト</li>
           <li><code>.claspignore</code> … <code>node_modules/</code> 等を除外（含めると GAS がエラー）</li>
         </ul>
@@ -632,7 +632,7 @@ npm test            <span class="cmt"># Playwright E2E（01-app-load 〜 07-a11y
         <p><strong>初回のみ</strong>は新規デプロイで Webapp URL と deploymentId を発番します。以降は<strong>その固定 ID へ <code>-i</code> 付きで更新</strong>し、URL を変えません。</p>
         <pre><code><span class="cmt"># 0. appsscript.json の webapp が USER_ACCESSING / DOMAIN か確認</span>
 <span class="cmt"># 1. 先に git commit（clasp pull の上書き対策）</span>
-git add index.html コード.js appsscript.json
+git add index.html gas appsscript.json
 git commit -m "feat: vX.X.X - 説明"
 
 <span class="cmt"># 2. プッシュ</span>
@@ -708,7 +708,7 @@ clasp deploy <span class="ok">-i &lt;DEPLOYMENT_ID&gt;</span> -d "vX.X.X"
     <ul>
       <li><code>docs/RD.md</code> — 要件定義（業務フロー・ビジネスルール）</li>
       <li><code>docs/SDD.md</code> — 詳細設計（全シート列・関数 F-01〜F-40・セキュリティ仕様）</li>
-      <li><code>docs/ADR.md</code> — 意思決定記録 ADR-001〜015</li>
+      <li><code>docs/ADR.md</code> — 意思決定記録 ADR-001〜016</li>
       <li><code>docs/RUNBOOK.md</code> — 運用・デプロイ・ロールバック・インシデント／本番 ID（§6）</li>
       <li><code>docs/HANDOVER.md</code> — 現状・既知課題・次フェーズ・関連リソース ID（§7）</li>
       <li><code>docs/Manual.md</code> — エンドユーザー操作マニュアル</li>

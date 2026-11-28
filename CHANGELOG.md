@@ -17,6 +17,12 @@
 - **Sheets API 一括読込（段階導入・既定オフ）**: スクリプトプロパティ `SNAPSHOT_READ_MODE=sheetsApi` で、作り直し時の読込を `values:batchGet`（日時判定用に2回並列）にする。失敗時は SpreadsheetApp に戻す。切替前に管理者が `diagnoseSheetsApiRead()` で全セル一致を確認する（計測用 `perfProbeSheetsApi` を置き換え）。
 - `getMasters_().spreadsheetUrl` を ID から組み立てる（DB を開かない）。
 
+### Changed
+- **バックエンドを役割別のファイルに分割（ADR-016）**: `コード.js`（約6,000行）を `gas/` の12ファイル（`00_管理者メニュー`〜`11_廃止機能`）に分けた。GAS エディタで `00_管理者メニュー` を開くと、手で実行する関数（トリガー設定・診断・初期構築・移行・廃止機能の後始末）だけが実行プルダウンに並ぶ。処理の中身は変えていない（分割前後で全宣言274個がコメント以外完全一致することを機械的に確認）。本番ビルドが `gas/*.js` を `dist/` 直下へコピーする。初回の push で GAS 上の旧ファイル「コード」は役割別ファイルに置き換わる。
+
+### Removed
+- 予約送信（v1.12.1 で廃止）の空のスタブ `scheduleEmail`・`cancelScheduledEmail`・`listScheduledForCase`（画面から呼ばれていなかった）。既存キューの無効化 `disablePendingScheduledEmails` と旧トリガーの削除は残す。
+
 ### Security
 - **公開関数のサーバー側権限確認（SDD SEC-01b）**: 画面の `google.script.run` から組織内の誰でも呼べる公開関数のうち、約25個が権限を確認していなかったのを是正。内部専用の `getStaffByEmail`・`getMasters`・`getFiscalYear`・`createZoomMeeting`・`createGoogleMeetEvent` は名前を `_` で終えて非公開化。画面から呼ぶ `getAllCasesJoined`・`getScheduleAvailability`・`checkScheduleConflict` にタダメン確認を追加。GAS エディタで実行する保守用関数（`add…Setting`・`fixSettingsSheet`・`setupAttachmentFeatureSchema`・`disablePendingScheduledEmails`・旧予約送信トリガー系・`verifyCcDryRun`）は管理者のみ実行可能（`runAdminWrite_`）。通常操作中の自動移行（`ensureAttachmentSchema_`）は本体（`…Impl_`）を直接呼ぶため、一般のタダメンの操作は止まらない。
 
@@ -26,6 +32,7 @@
 ### Tests
 - 単体 +33（147→180）: `snapshot.test.js`（完成品の判定・分割・シリアル値→日時・一括読込の整形・全セル比較。コード.js から関数を直接取り出して検査）、`snapshot-flow.test.js`（GAS の各サービスを模した環境で コード.js ごと動かし、作り直し→DB を開かない配信→書込後の作り直し→「最新に更新」→一括読込で同じ案件→診断→非スタッフ拒否を検査。開発中に未定義関数の呼び出しを1件検出）、`snapshot-write-guard.test.js`（公開関数がすべて「書込＝runWrite_ で包む」か「読むだけ」に分類されているか）。`buildBatchGetUrl` の写しのテスト1件は直接検査へ統合。
 - 単体 +4（180→184）: `public-auth-guard.test.js`（公開関数がすべて権限確認を行うか理由つきの例外か・内部専用関数の非公開・保守用関数の包み方）。
+- 単体 +6（184→190）: `backend-layout.test.js`（旧 コード.js が無い・ファイル名・宣言の重複なし・トップレベル定数はリテラルだけ・管理者メニューの中身と漏れ）、`build-deploy.test.js` に dist への全ファイルコピー。`snapshot-flow.test.js` は GAS と同じくファイルごとに名前順で評価するよう変更。
 - E2E +3（72→75）: `14-snapshot-refresh.spec.ts`（時点表示・「最新に更新」・更新後も下書きバッジが残る）。
 
 ---

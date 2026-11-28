@@ -1,6 +1,6 @@
 /**
  * v1.14.0 初期データの完成品（スナップショット）— 純粋関数の単体テスト（ADR-015）
- * コード.js から関数を直接取り出して検査する（tests/unit/src/extract-gas.js）。
+ * gas/ から関数を直接取り出して検査する（tests/unit/src/extract-gas.js）。
  */
 'use strict';
 

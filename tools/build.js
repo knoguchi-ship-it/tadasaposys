@@ -4,7 +4,7 @@
  *
  * 開発用の原本 index.html（ブラウザ内 Babel・CDN の React/Tailwind）から、本番用の dist/ を作る。
  *   dist/index.html   … JSX を事前変換し React・lucide を同梱した1本のスクリプト＋ビルド済み Tailwind CSS
- *   dist/コード.js     … そのままコピー
+ *   dist/<gas/*.js>   … バックエンド（gas/ の役割別ファイル）をそのまま dist/ 直下へコピー（ADR-016）
  *   dist/appsscript.json … そのままコピー
  * clasp は dist/ を push する（.clasp.json の rootDir を "dist" にする。RUNBOOK §3）。
  *
@@ -26,6 +26,14 @@ const { execFileSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..');
 const DIST = path.join(ROOT, 'dist');
+const GAS_DIR = path.join(ROOT, 'gas');
+
+/** バックエンドのファイル（gas/*.js・名前順）。GAS ではこの名前のまま並ぶ */
+function backendFiles() {
+  const files = fs.readdirSync(GAS_DIR).filter((f) => f.endsWith('.js')).sort();
+  if (!files.length) throw new Error('gas/ にバックエンドのファイルがない');
+  return files;
+}
 
 /** 原本から開発専用ブロックを除去する */
 function stripDevOnly(html) {
@@ -156,9 +164,9 @@ function sha256(text) {
   return crypto.createHash('sha256').update(text).digest('hex');
 }
 
-/** 原本の内容ハッシュ（index.html・コード.js・appsscript.json・package-lock.json）。dist の鮮度確認に使う */
+/** 原本の内容ハッシュ（index.html・gas/*.js・appsscript.json・package-lock.json）。dist の鮮度確認に使う */
 function sourceHash() {
-  const parts = ['index.html', 'コード.js', 'appsscript.json', 'package-lock.json']
+  const parts = ['index.html', ...backendFiles().map((f) => 'gas/' + f), 'appsscript.json', 'package-lock.json']
     .map((f) => f + '\n' + fs.readFileSync(path.join(ROOT, f), 'utf8').replace(/\r\n/g, '\n'));
   return sha256(parts.join('\n---\n'));
 }
@@ -189,7 +197,7 @@ function build() {
   fs.rmSync(DIST, { recursive: true, force: true });
   fs.mkdirSync(DIST, { recursive: true });
   fs.writeFileSync(path.join(DIST, 'index.html'), html);
-  fs.copyFileSync(path.join(ROOT, 'コード.js'), path.join(DIST, 'コード.js'));
+  for (const f of backendFiles()) fs.copyFileSync(path.join(GAS_DIR, f), path.join(DIST, f));
   fs.copyFileSync(path.join(ROOT, 'appsscript.json'), path.join(DIST, 'appsscript.json'));
 
   const kb = (n) => (n / 1024).toFixed(0) + 'KB';
@@ -204,7 +212,8 @@ function isDistFresh() {
   if (!fs.existsSync(p)) return false;
   const m = fs.readFileSync(p, 'utf8').match(/build: source-sha256=([0-9a-f]{64})/);
   return !!m && m[1] === sourceHash()
-    && fs.readFileSync(path.join(DIST, 'コード.js'), 'utf8') === fs.readFileSync(path.join(ROOT, 'コード.js'), 'utf8')
+    && backendFiles().every((f) => fs.existsSync(path.join(DIST, f))
+      && fs.readFileSync(path.join(DIST, f), 'utf8') === fs.readFileSync(path.join(GAS_DIR, f), 'utf8'))
     && fs.readFileSync(path.join(DIST, 'appsscript.json'), 'utf8') === fs.readFileSync(path.join(ROOT, 'appsscript.json'), 'utf8');
 }
 

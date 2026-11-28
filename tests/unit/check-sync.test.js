@@ -16,7 +16,7 @@ const errorsOf = (r) => r.items.filter((i) => i.level === 'error').map((i) => i.
 function versionFiles(v, overrides = {}) {
   return {
     'package.json': JSON.stringify({ version: v }),
-    'コード.js': `/**\n * タダサポ管理システム - Backend Logic (v${v})\n */`,
+    'gas/01_定数と設定.js': `/**\n * タダサポ管理システム - Backend Logic (v${v})\n */`,
     'index.html': `<title>x</title>\n<meta name="app-version" content="${v}">`,
     'CHANGELOG.md': `# Changelog\n\n## [Unreleased]\n\n## [${v}] - 2026-01-01\n`,
     'AI_RULES.md': `- **現行バージョン:** v${v}\n`,
@@ -54,7 +54,7 @@ describe('版数の同期', () => {
 describe('IDX 定数の照合', () => {
   const code = `const X = 1;\nconst IDX = {\n  CASES: { PK: 0, EMAIL: 1 },\n  // コメント\n  STAFF: { NAME: 1, EMAIL: 2 }\n};\nfunction f() {}`;
 
-  test('コード.js の const IDX を入れ子のまま取り出す', () => {
+  test('バックエンドの const IDX を入れ子のまま取り出す', () => {
     expect(parseCodeIdx(code)).toEqual({ CASES: { PK: 0, EMAIL: 1 }, STAFF: { NAME: 1, EMAIL: 2 } });
   });
 
@@ -80,7 +80,7 @@ describe('IDX 定数の照合', () => {
 
   test('AI_RULES にないシート・列番号のずれをエラーにする', () => {
     const files = {
-      'コード.js': 'const IDX = {\n  CASES: { PK: 0, EMAIL: 1 },\n  CHAT_LINK: { SUBMITTED_AT: 0 }\n};',
+      'gas/01_定数と設定.js': 'const IDX = {\n  CASES: { PK: 0, EMAIL: 1 },\n  CHAT_LINK: { SUBMITTED_AT: 0 }\n};',
       'AI_RULES.md': '## データモデル\n```javascript\nCASES: { PK:0, EMAIL:2 }\n```\n',
       'docs/SDD.md': '',
     };

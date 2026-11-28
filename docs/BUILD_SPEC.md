@@ -66,7 +66,7 @@
 システムは大きく次の3つの実体で構成されます。
 
 - **フロントエンド（`index.html`）** — ブラウザで動く React の画面。1ファイルに収まっており、開発用のモックデータも内蔵しているため、GAS なしでもローカルで画面を確認できます。
-- **バックエンド（`コード.js`）** — GAS 上で動くサーバー側のロジック。Web アプリの入口 `doGet()` と、画面から呼び出される多数の公開関数からなります。
+- **バックエンド（`gas/` の役割別ファイル。v1.14.0〜・ADR-016）** — GAS 上で動くサーバー側のロジック。Web アプリの入口 `doGet()` と、画面から呼び出される多数の公開関数からなります。
 - **データストア（Google スプレッドシート）** — 設定・案件・記録・スタッフ・メール履歴・監査ログなどを保持するシート群。
 
 外部サービスとの連携は次のとおりです。
@@ -324,7 +324,7 @@ HISTORY 列（過去回の記録）は、1回分が次の形の JSON エント�
 
 ## 6. 機能仕様（バックエンド関数とUI）
 
-画面（`index.html`）は `google.script.run` を通じてバックエンド（`コード.js`）の公開関数を呼びます。ここでは主要な機能をグループごとに説明します。
+画面（`index.html`）は `google.script.run` を通じてバックエンド（`gas/`）の公開関数を呼びます。GAS エディタから人が手で実行する関数は `gas/00_管理者メニュー.js` にまとめています。ここでは主要な機能をグループごとに説明します。
 
 ### 6.1 起動・データ取得
 
@@ -457,7 +457,7 @@ GAS エディタ側で：
 ```
 
 ### 段階4：コード配置とプッシュ
-- 配置するファイルは `index.html` / `コード.js` / `appsscript.json` の3つのみ。`src/` は作らない、`temp/` は配布しない。
+- 配置するのは `index.html` / `gas/` のバックエンド一式 / `appsscript.json` のみ（ビルドで `dist/` 直下に平らに並べる）。`src/` は作らない、`temp/` は配布しない。
 - v1.13.0〜 本番用は `npm ci` → `npm run build` で `dist/` を作り、`dist/` を push する（`.clasp.json` の `rootDir: "dist"`）：
   ```
   npm ci && npm run build
@@ -466,7 +466,7 @@ GAS エディタ側で：
   `--force` を付けないと、まれに変更がサイレントにスキップされます。初回以降のデプロイは `npm run deploy`（§8）。
 
 ### 段階5：初期セットアップ関数の実行
-GAS エディタの実行ボタンから順に実行します。**段階2でタダメンマスタに登録した管理者のアカウントで実行**します（v1.14.0〜 `setupSettingsSheet` 以外は管理者確認があります）。
+GAS エディタで `00_管理者メニュー` を開き、実行ボタンから順に実行します。**段階2でタダメンマスタに登録した管理者のアカウントで実行**します（v1.14.0〜 `setupSettingsSheet` 以外は管理者確認があります）。
 ```
 setupSettingsSheet()          // 「設定」シートを作る
 addEmailTemplates()           // メールテンプレート
@@ -679,7 +679,7 @@ Web App の設定は**必ず `executeAs: USER_ACCESSING` / `access: DOMAIN`** �
 - ランタイム：GAS V8、タイムゾーン `Etc/GMT-9`（JST）。
 - Advanced Services：Gmail v1、Calendar v3。
 - フロント：React 18.2.0 固定、lucide-react 0.330.0、Tailwind（CDN）、FullCalendar 6.1.18（グローバルバンドル）、Babel standalone（`type="text/babel" data-type="module" data-presets="react"`）。
-- ファイル構成：`index.html` / `コード.js` / `appsscript.json` の3点（`src/` は作らない、`temp/` は配布しない）。
+- ファイル構成：`index.html` / `gas/`（バックエンド・役割別）/ `appsscript.json`（`src/` は作らない、`temp/` は配布しない）。
 
 ### 13.3 改訂履歴
 

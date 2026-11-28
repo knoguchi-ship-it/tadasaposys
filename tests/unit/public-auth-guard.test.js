@@ -2,7 +2,7 @@
  * v1.14.0 公開関数のサーバー側権限チェック（SEC-01・グランドルール3）
  *
  * GAS では名前が _ で終わらないトップレベル関数は、画面の google.script.run から誰でも呼べる
- * （アクセス=組織内の全員）。そこで コード.js の公開関数はすべて、本体（または XImpl_）で
+ * （アクセス=組織内の全員）。そこで gas/ の公開関数はすべて、本体（または XImpl_）で
  *   ・タダメン確認: getActor_() / getStaffByEmail_()
  *   ・管理者確認:   requireAdmin_() / runAdminWrite_()
  * のどれかを行うか、下の EXEMPT に理由つきで登録することを検査する。
@@ -17,9 +17,6 @@ const EXEMPT = {
   doGet: 'HTML を返すだけ（データは getInitialData がタダメン確認のうえ返す）',
   keepWarm: '時間主導トリガー用。完成品を作り直すだけで、データを返さない',
   setupSettingsSheet: '初回構築用。設定シートが無いときだけ作る（タダメンマスタが無い段階でも実行できる必要がある）',
-  scheduleEmail: '廃止スタブ（例外を投げるだけ）',
-  cancelScheduledEmail: '廃止スタブ（例外を投げるだけ）',
-  listScheduledForCase: '廃止スタブ（空配列を返すだけ）',
 };
 
 const AUTH_CALLS = ['getActor_(', 'getStaffByEmail_(', 'requireAdmin_(', 'runAdminWrite_('];

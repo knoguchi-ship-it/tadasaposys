@@ -3,7 +3,7 @@
  *
  * 完成品（スナップショット）は「書込のたびに世代を替える」ことで古いデータを配らない。
  * 書込を行う公開関数が runWrite_ で包まれていないと、書込が次の起動に反映されない（最大10分遅れる）。
- * そこで コード.js の公開関数（名前が _ で終わらない関数）をすべて
+ * そこで gas/ の公開関数（名前が _ で終わらない関数）をすべて
  *   ・書込: `function X() { return runWrite_(XImpl_, arguments); }` の形
  *     （GAS エディタから実行する管理者用の保守関数は runAdminWrite_。管理者確認のうえ runWrite_ を通る）
  *   ・読むだけ（完成品に影響しない）: 下の READ_ONLY に理由つきで登録
@@ -32,7 +32,6 @@ const READ_ONLY = {
   loadDraft: '下書きは完成品に含めない',
   deleteDraft: '下書きは完成品に含めない',
   listDraftsForCase: '読むだけ',
-  listScheduledForCase: '読むだけ（廃止機能）',
   setupScheduledEmailTrigger: 'トリガーの削除のみ（廃止機能）',
   removeScheduledEmailTrigger: 'トリガーの削除のみ（廃止機能）',
   getScheduledEmailTriggerStatus: '読むだけ（廃止機能）',

@@ -1,6 +1,6 @@
 /**
  * ビジネスロジック 単体テスト
- * 対象: コード.js のピュア関数（GAS API 非依存）
+ * 対象: gas/ のピュア関数（GAS API 非依存）
  */
 
 'use strict';
@@ -826,7 +826,7 @@ describe('schemaMigrationNeeded（スキーマ移行確認の要否）', () => {
 });
 
 // ── v1.13.0: 計測用 Sheets API 一括読込の URL ──
-// buildBatchGetUrl_ は v1.14.0 から tests/unit/snapshot.test.js（コード.js から直接取り出して検査）
+// buildBatchGetUrl_ は v1.14.0 から tests/unit/snapshot.test.js（gas/ から直接取り出して検査）
 
 // ── v1.13.0: タダメンマスタの ROLE / IS_ACTIVE 補完（空行に書かない） ──
 describe('planStaffDefaults（タダメンマスタの補完計画）', () => {

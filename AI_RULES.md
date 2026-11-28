@@ -22,7 +22,7 @@
 
 ```
 index.html      — フロントエンドの原本（React SPA、モックデータ含む単一ファイル。開発時はブラウザ内 Babel で動く）
-コード.js        — バックエンド（GAS サーバーサイド）
+gas/            — バックエンド（GAS サーバーサイド）。役割別の「2桁番号_名前.js」12ファイル（ADR-016）。00_管理者メニュー.js は GAS エディタから手で実行する関数だけ
 appsscript.json — GASマニフェスト
 dist/           — 本番ビルド成果物（npm run build が生成。Git 対象外。clasp はここを push。ADR-013）
 tools/          — ビルド・デプロイ・同期チェック（build.js / deploy.js / check-sync.js）
@@ -31,7 +31,8 @@ CLAUDE.md / AGENTS.md — 各エージェントの入口（本ファイルを読
 ```
 
 - `src/` フォルダは廃止済み。**絶対に作らないこと**。アプリの原本は `index.html` 1ファイルのまま（分割しない）
-- 新規ファイル追加は原則不要。上記2ファイル（`index.html` / `コード.js`）を編集する
+- 新規ファイル追加は原則不要。`index.html` と `gas/` の該当ファイルを編集する。`gas/` は役割で選ぶ（各ファイル先頭のコメント参照）。GAS エディタから手で実行する関数は `gas/00_管理者メニュー.js` に置き、画面から呼ぶ関数は置かない
+- `gas/` のトップレベルの `const`/`let` はリテラルだけで初期化する（GAS は全ファイルを同じグローバル空間で名前順に評価するため、他ファイルの値を参照すると読込順で壊れる）。同じ名前を2つのファイルで宣言しない
 - `dist/` は手で編集しない（毎回 `npm run build` で作り直す）
 - 原本 `index.html` の目印コメント（`build:dev-only`・`build:css`・`build:app`）を消さない。開発専用の CDN・Babel・importmap は `build:dev-only` の内側に置く
 - `temp/` 配下はローカルバックアップ・GAS上の残存スタブ確認用。**Git追跡・clasp push対象から除外し、今後追わないこと**
@@ -57,7 +58,7 @@ Claude Code では、1〜7 の結果がセッション開始時に SessionStart 
 |---|---|---|
 | 1 | 版数が同期対象（グランドルール6）すべてで一致 | `npm run check` |
 | 2 | HANDOVER の現在地（版・@nn・単体/E2E 件数）と §1・§8 が、package.json・テストの実数と一致 | `npm run check` |
-| 3 | `コード.js` の `const IDX` が、本ファイルのデータモデル節と `docs/SDD.md` §1 の各シート表と一致 | `npm run check` |
+| 3 | `gas/01_定数と設定.js` の `const IDX` が、本ファイルのデータモデル節と `docs/SDD.md` §1 の各シート表と一致 | `npm run check` |
 | 4 | ADR の件数が索引（`ADR-001〜NNN`）と一致 | `npm run check` |
 | 5 | 「仕組み」欄で導入済みの物が実在する（`.claspignore`・`.gitignore`・CI・`appsscript.json`） | `npm run check` |
 | 6 | 本番識別子・個人名の残存件数（移行中のため警告。件数の増減を報告する） | `npm run check` |
@@ -229,7 +230,7 @@ Webapp 設定は **`executeAs: USER_ACCESSING` / `access: DOMAIN` 固定**。ア
 - 導入済み: `npm run check` が本番識別子の形式と、ローカルの `.clasp.json`・`.clasp.deploy.json`・`.private-terms.local.txt`（個人名など1行1語。Git 対象外）に書かれた実値の混入を検出する（移行中は警告、`--strict` でエラー）
 - 導入済み: 上記はコミット前検査（pre-commit）でも実行される（移行中は警告のみ）
 - 導入済み: `SPREADSHEET_ID` と秘密情報はスクリプトプロパティ（ADR-014）。秘密情報は書込専用（管理画面・監査ログに値を出さない）
-- 導入済み: 単体テスト `tests/unit/public-auth-guard.test.js`（v1.14.0・SDD SEC-01b）。`コード.js` の公開関数（画面から誰でも呼べる）が、すべてタダメン確認（`getActor_`）か管理者確認（`requireAdmin_`・`runAdminWrite_`）を行うか、理由つきの例外であることを検査する。内部専用の関数は名前を `_` で終えて公開しない
+- 導入済み: 単体テスト `tests/unit/public-auth-guard.test.js`（v1.14.0・SDD SEC-01b）。`gas/` の公開関数（画面から誰でも呼べる）が、すべてタダメン確認（`getActor_`）か管理者確認（`requireAdmin_`・`runAdminWrite_`）を行うか、理由つきの例外であることを検査する。内部専用の関数は名前を `_` で終えて公開しない
 - 導入予定: 残存ゼロを確認したら pre-commit・CI を `--strict` にする（v1.13.0 でコード上の残存は解消。過去のコミット履歴には残る）
 
 ### 4. 実装品質
@@ -264,14 +265,15 @@ DRY原則を守り、共通化できる処理を重複実装しない。新設�
 
 仕組み:
 - 導入済み: GitHub Actions（`.github/workflows/playwright.yml`）が push / PR で単体テスト・`npm run check`・E2E を実行
-- 導入済み: 単体テスト `tests/unit/snapshot-write-guard.test.js`（v1.14.0・ADR-015）。`コード.js` の公開関数が、すべて「書込＝`runWrite_` で包む（完成品の世代を更新）」か「読むだけ」に分類されていることを検査する。書込を行う公開関数を追加したら包む（包み忘れると、その書込が次の起動に最大10分反映されない）
+- 導入済み: 単体テスト `tests/unit/snapshot-write-guard.test.js`（v1.14.0・ADR-015）。`gas/` の公開関数が、すべて「書込＝`runWrite_` で包む（完成品の世代を更新）」か「読むだけ」に分類されていることを検査する。書込を行う公開関数を追加したら包む（包み忘れると、その書込が次の起動に最大10分反映されない）
+- 導入済み: 単体テスト `tests/unit/backend-layout.test.js`（v1.14.0・ADR-016）。`gas/` のファイル名・宣言の重複なし・トップレベル定数がリテラルだけ・管理者メニューに手で実行する関数だけがあり漏れもないことを検査する。`snapshot-flow.test.js` は GAS と同じくファイルごとに名前順で評価する
 - 導入予定: `master` のブランチ保護で CI 合格を必須にする
 
 ### 6. ドキュメント・文字コード
 
 コード更新時は毎回、コード・ドキュメント・テスト・モックデータの整合性を確認する。ER図・テーブル設計書は HTML で `docs/` 配下に保存する。AI向け指示だけでなく、人間が読める Markdown/HTML も維持する。文字化けは放置せず UTF-8 として読める状態に修正する。
 
-**バージョン同期対象:** `コード.js` 先頭コメント・`index.html`（`<meta name="app-version">`）・`package.json`・`CHANGELOG.md`・本ファイル（`AI_RULES.md`）・`docs/SDD.md`・`docs/HANDOVER.md`・`docs/Manual.md`
+**バージョン同期対象:** `gas/01_定数と設定.js` 先頭コメント・`index.html`（`<meta name="app-version">`）・`package.json`・`CHANGELOG.md`・本ファイル（`AI_RULES.md`）・`docs/SDD.md`・`docs/HANDOVER.md`・`docs/Manual.md`
 
 **HANDOVER の現在地:** 版・本番デプロイ番号・テスト件数は、`docs/HANDOVER.md` 冒頭の1行「**現在地:** vX.Y.Z / 本番 @nn / 単体 N件 / E2E N件」だけに書く（DRY）。リポジトリの版が本番より新しい（未反映）間は「本番 @nn（vA.B.C）」と本番の版を併記する。本文の他の箇所に件数・現行版を書き写さず「冒頭の現在地を参照」とする。例外として §1「本番デプロイバージョン: @nn（vX.Y.Z）」と §8 のスペック別件数一覧は維持し、`npm run check` が現在地・実テストと照合する。
 
@@ -293,7 +295,7 @@ DRY原則を守り、共通化できる処理を重複実装しない。新設�
 
 ---
 
-## データモデル（`コード.js` の `const IDX`）
+## データモデル（`gas/01_定数と設定.js` の `const IDX`）
 
 全シート左詰め、ギャップなし。IDX を変更したら、`docs/SDD.md` §1 と本節の両方を同じコミットで更新する（`npm run check` が照合する。行番号ではなく定義名で指す）。
 
@@ -455,7 +457,7 @@ npm run deploy
 | `CLAUDE.md` / `AGENTS.md` | Claude Code / Codex の入口（本ファイルを読ませるだけ） | AI |
 | `docs/SDD.md` | システム詳細設計書（仕様の正本） | AI・開発者 |
 | `docs/HANDOVER.md` | 引き継ぎ書（現在地・残作業） | 開発者 |
-| `docs/ADR.md` | アーキテクチャ判断記録（ADR-001〜015） | AI・開発者 |
+| `docs/ADR.md` | アーキテクチャ判断記録（ADR-001〜016） | AI・開発者 |
 | `docs/RUNBOOK.md` | 運用手順書（デプロイ・障害対応） | 開発者・運用者 |
 | `docs/Manual.md` | 操作マニュアル | エンドユーザー |
 | `docs/RD.md` | 要件定義 | 参照用 |
