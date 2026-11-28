@@ -9,7 +9,8 @@
 > - **作り直し:** 書込を行う公開関数は `runWrite_` で包み、終了時に世代（スクリプトプロパティ `SNAPSHOT_GEN`）を更新して完成品を無効にする。時間主導トリガー `keepWarm`（5分ごと・業務時間のみ）が完成品を作り直す（DB の温めも兼ねる）。画面右上の「最新に更新」で即時に作り直す（`getInitialData(true)`）。
 > - **下書きバッジ:** 利用者ごとに違うため完成品から外し、画面表示後に `getMyDraftCaseIds()` で取得する（F-02b）。
 > - **Sheets API 一括読込（段階導入）:** スクリプトプロパティ `SNAPSHOT_READ_MODE=sheetsApi` で、作り直し時の読込を `values:batchGet` 1往復（＋日時判定用の並列1往復）にする。既定は従来の SpreadsheetApp。切替前に `diagnoseSheetsApiRead()` で全セル一致を確認する（v1.13.0 の計測用 `perfProbeSheetsApi` を置き換え）。
-> - **その他:** `getMasters().spreadsheetUrl` を ID から組み立てる（DB を開かない）。日程連絡メールの既定文面の文字化けを修正。
+> - **公開関数の権限確認（SEC-01b）:** 画面から呼べる公開関数（名前が `_` で終わらない関数）は、すべてサーバー側でタダメン確認（`getActor_`）または管理者確認（`requireAdmin_`・`runAdminWrite_`）を行う。内部専用の `getStaffByEmail_`・`getMasters_`・`getFiscalYear_`・`createZoomMeeting_`・`createGoogleMeetEvent_` は非公開にした。GAS エディタから実行する保守用関数（`add…Setting` 等）は管理者のみ実行でき、通常操作中の自動移行（`ensureAttachmentSchema_`）は本体（`…Impl_`）を直接呼ぶ。
+> - **その他:** `getMasters_().spreadsheetUrl` を ID から組み立てる（DB を開かない）。日程連絡メールの既定文面の文字化けを修正。
 
 > **v1.13.0 追補（読込速度とセキュリティ。ADR-013・ADR-014）**
 > - **本番ビルド**: 原本 `index.html` から `npm run build`（`tools/build.js`）で `dist/` を生成し、clasp は `dist/` を push する。JSX は事前変換、React 18.2.0・lucide-react 0.330.0 は同梱、Tailwind は使用クラスのみの CSS を埋め込み。本番は esm.sh・unpkg・Tailwind CDN を使わない（TC-01・TC-03）。デプロイは `npm run deploy`（`tools/deploy.js`）に一本化。
@@ -414,7 +415,7 @@ HTML を返す Web App エントリポイント。v1.13.0〜 シートを読ま�
 - **完成品（スナップショット）配信（v1.14.0・ADR-015）:** 完成品が使えれば DB を開かずに返す。使える条件（純粋関数 `snapshotUsable_`）は、形式 `SNAPSHOT_FORMAT_` が一致・完成品の世代＝スクリプトプロパティ `SNAPSHOT_GEN`・作成から `SNAPSHOT_MAX_AGE_MIN` 分（スクリプトプロパティ・既定10）以内。使えなければその場で作り直してから返す（`rebuildSnapshot_`）。
   - 完成品の中身: `cases`（F-03 の結果）・`masters`（F-14）・`forcedCc`・`staffRows`（タダメンマスタの全行。認証に使う）・`settings`（設定シートの値。秘密情報キー `SECRET_SETTING_KEYS_` は除く）・`gen`・`builtAt`（ms）・`readMode`（実際に使った読み方）。
   - 保存: JSON を gzip → Base64 にし、90,000 文字ごとに分割して ScriptCache に保存（1項目 100KB 上限のため。純粋関数 `splitIntoChunks_`）。キーは `snap:meta`（世代・作成時刻・分割数）と `snap:<世代>:<番号>`。保存期限 6時間。
-  - 認証: 完成品の `staffRows`・`settings` を実行内キャッシュ（`getStaffRows_`・`loadSettings_`）に入れ、従来の `getStaffByEmail` / `getStaffRoleByEmail_` / `isAdminEmail_` で判定する（SEC-01・SEC-02 は不変）。
+  - 認証: 完成品の `staffRows`・`settings` を実行内キャッシュ（`getStaffRows_`・`loadSettings_`）に入れ、従来の `getStaffByEmail_` / `getStaffRoleByEmail_` / `isAdminEmail_` で判定する（SEC-01・SEC-02 は不変）。
   - `snapshot`: `{ builtAt, source: 'cache' | 'rebuild', readMode }`。画面右上に作成時刻（「HH:MM 時点」）を出す。
   - `_perf`（ms）: 完成品を使ったとき `snapshotRead`・`auth`、作り直したとき `rebuild`（内訳 `rebuildDetail`: `schema`・`read`・`cases`（内訳 `casesDetail`）・`masters`・`save`）。実行ログにも JSON で出す。
 - **作り直し `rebuildSnapshot_(reason)`:** ①`ensureAttachmentSchema_()`（移行確認）→ ②作り始めの世代を読む（無ければ発行）→ ③起動時のシート（`initialDataSheetNames_`）を読む（読み方は下記）→ ④F-03・F-14 等で組み立て → ⑤世代を読み直し、変わっていなければ保存（変わっていれば保存せず、組み立てた結果はその呼び出しにだけ返す）。同時に複数人が作り直してもよい（世代で正しさを保つ。ロックは取らない）。
@@ -429,6 +430,8 @@ HTML を返す Web App エントリポイント。v1.13.0〜 シートを読ま�
 ログイン中メンバーの下書きを持つ案件IDの一覧（下書きバッジ用）。画面表示後に非同期で取得する（失敗しても画面は止めない）。読むだけ。
 
 ### F-03: `getAllCasesJoined()`
+公開関数（画面の再読込用）はタダメン確認（`getActor_`）のうえ内部の `getAllCasesJoined_()` を呼ぶ。完成品の作り直し・年間利用補正は `getAllCasesJoined_()` を直接使う（v1.14.0）。
+
 案件リスト + 案件手動追加 + 案件補正 + サポート記録を結合し、削除済み案件を除外して返す（v1.13.0〜 メール履歴は結合しない。案件の `emails` は廃止）。各案件に `currentFiscalYearCount`（今年度累計利用回数）を付与する。v1.12.13 からフォーム案件には「チャット連携」シートから `chatThreadUrl`（申込通知スレッドURL・なければ `null`）も付与する（S-10）。
 
 **年度計算:** 4月1日始まり。同一 `EMAIL`（正規化）かつ同一年度の `inProgress`/`completed` 案件の `supportCount` を合算。集計キーは `annualUsageKey_(email, pk)` = `normalizeEmail_(email) + '_' + caseFiscalYear_(pk)` で統一。`caseFiscalYear_()` は手動追加案件のPK `manual_<エポックミリ秒>` も申込日年度へ正しく解決するため、**Googleフォーム申込と管理者の手動追加案件が同一メール+年度で合算される**（v1.12.3）。
@@ -464,10 +467,10 @@ HTML を返す Web App エントリポイント。v1.13.0〜 シートを読ま�
 案件の全 Gmail スレッドのメッセージを取得。スレッドIDが無い場合はメール履歴シートからフォールバック表示。
 戻り値: `[{ threadId, subject, messages: [{ sendDate, senderName, fromEmail, subject, body, isStaff }] }]`
 
-### F-14: `getMasters()`
+### F-14: `getMasters_()`（内部専用・v1.14.0 で非公開化）
 マスタデータ取得。`methods`, `businessTypes`, `prefectures`, `allStaff`, `limits`, `supportTools`, `toolMonthlyLimits`, `emailTemplates`, `attachmentFolderConfigured`, `spreadsheetUrl` を返す。
 
-### F-15: `getStaffByEmail(email)`
+### F-15: `getStaffByEmail_(email)`（内部専用・v1.14.0 で非公開化）
 メールアドレスからスタッフ情報を取得。
 
 ### F-16: `getAdminPanelData()`
@@ -513,13 +516,14 @@ Meet/Zoom URL 変更 + カレンダーイベントの説明欄を同期更新。
 ### F-27: `updateSupportHistory(caseId, roundIndex, patch)`
 過去回（HISTORY JSON 内）の記録を編集。
 
-### F-28: `createGoogleMeetEvent(title, startTime, description, durationMinutes)`
+### F-28: `createGoogleMeetEvent_(title, startTime, description, durationMinutes)`（内部専用・v1.14.0 で非公開化。記録の更新処理から呼ぶ）
 Google カレンダーに Meet 付きイベントを作成。説明欄にアプリ URL を追記。
 
-### F-29: `createZoomMeeting(title, startTime, durationMinutes)`
+### F-29: `createZoomMeeting_(title, startTime, durationMinutes)`（内部専用・v1.14.0 で非公開化。記録の更新処理から呼ぶ）
 Zoom Server-to-Server OAuth でミーティングを作成。Zoom API 失敗時もカレンダー作成は続行する（分離設計）。
 
 ### F-30: `verifyCcDryRun()`
+管理者のみ実行可能（v1.14.0）。
 CC 設定のドライラン検証。`MAIL_DRY_RUN=true` が前提。
 
 ### F-31: `saveDraft(payload)` ※v1.11.0
@@ -558,6 +562,9 @@ CC 設定のドライラン検証。`MAIL_DRY_RUN=true` が前提。
 
 ### SEC-01: 認証
 実行ユーザーのメールアドレスがタダメンマスタに存在しない・無効の場合、全処理をブロックしエラーを返す。
+
+### SEC-01b: 公開関数の権限確認（v1.14.0）
+GAS では名前が `_` で終わらないトップレベル関数は、画面の `google.script.run` から組織内の誰でも呼べる。そのため公開関数はすべて、本体（または `…Impl_`）でタダメン確認（`getActor_` / `getStaffByEmail_`）か管理者確認（`requireAdmin_` / `runAdminWrite_`）を行う。内部からしか使わない関数は公開しない（名前を `_` で終える）。例外は `doGet`（HTML のみ）・`keepWarm`（トリガー用。データを返さない）・`setupSettingsSheet`（初回構築用。設定シートが無いときだけ作る）・廃止スタブ（`scheduleEmail`・`cancelScheduledEmail`・`listScheduledForCase`）のみ。GAS エディタから実行する保守用の書込関数は `function X() { return runAdminWrite_(XImpl_, arguments); }`（管理者確認 → `runWrite_`）の形にし、通常操作中の自動移行は `XImpl_` を直接呼ぶ。`tests/unit/public-auth-guard.test.js` が `コード.js` を走査して検査する。
 
 ### SEC-02: 管理者権限
 権限判定はバックエンドで強制する。`ROLE=admin` を優先し、後方互換として `ADMIN_EMAILS` も管理者判定に利用。管理者操作は監査ログへ記録する。

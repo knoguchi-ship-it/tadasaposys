@@ -331,8 +331,8 @@ HISTORY 列（過去回の記録）は、1回分が次の形の JSON エント�
 - **`doGet()`** — Web App の入口。v1.13.0〜 シートを読まずに HTML を即返し、初期データはページ先頭の script が `getInitialData()` を先行取得します（シート読込と画面の準備が並行）。
 - **`getInitialData(forceRefresh)`** — 起動時にユーザー情報・案件・マスタ・強制CCをまとめて返す。v1.14.0〜 組み立て済みの「完成品」を ScriptCache から返し、DB を開きません（無い・古い・書込後のときだけ作り直し、このとき**スキーマの自動移行**も行います。ADR-015）。下書き有無は `getMyDraftCaseIds()` で画面表示後に取ります。
 - **`getAllCasesJoined()`** — 案件リスト＋手動追加＋補正＋サポート記録を結合し（v1.13.0〜 メール履歴は含めない）、削除済みを除外して返す。各案件に「今年度の累計利用回数」を付けます。
-- **`getMasters()`** — 対応方法・事業種別・都道府県・スタッフ一覧・上限値・対応ツール・メールテンプレート等のマスタを返す。
-- **`getStaffByEmail(email)`** — メールからスタッフ情報を引く。
+- **`getMasters_()`**（内部専用） — 対応方法・事業種別・都道府県・スタッフ一覧・上限値・対応ツール・メールテンプレート等のマスタを返す。
+- **`getStaffByEmail_(email)`**（内部専用） — メールからスタッフ情報を引く。
 
 ### 6.2 案件の操作
 
@@ -362,8 +362,8 @@ HISTORY 列（過去回の記録）は、1回分が次の形の JSON エント�
 
 - **`getScheduleAvailability(rangeStart, rangeEnd)`** — 指定期間の空き状況を返す（カレンダー表示用）。
 - **`checkScheduleConflict(start, dur, excludeId)`** — 重複（バッファ込み）を判定。
-- **`createGoogleMeetEvent(...)`** — Meet 付きカレンダーイベントを作成し、説明欄にアプリ URL を追記。
-- **`createZoomMeeting(...)`** — Zoom の Server-to-Server OAuth で会議を作成。Zoom 失敗時もカレンダー作成は続行（分離設計）。
+- **`createGoogleMeetEvent_(...)`**（内部専用） — Meet 付きカレンダーイベントを作成し、説明欄にアプリ URL を追記。
+- **`createZoomMeeting_(...)`**（内部専用） — Zoom の Server-to-Server OAuth で会議を作成。Zoom 失敗時もカレンダー作成は続行（分離設計）。
 - **`updateMeetUrl(caseId, newUrl)`** — URL を変更し、カレンダーの説明欄も同期。
 
 ### 6.5 管理者機能（権限が必要）
@@ -466,7 +466,7 @@ GAS エディタ側で：
   `--force` を付けないと、まれに変更がサイレントにスキップされます。初回以降のデプロイは `npm run deploy`（§8）。
 
 ### 段階5：初期セットアップ関数の実行
-GAS エディタの実行ボタンから順に実行します。
+GAS エディタの実行ボタンから順に実行します。**段階2でタダメンマスタに登録した管理者のアカウントで実行**します（v1.14.0〜 `setupSettingsSheet` 以外は管理者確認があります）。
 ```
 setupSettingsSheet()          // 「設定」シートを作る
 addEmailTemplates()           // メールテンプレート

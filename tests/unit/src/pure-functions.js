@@ -8,8 +8,8 @@
 'use strict';
 
 // ── 年度計算 ────────────────────────────────────────────────
-// コード.js: getFiscalYear()
-function getFiscalYear(dateObj) {
+// コード.js: getFiscalYear_()
+function getFiscalYear_(dateObj) {
   var d = new Date(dateObj);
   if (isNaN(d.getTime())) return 0;
   return d.getMonth() < 3 ? d.getFullYear() - 1 : d.getFullYear();
@@ -18,13 +18,13 @@ function getFiscalYear(dateObj) {
 // コード.js: caseFiscalYear_()
 // 案件PKから年度を求める。手動追加案件のPK "manual_<エポックミリ秒>" にも対応する。
 function caseFiscalYear(pkRaw) {
-  if (pkRaw && typeof pkRaw.getTime === 'function') return getFiscalYear(pkRaw);
+  if (pkRaw && typeof pkRaw.getTime === 'function') return getFiscalYear_(pkRaw);
   var s = String(pkRaw);
   if (s.indexOf('manual_') === 0) {
     var epoch = Number(s.replace('manual_', ''));
-    return getFiscalYear(isFinite(epoch) ? new Date(epoch) : new Date(NaN));
+    return getFiscalYear_(isFinite(epoch) ? new Date(epoch) : new Date(NaN));
   }
-  return getFiscalYear(s);
+  return getFiscalYear_(s);
 }
 
 // コード.js: annualUsageKey_()
@@ -396,7 +396,7 @@ function isWithinKeepWarmWindow(hour, isoDay, hoursSpec, daysSpec) {
 module.exports = {
   isWithinKeepWarmWindow,
   planStaffDefaults,
-  getFiscalYear,
+  getFiscalYear_,
   caseFiscalYear,
   canonicalNaturalKey,
   buildCaseId,

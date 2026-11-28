@@ -816,6 +816,12 @@ function runWrite_(impl, args) {
   }
 }
 
+/** 管理者だけが実行できる書込の包み（GAS エディタから実行する保守用関数）。内部からは XImpl_ を直接呼ぶ */
+function runAdminWrite_(impl, args) {
+  requireAdmin_();
+  return runWrite_(impl, args);
+}
+
 // ---------- 純粋関数 ----------
 
 /** 文字列を size 文字ごとに分割する（純粋関数） */
@@ -1088,10 +1094,10 @@ function rebuildSnapshot_(reason, perfOut) {
 
   let snap = withPrefetchedSheets_(src, function() {
     let casesDetail = {};
-    let cases = getAllCasesJoined(casesDetail);
+    let cases = getAllCasesJoined_(casesDetail);
     p.casesDetail = casesDetail;
     lap('cases');
-    let masters = getMasters();
+    let masters = getMasters_();
     let forcedCc = getForcedCc_() || '';
     let staffRows = getStaffRows_();
     let settings = stripSecretSettings_(loadSettings_(), SECRET_SETTING_KEYS_);
@@ -1258,7 +1264,7 @@ function getInitialData(forceRefresh) {
   primeFromSnapshot_(snap);
 
   let userEmail = normalizeEmail_(Session.getActiveUser().getEmail());
-  let staff = getStaffByEmail(userEmail);
+  let staff = getStaffByEmail_(userEmail);
   if (!staff) {
     throw new Error('アクセス権限がありません。管理者によりタダメンマスタへの登録が必要です。');
   }
@@ -1286,7 +1292,7 @@ function getMyDraftCaseIds() {
 // ======================================================================
 // 年度計算
 // ======================================================================
-function getFiscalYear(dateObj) {
+function getFiscalYear_(dateObj) {
   let d = new Date(dateObj);
   if (isNaN(d.getTime())) return 0;
   return d.getMonth() < 3 ? d.getFullYear() - 1 : d.getFullYear();
@@ -1296,13 +1302,13 @@ function getFiscalYear(dateObj) {
 // （フォーム案件のPKは日時、手動追加案件は文字列のため new Date() が無効になり
 //   年度が 0 に落ちて年間カウントが合流しない問題を防ぐ — v1.12.3）
 function caseFiscalYear_(pkRaw) {
-  if (pkRaw && typeof pkRaw.getTime === 'function') return getFiscalYear(pkRaw);
+  if (pkRaw && typeof pkRaw.getTime === 'function') return getFiscalYear_(pkRaw);
   let s = String(pkRaw);
   if (s.indexOf('manual_') === 0) {
     let epoch = Number(s.replace('manual_', ''));
-    return getFiscalYear(isFinite(epoch) ? new Date(epoch) : new Date(NaN));
+    return getFiscalYear_(isFinite(epoch) ? new Date(epoch) : new Date(NaN));
   }
-  return getFiscalYear(s);
+  return getFiscalYear_(s);
 }
 
 // 年間利用回数の集計キー。メール正規化（大小文字・前後空白を無視）+ 案件PKの年度で構成する。
@@ -1417,7 +1423,13 @@ function getChatLinkMap_(timeZone) {
 // ======================================================================
 // データ結合取得
 // ======================================================================
-function getAllCasesJoined(perfOut) {
+/** 案件一覧（画面の再読込用・公開）。タダメンだけが呼べる */
+function getAllCasesJoined() {
+  getActor_();
+  return getAllCasesJoined_();
+}
+
+function getAllCasesJoined_(perfOut) {
   // v1.13.0: perfOut（任意）に区間ごとの処理時間を書き込む（getInitialData の _perf.casesDetail）
   let t0 = Date.now();
   let lap = function(name) { if (!perfOut) return; let now = Date.now(); perfOut[name] = now - t0; t0 = now; };
@@ -1858,16 +1870,16 @@ function ensureAttachmentSchema_() {
     // v1.14.0: 移行全体を1つの書込として包む（完成品の世代更新を最後に1回だけにする）
     runWrite_(function() {
       ensureAdminSchema_();
-      addForcedCcSetting();
-      addMailDryRunSetting();
-      addUsageLimitSettings();
-      addAttachmentFolderSetting();
-      addAttachmentsColumnToRecords();
-      addCaseLimitOverrideColumnsToRecords();
-      addToolsColumnToRecords();
-      addSubStaffColumnToRecords();
+      addForcedCcSettingImpl_();
+      addMailDryRunSettingImpl_();
+      addUsageLimitSettingsImpl_();
+      addAttachmentFolderSettingImpl_();
+      addAttachmentsColumnToRecordsImpl_();
+      addCaseLimitOverrideColumnsToRecordsImpl_();
+      addToolsColumnToRecordsImpl_();
+      addSubStaffColumnToRecordsImpl_();
       addMissingEmailSettings_();
-      addScheduleZoomSettings();  // v1.11.7: 日程・Zoom予約関連の設定キー追加
+      addScheduleZoomSettingsImpl_();  // v1.11.7: 日程・Zoom予約関連の設定キー追加
     }, []);
   } catch (e) {
     throw new Error('添付機能の初期化に失敗しました。管理者に連絡してください。詳細: ' + e.message);
@@ -2201,6 +2213,7 @@ function sendInThread_(to, subject, body, threadId, inReplyTo, optionalCc, optio
  * 送信先は .invalid ドメインを使用する。
  */
 function verifyCcDryRun() {
+  requireAdmin_();
   if (!isMailDryRun_()) {
     throw new Error('MAIL_DRY_RUN が有効ではありません。テスト時のみ true にしてください。');
   }
@@ -2563,7 +2576,7 @@ function getZoomAccessToken_(forceRefresh) {
   throw new Error('Zoom認証エラー: ' + (result.reason || ('HTTP ' + response.getResponseCode())));
 }
 
-function createZoomMeeting(title, startTime, durationMinutes) {
+function createZoomMeeting_(title, startTime, durationMinutes) {
   let startISO = Utilities.formatDate(new Date(startTime), 'Asia/Tokyo', "yyyy-MM-dd'T'HH:mm:ss");
   let post = function(token) {
     return UrlFetchApp.fetch('https://api.zoom.us/v2/users/me/meetings', {
@@ -2594,7 +2607,7 @@ function createZoomMeeting(title, startTime, durationMinutes) {
  * Calendar Advanced Service (Events.insert) でイベントと Meet を同時作成する。
  * conferenceDataVersion: 1 を指定することで、Google Meet が自動発行される。
  */
-function createGoogleMeetEvent(title, startTime, description, durationMinutes) {
+function createGoogleMeetEvent_(title, startTime, description, durationMinutes) {
   let start = new Date(startTime);
   let dur = (durationMinutes && Number(durationMinutes) > 0) ? Number(durationMinutes) : 60;
   let end = new Date(start.getTime() + dur * 60 * 1000);
@@ -2698,6 +2711,7 @@ function computeBufferedWindow_(start, durationMin, bufferMin) {
  * @returns {{events: Array, settings: {bufferMin: number, teamCalendarId: string, displayCalendars: Array}}}
  */
 function getScheduleAvailability(rangeStartIso, rangeEndIso) {
+  getActor_();
   ensureAdminSchema_();
   let start = rangeStartIso ? new Date(rangeStartIso) : new Date();
   let end = rangeEndIso ? new Date(rangeEndIso) : new Date(start.getTime() + 30 * 24 * 3600 * 1000);
@@ -2756,6 +2770,7 @@ function getScheduleAvailability(rangeStartIso, rangeEndIso) {
  * @returns {{hasConflict: boolean, conflicts: Array, bufferMin: number}}
  */
 function checkScheduleConflict(startIso, durationMin, excludeEventId) {
+  getActor_();
   if (!startIso) throw new Error('開始日時が必要です。');
   let bufferMin = getScheduleBufferMin_();
   let win = computeBufferedWindow_(new Date(startIso), durationMin, bufferMin);
@@ -3039,7 +3054,7 @@ function updateSupportRecordImpl_(recordData) {
       } else {
         // 新規発行: 既存ロジック維持
         try {
-          let zoomResult = createZoomMeeting(eventTitle, recordData.scheduledDateTime, zDur);
+          let zoomResult = createZoomMeeting_(eventTitle, recordData.scheduledDateTime, zDur);
           newMeetUrl = zoomResult.joinUrl;
         } catch(e) { console.error('Zoom会議作成エラー（カレンダーのみ作成します）: ' + e.message); }
         var zoomLeadingDesc = newMeetUrl ? 'Zoom URL: ' + newMeetUrl + '\n\n' : '';
@@ -3083,7 +3098,7 @@ function updateSupportRecordImpl_(recordData) {
       }
     } else if (recordData.method === 'GoogleMeet' && !recordData.skipCalendar) {
       try {
-        let meetResult = createGoogleMeetEvent(eventTitle, recordData.scheduledDateTime, recordData.details, recordData.duration);
+        let meetResult = createGoogleMeetEvent_(eventTitle, recordData.scheduledDateTime, recordData.details, recordData.duration);
         newEventId = meetResult.eventId;
         newMeetUrl = meetResult.meetUrl;
       } catch(e) { console.error('Google Meet作成エラー: ' + e.message); }
@@ -3187,7 +3202,7 @@ function updateSupportRecordImpl_(recordData) {
 // ======================================================================
 // マスタデータ
 // ======================================================================
-function getStaffByEmail(email) {
+function getStaffByEmail_(email) {
   let normalized = normalizeEmail_(email);
   let data = getStaffRows_(); // v1.13.0: 1実行1回の読込
 
@@ -3201,7 +3216,7 @@ function getStaffByEmail(email) {
   return null;
 }
 
-function getMasters() {
+function getMasters_() {
   let zoomEnabled = !!getSetting_('ZOOM_ACCOUNT_ID');
   let zoomFixedConfigured = !!getSetting_('ZOOM_FIXED_URL'); // v1.12.0: 固定ID使用可能フラグ
   let attachmentFolderConfigured = !!getSetting_('ATTACHMENT_FOLDER_ID');
@@ -3658,7 +3673,7 @@ function reassignCaseAdminImpl_(caseId, staffEmail) {
 
   let targetStaff = null;
   if (!isUnassign) {
-    targetStaff = getStaffByEmail(targetEmail);
+    targetStaff = getStaffByEmail_(targetEmail);
     if (!targetStaff) throw new Error('対象スタッフが見つかりません。');
   }
 
@@ -3744,7 +3759,7 @@ function reassignCaseAdminImpl_(caseId, staffEmail) {
  * 書式も他の行に合わせて整える。
  * GASエディタからこの関数を手動実行してください。
  */
-function fixSettingsSheet() { return runWrite_(fixSettingsSheetImpl_, arguments); }
+function fixSettingsSheet() { return runAdminWrite_(fixSettingsSheetImpl_, arguments); }
 function fixSettingsSheetImpl_() {
   let ss = getSpreadsheet_();
   let sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
@@ -3935,7 +3950,7 @@ function setAnnualUsageCountAdminImpl_(caseId, desiredCount) {
 
   let ss = getSpreadsheet_();
   // 対象案件の email + 年度 を、表示と同じ結合ロジックから解決する
-  let joined = getAllCasesJoined();
+  let joined = getAllCasesJoined_();
   let target = null;
   for (let i = 0; i < joined.length; i++) {
     if (String(joined[i].id) === String(caseId)) { target = joined[i]; break; }
@@ -4716,7 +4731,7 @@ function updateCaseDataAdminImpl_(caseId, payload) {
     // staffEmail: 遷移以外の単純な担当者変更
     if (Object.prototype.hasOwnProperty.call(recordPatch, 'staffEmail')) {
       let targetEmail = normalizeEmail_(recordPatch.staffEmail);
-      let staff = targetEmail ? getStaffByEmail(targetEmail) : null;
+      let staff = targetEmail ? getStaffByEmail_(targetEmail) : null;
       if (targetEmail && !staff) throw new Error('存在しないスタッフです: ' + targetEmail);
       recordSheet.getRange(recordRowIndex, IDX.RECORDS.STAFF_EMAIL + 1).setValue(targetEmail);
       if (!Object.prototype.hasOwnProperty.call(recordPatch, 'staffName')) {
@@ -4950,7 +4965,7 @@ function setupSettingsSheetImpl_() {
  * 初回 setupSettingsSheet 実行後に本機能が追加された場合に使用。
  * GASエディタからこの関数を実行してください。
  */
-function addEmailTemplates() { return runWrite_(addEmailTemplatesImpl_, arguments); }
+function addEmailTemplates() { return runAdminWrite_(addEmailTemplatesImpl_, arguments); }
 function addEmailTemplatesImpl_() {
   let ss = getSpreadsheet_();
   let sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
@@ -5019,7 +5034,7 @@ function addEmailTemplatesImpl_() {
  * 既存の設定シートに MAIL_FORCE_CC 行を追加するヘルパー。
  * 既に存在する場合はスキップする。
  */
-function addForcedCcSetting() { return runWrite_(addForcedCcSettingImpl_, arguments); }
+function addForcedCcSetting() { return runAdminWrite_(addForcedCcSettingImpl_, arguments); }
 function addForcedCcSettingImpl_() {
   let ss = getSpreadsheet_();
   let sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
@@ -5080,7 +5095,7 @@ function addForcedCcSettingImpl_() {
  * 既存の設定シートに MAIL_DRY_RUN 行を追加するヘルパー。
  * 既に存在する場合はスキップする。
  */
-function addMailDryRunSetting() { return runWrite_(addMailDryRunSettingImpl_, arguments); }
+function addMailDryRunSetting() { return runAdminWrite_(addMailDryRunSettingImpl_, arguments); }
 function addMailDryRunSettingImpl_() {
   let ss = getSpreadsheet_();
   let sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
@@ -5133,7 +5148,7 @@ function addMailDryRunSettingImpl_() {
   Logger.log('MAIL_DRY_RUN の設定行を追加しました。');
 }
 
-function addUsageLimitSettings() { return runWrite_(addUsageLimitSettingsImpl_, arguments); }
+function addUsageLimitSettings() { return runAdminWrite_(addUsageLimitSettingsImpl_, arguments); }
 function addUsageLimitSettingsImpl_() {
   let ss = getSpreadsheet_();
   let sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
@@ -5201,7 +5216,7 @@ function addUsageLimitSettingsImpl_() {
   }
 }
 
-function addAttachmentFolderSetting() { return runWrite_(addAttachmentFolderSettingImpl_, arguments); }
+function addAttachmentFolderSetting() { return runAdminWrite_(addAttachmentFolderSettingImpl_, arguments); }
 function addAttachmentFolderSettingImpl_() {
   let ss = getSpreadsheet_();
   let sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
@@ -5252,7 +5267,7 @@ function addAttachmentFolderSettingImpl_() {
  * サポート記録シートに ATTACHMENTS 列（O列）を追加する。
  * 既に存在する場合はスキップ。
  */
-function addAttachmentsColumnToRecords() { return runWrite_(addAttachmentsColumnToRecordsImpl_, arguments); }
+function addAttachmentsColumnToRecords() { return runAdminWrite_(addAttachmentsColumnToRecordsImpl_, arguments); }
 function addAttachmentsColumnToRecordsImpl_() {
   let ss = getSpreadsheet_();
   let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
@@ -5306,7 +5321,7 @@ function addAttachmentsColumnToRecordsImpl_() {
  * 1) 設定シートへ ATTACHMENT_FOLDER_ID を追加
  * 2) サポート記録へ ATTACHMENTS 列を追加
  */
-function addCaseLimitOverrideColumnsToRecords() { return runWrite_(addCaseLimitOverrideColumnsToRecordsImpl_, arguments); }
+function addCaseLimitOverrideColumnsToRecords() { return runAdminWrite_(addCaseLimitOverrideColumnsToRecordsImpl_, arguments); }
 function addCaseLimitOverrideColumnsToRecordsImpl_() {
   let ss = getSpreadsheet_();
   let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
@@ -5331,7 +5346,7 @@ function addCaseLimitOverrideColumnsToRecordsImpl_() {
  * サポート記録シートに TOOLS 列（R列 = 18列目）を追加する。
  * 既に存在する場合はスキップする。
  */
-function addToolsColumnToRecords() { return runWrite_(addToolsColumnToRecordsImpl_, arguments); }
+function addToolsColumnToRecords() { return runAdminWrite_(addToolsColumnToRecordsImpl_, arguments); }
 function addToolsColumnToRecordsImpl_() {
   let ss = getSpreadsheet_();
   let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
@@ -5348,7 +5363,7 @@ function addToolsColumnToRecordsImpl_() {
   }
 }
 
-function addSubStaffColumnToRecords() { return runWrite_(addSubStaffColumnToRecordsImpl_, arguments); }
+function addSubStaffColumnToRecords() { return runAdminWrite_(addSubStaffColumnToRecordsImpl_, arguments); }
 function addSubStaffColumnToRecordsImpl_() {
   let ss = getSpreadsheet_();
   let sheet = ss.getSheetByName(SHEET_NAMES.RECORDS);
@@ -5365,15 +5380,15 @@ function addSubStaffColumnToRecordsImpl_() {
   }
 }
 
-function setupAttachmentFeatureSchema() { return runWrite_(setupAttachmentFeatureSchemaImpl_, arguments); }
+function setupAttachmentFeatureSchema() { return runAdminWrite_(setupAttachmentFeatureSchemaImpl_, arguments); }
 function setupAttachmentFeatureSchemaImpl_() {
   ensureAdminSchema_();
-  addForcedCcSetting();
-  addMailDryRunSetting();
-  addUsageLimitSettings();
-  addAttachmentFolderSetting();
-  addAttachmentsColumnToRecords();
-  addCaseLimitOverrideColumnsToRecords();
+  addForcedCcSettingImpl_();
+  addMailDryRunSettingImpl_();
+  addUsageLimitSettingsImpl_();
+  addAttachmentFolderSettingImpl_();
+  addAttachmentsColumnToRecordsImpl_();
+  addCaseLimitOverrideColumnsToRecordsImpl_();
   Logger.log('添付機能向けスキーマ整備が完了しました。');
 }
 
@@ -5612,7 +5627,7 @@ function listScheduledCaseIdsForUser_(userEmail) {
  * 既存の未送信予約を disabled にする。メール送信・案件更新は行わない。
  * 本番反映後に手動実行できるほか、残存トリガーから呼ばれても安全。
  */
-function disablePendingScheduledEmails() { return runWrite_(disablePendingScheduledEmailsImpl_, arguments); }
+function disablePendingScheduledEmails() { return runAdminWrite_(disablePendingScheduledEmailsImpl_, arguments); }
 function disablePendingScheduledEmailsImpl_() {
   return disablePendingScheduledEmails_();
 }
@@ -5655,7 +5670,7 @@ function sendScheduledRow_(s) {
  * GASエディタからこの関数を1回だけ手動実行してください。
  * 既に存在するキーはスキップされます。
  */
-function addScheduleZoomSettings() { return runWrite_(addScheduleZoomSettingsImpl_, arguments); }
+function addScheduleZoomSettings() { return runAdminWrite_(addScheduleZoomSettingsImpl_, arguments); }
 function addScheduleZoomSettingsImpl_() {
   let ss = getSpreadsheet_();
   let sheet = ss.getSheetByName(SHEET_NAMES.SETTINGS);
@@ -5737,12 +5752,18 @@ function addScheduleZoomSettingsImpl_() {
  * 旧予約送信トリガーを削除する。v1.12.1以降、新規作成はしない。
  */
 function setupScheduledEmailTrigger() {
-  removeScheduledEmailTrigger();
+  requireAdmin_();
+  removeScheduledEmailTrigger_();
   Logger.log('予約送信機能は廃止済みです。既存トリガーを削除しました。');
   return { active: false, disabled: true };
 }
 
 function removeScheduledEmailTrigger() {
+  requireAdmin_();
+  removeScheduledEmailTrigger_();
+}
+
+function removeScheduledEmailTrigger_() {
   let triggers = ScriptApp.getProjectTriggers();
   for (let i = 0; i < triggers.length; i++) {
     if (triggers[i].getHandlerFunction() === 'processScheduledEmails_') {
@@ -5755,6 +5776,7 @@ function removeScheduledEmailTrigger() {
  * 予約送信トリガーの稼働状態を確認する（管理者UI用）。
  */
 function getScheduledEmailTriggerStatus() {
+  requireAdmin_();
   let triggers = ScriptApp.getProjectTriggers();
   for (let i = 0; i < triggers.length; i++) {
     if (triggers[i].getHandlerFunction() === 'processScheduledEmails_') {

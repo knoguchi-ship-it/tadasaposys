@@ -589,7 +589,7 @@ clasp push --force   <span class="cmt"># --force 必須（なしだとサイレ�
     <div class="phase">
       <div class="phase-head"><div class="phase-badge">5</div><div><div class="phase-title">初期セットアップ関数の実行</div><div class="phase-meta">設定シートとテンプレートを生成</div></div></div>
       <div class="phase-body">
-        <p>GAS エディタの実行ボタンから順に実行（RUNBOOK §1-4）:</p>
+        <p>GAS エディタの実行ボタンから順に実行（RUNBOOK §1-4）。タダメンマスタに admin で登録した管理者のアカウントで実行する（v1.14.0〜 <code>setupSettingsSheet</code> 以外は管理者確認あり）:</p>
         <pre><code>setupSettingsSheet()         <span class="cmt">// 「設定」シート作成</span>
 addEmailTemplates()          <span class="cmt">// メールテンプレート</span>
 addForcedCcSetting()         <span class="cmt">// MAIL_FORCE_CC</span>
@@ -620,7 +620,7 @@ npx serve -s . -l 3000   <span class="cmt"># → http://localhost:3000</span>
     <div class="phase">
       <div class="phase-head"><div class="phase-badge">7</div><div><div class="phase-title">テスト走行</div><div class="phase-meta">純粋関数の単体 + ブラウザ E2E</div></div></div>
       <div class="phase-body">
-        <pre><code>npm run test:unit   <span class="cmt"># Jest 単体（getFiscalYear / sanitizeForSheet_ 等の純粋関数）</span>
+        <pre><code>npm run test:unit   <span class="cmt"># Jest 単体（getFiscalYear_ / sanitizeForSheet_ 等の純粋関数）</span>
 npm test            <span class="cmt"># Playwright E2E（01-app-load 〜 07-a11y）</span></code></pre>
         <p>導入・実行の詳細は <code>docs/playwright-guide.html</code>、品質基準は <code>docs/test-criteria.html</code>。アクセシビリティは axe-core で WCAG 2.1 AA を確認。</p>
       </div>

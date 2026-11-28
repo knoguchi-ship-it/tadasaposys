@@ -2,16 +2,16 @@
 
 **Project:** タダサポ管理システム
 **Version:** 1.14.0（本番未反映。本番は v1.12.13 @159）
-**Date:** 2026/11/27
+**Date:** 2026/11/28
 **Author:** Development Team
 
 ---
 
 ## 📌 次の担当者へ（最初にこの節だけ読めば現状が掴めます）
 
-> **現在地:** v1.14.0 / 本番 @159（v1.12.13） / 単体 180件 / E2E 75件
+> **現在地:** v1.14.0 / 本番 @159（v1.12.13） / 単体 184件 / E2E 75件
 >
-> 版・本番デプロイ番号・テスト件数は**この1行だけ**に書く（本文に書き写さない。AI_RULES.md グランドルール6）。`npm run check` がこの行を package.json・実テスト・§1・§8 と照合する。最終確認 2026/11/25（単体・E2E 全合格、`npm run check` エラー0）。
+> 版・本番デプロイ番号・テスト件数は**この1行だけ**に書く（本文に書き写さない。AI_RULES.md グランドルール6）。`npm run check` がこの行を package.json・実テスト・§1・§8 と照合する。最終確認 2026/11/28（単体・E2E 全合格、`npm run check` エラー0）。
 > ⚠️ デプロイ直後の運用確認として、GAS デプロイ管理画面で Webapp 設定（実行＝アクセスしているユーザー／アクセス＝NPO法人タダカヨ内の全員）をブラウザで目視確認すること（CLIでは確認不可）。
 
 > **2026/10/10 追記: v1.12.13（申込通知チャットへのリンク）を本番 @159 にデプロイ済み（固定 deploymentId / URL 不変）。** bot 側も反映済み（2026/10/10: CHAT_WEBHOOK_URL 設定・コード push・bot 担当メンバーのアカウントでトリガー新規作成）。タダサポのスプシの「チャット連携」シートと IMPORTRANGE も設定済み。**実申込で、通知が1回だけ届くこと・リンクが表示されスレッドが開くことを確認済み**（2026/10/10）。旧トリガーにも権限があり、切替時に通知が二重化したため、bot に重複防止を追加済み。**残り: 旧トリガー（別メンバー作成）の削除のみ**（重複防止があるため急ぎではない）。
@@ -28,9 +28,12 @@ keepWarm（DB の温め）では効果が薄かったため、画面を開くた
 |---|---|
 | ブランチ | `feat/v1.14.0-snapshot`（`feat/v1.13.0-perf-security` の上。ローカルのみ・未 push） |
 | 実装 | 完成品の保存・読出し・世代番号による無効化（書込を行う公開関数 39個を `runWrite_` で包む）・`keepWarm` を完成品の作り直しに変更・「最新に更新」ボタン・下書きバッジの遅延取得（`getMyDraftCaseIds`）・Sheets API 一括読込（`SNAPSHOT_READ_MODE=sheetsApi`、既定オフ）・診断 `diagnoseSheetsApiRead`（`perfProbeSheetsApi` を置き換え） |
+| 権限確認の是正（2026/11/28） | 権限確認の無い公開関数が約25個あったのを是正（SDD SEC-01b）。内部専用5関数を非公開化（`getStaffByEmail_` 等）、画面から呼ぶ `getAllCasesJoined`・`getScheduleAvailability`・`checkScheduleConflict` にタダメン確認、GAS エディタで実行する保守用関数に管理者確認（`runAdminWrite_`）。検査は `tests/unit/public-auth-guard.test.js` |
 | テスト | ローカルの単体・E2E は合格（冒頭の現在地）。**GAS 実機では未検証** |
+| 完成品の作り直しトリガー（`keepWarm`） | **使う（2026/11/28 利用者判断：冷えた状態からの起動が重いため）**。2026/11/27 に一度停止したため、管理者アカウントで `setupKeepWarmTrigger()` を実行して再設定する（未実施） |
 
 **次にやること（順番）**
+0. 管理者アカウントで GAS エディタから `setupKeepWarmTrigger()` を実行し、`keepWarm` トリガー（5分ごと）を再設定する
 1. **（2026/11/27 済）テスト用デプロイを @165（v1.14.0 8a16b18）に更新。** 実機確認（`clasp push` / `clasp deploy -i <テスト用ID>` はユーザー確認のうえ）。見ること: ①2回目以降の起動で `[perf] initial data` の `server.ms` が `snapshotRead` と `auth` だけ（`rebuild` が無い）こと、②担当などの書込後に別タブで開くと反映されていること、③「最新に更新」、④実行ログの `keepWarm` の `detail`（`saved.chunks`・`discarded`）
 2. 管理者アカウントで `diagnoseSheetsApiRead()` を数回実行し、`ok: true` なら `SNAPSHOT_READ_MODE=sheetsApi` に切り替えて `keepWarm` の `detail.read` を比べる（RUNBOOK §1-4-3）
 3. 検証が済んだら v1.13.0 と合わせて PR → テスト用デプロイを `clasp undeploy` → デプロイ担当へ依頼
@@ -45,12 +48,12 @@ keepWarm（DB の温め）では効果が薄かったため、画面を開くた
 
 | 項目 | 状態 |
 |---|---|
-| ブランチ | `feat/v1.13.0-perf-security`。**GitHub に未 push のコミットあり**（`46ec883` 以降。`git log origin/feat/v1.13.0-perf-security..HEAD` で確認）。push 後に PR の説明を更新する |
+| ブランチ | `feat/v1.13.0-perf-security`。GitHub に push 済み（2026/11/28 確認・origin との差なし）。PR #5（マージ先は PR #4 の `chore/g3-rules-hooks`）。PR の説明は v1.13.0 の最終内容に合わせて更新する |
 | GAS の HEAD | `f22c8fd` のビルド（`dist/`）を push 済み。手元の `.clasp.json` は `rootDir: "dist"` |
 | テスト用デプロイ | **@164**（説明欄「【テスト・本番ではない】v1.13.0 1b20c70 / 本番は @159（v1.12.13）」）。`clasp list-deployments` で確認できる。ID は作業者の手元の `.clasp.deploy.json` の `test`。**検証が終わったら `clasp undeploy <テスト用ID>` で削除する**。PR マージまで GAS エディタから「新しいバージョン」でデプロイしない（HEAD が未マージの v1.13.0 のため） |
 | スクリプトプロパティ | `SPREADSHEET_ID` 設定済み（v1.13.0 は URL を貼っても動く）。`SCHEMA_VERSION_APPLIED` はアプリが自動で書く |
 | 高度なサービス | **Sheets API v4 を GAS エディタから追加済み**（手元の `appsscript.json` にも反映済み） |
-| DB の温めトリガー | **削除済み（2026/11/27・利用者が停止）**。v1.14.0 では `keepWarm` は完成品の5分ごとの作り直しを担う。止めている間は、完成品の期限切れ（既定10分）後に最初に開いた人が作り直しを待ち、フォーム申込の反映は期限切れ・書込・「最新に更新」のいずれかまで遅れる。再開は管理者アカウントで `setupKeepWarmTrigger()` |
+| DB の温めトリガー | 2026/11/27 に利用者が一度停止 → **2026/11/28 に使うと決定**（v1.14.0 の進行中の表を参照。再設定は未実施）。v1.14.0 では `keepWarm` は完成品の5分ごとの作り直しを担う。止めている間は、完成品の期限切れ（既定10分）後に最初に開いた人が作り直しを待ち、フォーム申込の反映は期限切れ・書込・「最新に更新」のいずれかまで遅れる。再開は管理者アカウントで `setupKeepWarmTrigger()` |
 | タダメンマスタの空行 | **削除済み（2026/11/27）**。本番反映時の手順 7-3 は確認だけでよい |
 | 本番 | **@159（v1.12.13）のまま**。毎回 `clasp list-deployments` で確認済み |
 
@@ -351,8 +354,8 @@ inProgress/completed → cancelled
 | `sendNewCaseEmail(...)` | 新規スレッドメール送信 |
 | `sendCaseEmail(...)` | スレッド返信 |
 | `getThreadMessages(caseId)` | スレッドグループ取得 |
-| `getMasters()` | マスタデータ取得 |
-| `getStaffByEmail(email)` | スタッフ情報取得 |
+| `getMasters_()` | マスタデータ取得（内部専用・v1.14.0 で非公開化） |
+| `getStaffByEmail_(email)` | スタッフ情報取得（内部専用・v1.14.0 で非公開化） |
 | `getAdminPanelData()` | 管理パネル初期データ |
 | `upsertStaffMember(payload)` | 既存スタッフの権限更新 |
 | `deactivateStaffMember(email)` | スタッフ無効化 |
@@ -365,9 +368,9 @@ inProgress/completed → cancelled
 | `updateMeetUrl(caseId, newUrl)` | Meet/Zoom URL変更＋カレンダー同期 |
 | `updateSupportHistory(caseId, roundIndex, patch)` | 過去対応記録の編集 |
 | `deleteCaseAdmin(caseId)` | 管理者による案件削除 |
-| `createGoogleMeetEvent(...)` | Google Meetイベント作成 |
-| `createZoomMeeting(...)` | Zoomミーティング作成 |
-| `verifyCcDryRun()` | CC設定のドライラン検証 |
+| `createGoogleMeetEvent_(...)` | Google Meetイベント作成（内部専用・v1.14.0 で非公開化） |
+| `createZoomMeeting_(...)` | Zoomミーティング作成（内部専用・v1.14.0 で非公開化） |
+| `verifyCcDryRun()` | CC設定のドライラン検証（管理者のみ） |
 | `saveDraft / loadDraft / deleteDraft / listDraftsForCase` | メール下書き管理（v1.11.0） |
 | `scheduleEmail / cancelScheduledEmail / listScheduledForCase` | v1.12.1で廃止。新規予約登録・一覧表示は行わない |
 | `processScheduledEmails_()` | 旧トリガー互換。送信せず未送信予約を `disabled` 化 |
@@ -464,7 +467,7 @@ npm run test:report
 
 E2E は既定で `dist/`（本番ビルド）を検証する。原本を検証するときは `E2E_TARGET=src npm test`。
 
-> **モック整備（T1）**: ローカル/E2E で Zoom 機能を再現するため、`index.html` の `MOCK_MASTERS.methods` に `Zoom` を追加（本番 `getMasters` の `zoomEnabled` 時と同形状＝index1 に挿入）。モックは `IS_LOCAL` 専用で本番挙動に影響なし。
+> **モック整備（T1）**: ローカル/E2E で Zoom 機能を再現するため、`index.html` の `MOCK_MASTERS.methods` に `Zoom` を追加（本番 `getMasters_` の `zoomEnabled` 時と同形状＝index1 に挿入）。モックは `IS_LOCAL` 専用で本番挙動に影響なし。
 
 詳細: `docs/playwright-guide.html`
 
@@ -474,7 +477,7 @@ E2E は既定で `dist/`（本番ビルド）を検証する。原本を検証�
 npm run test:unit  # 件数は冒頭の現在地 / 約1秒
 ```
 
-対象: `getFiscalYear` / `sanitizeForSheet_` / `parseNullablePositiveInteger_` / `normalizeEmail_` / `parseBoolean_` 等の純粋関数（`business-logic.test.js`）と、同期チェックの検査ロジック（`check-sync.test.js`）、PreToolUse フックの判定（`guard.test.js`）、本番ビルドとデプロイ事前検査（`build-deploy.test.js`）。件数照合のため `test.each` は使わず1件ずつ `test()` で書く
+対象: `getFiscalYear_` / `sanitizeForSheet_` / `parseNullablePositiveInteger_` / `normalizeEmail_` / `parseBoolean_` 等の純粋関数（`business-logic.test.js`）と、同期チェックの検査ロジック（`check-sync.test.js`）、PreToolUse フックの判定（`guard.test.js`）、本番ビルドとデプロイ事前検査（`build-deploy.test.js`）。件数照合のため `test.each` は使わず1件ずつ `test()` で書く
 
 ### ドキュメント同期チェック
 

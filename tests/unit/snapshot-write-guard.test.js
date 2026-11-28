@@ -5,6 +5,7 @@
  * 書込を行う公開関数が runWrite_ で包まれていないと、書込が次の起動に反映されない（最大10分遅れる）。
  * そこで コード.js の公開関数（名前が _ で終わらない関数）をすべて
  *   ・書込: `function X() { return runWrite_(XImpl_, arguments); }` の形
+ *     （GAS エディタから実行する管理者用の保守関数は runAdminWrite_。管理者確認のうえ runWrite_ を通る）
  *   ・読むだけ（完成品に影響しない）: 下の READ_ONLY に理由つきで登録
  * のどちらかに分類させる。公開関数を追加したら、どちらかにすること。
  */
@@ -21,16 +22,11 @@ const READ_ONLY = {
   removeKeepWarmTrigger: 'トリガーの削除のみ',
   getInitialData: '完成品を配る側',
   getMyDraftCaseIds: '読むだけ',
-  getFiscalYear: '計算のみ',
   getAllCasesJoined: '読むだけ',
   verifyCcDryRun: '設定の確認のみ',
   getThreadMessages: 'Gmail を読むだけ',
-  createZoomMeeting: 'Zoom の会議作成のみ（シートへの記録は updateSupportRecord 等が行う）',
-  createGoogleMeetEvent: 'カレンダー作成のみ（シートへの記録は updateSupportRecord 等が行う）',
   getScheduleAvailability: '読むだけ（ensureAdminSchema_ の補完は既定値と同じ意味）',
   checkScheduleConflict: '読むだけ',
-  getStaffByEmail: '読むだけ',
-  getMasters: '読むだけ',
   getAdminPanelData: '読むだけ（ensureAdminSchema_ の補完は既定値と同じ意味）',
   saveDraft: '下書きは完成品に含めない',
   loadDraft: '下書きは完成品に含めない',
@@ -51,15 +47,16 @@ describe('書込を行う公開関数は runWrite_ で包む（完成品の世�
   test('公開関数はすべて「書込（runWrite_ で包む）」か「読むだけ（READ_ONLY）」に分類されている', () => {
     const unclassified = publicFns.filter((f) => {
       if (Object.prototype.hasOwnProperty.call(READ_ONLY, f.name)) return false;
-      const wrapper = 'return runWrite_(' + f.name + 'Impl_, arguments); }';
-      return f.firstLine.trim() !== wrapper;
+      const line = f.firstLine.trim();
+      return line !== 'return runWrite_(' + f.name + 'Impl_, arguments); }'
+        && line !== 'return runAdminWrite_(' + f.name + 'Impl_, arguments); }';
     }).map((f) => f.name);
     expect(unclassified).toEqual([]);
   });
 
   test('包んだ公開関数の本体（XImpl_）が存在する', () => {
     const missing = publicFns
-      .filter((f) => f.firstLine.includes('runWrite_('))
+      .filter((f) => /run(Admin)?Write_\(/.test(f.firstLine))
       .map((f) => f.name + 'Impl_')
       .filter((impl) => !names.has(impl));
     expect(missing).toEqual([]);

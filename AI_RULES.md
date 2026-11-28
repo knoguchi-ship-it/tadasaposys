@@ -229,6 +229,7 @@ Webapp 設定は **`executeAs: USER_ACCESSING` / `access: DOMAIN` 固定**。ア
 - 導入済み: `npm run check` が本番識別子の形式と、ローカルの `.clasp.json`・`.clasp.deploy.json`・`.private-terms.local.txt`（個人名など1行1語。Git 対象外）に書かれた実値の混入を検出する（移行中は警告、`--strict` でエラー）
 - 導入済み: 上記はコミット前検査（pre-commit）でも実行される（移行中は警告のみ）
 - 導入済み: `SPREADSHEET_ID` と秘密情報はスクリプトプロパティ（ADR-014）。秘密情報は書込専用（管理画面・監査ログに値を出さない）
+- 導入済み: 単体テスト `tests/unit/public-auth-guard.test.js`（v1.14.0・SDD SEC-01b）。`コード.js` の公開関数（画面から誰でも呼べる）が、すべてタダメン確認（`getActor_`）か管理者確認（`requireAdmin_`・`runAdminWrite_`）を行うか、理由つきの例外であることを検査する。内部専用の関数は名前を `_` で終えて公開しない
 - 導入予定: 残存ゼロを確認したら pre-commit・CI を `--strict` にする（v1.13.0 でコード上の残存は解消。過去のコミット履歴には残る）
 
 ### 4. 実装品質

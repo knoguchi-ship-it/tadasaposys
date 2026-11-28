@@ -6,7 +6,7 @@
 'use strict';
 
 const {
-  getFiscalYear,
+  getFiscalYear_,
   caseFiscalYear,
   annualUsageKey,
   effectiveAnnualCount,
@@ -38,45 +38,45 @@ const {
 } = require('./src/pure-functions');
 
 // ============================================================
-// getFiscalYear — 年度計算（4月始まり）
+// getFiscalYear_ — 年度計算（4月始まり）
 // ============================================================
-describe('getFiscalYear', () => {
+describe('getFiscalYear_', () => {
   test('4月は同年度の開始', () => {
-    expect(getFiscalYear(new Date('2025-04-01'))).toBe(2025);
-    expect(getFiscalYear(new Date('2026-04-01'))).toBe(2026);
+    expect(getFiscalYear_(new Date('2025-04-01'))).toBe(2025);
+    expect(getFiscalYear_(new Date('2026-04-01'))).toBe(2026);
   });
 
   test('3月は前年度の末', () => {
-    expect(getFiscalYear(new Date('2026-03-31'))).toBe(2025);
-    expect(getFiscalYear(new Date('2025-03-01'))).toBe(2024);
+    expect(getFiscalYear_(new Date('2026-03-31'))).toBe(2025);
+    expect(getFiscalYear_(new Date('2025-03-01'))).toBe(2024);
   });
 
   test('年度境界: 3月末 → 4月始め', () => {
-    expect(getFiscalYear(new Date('2026-03-31'))).toBe(2025);
-    expect(getFiscalYear(new Date('2026-04-01'))).toBe(2026);
+    expect(getFiscalYear_(new Date('2026-03-31'))).toBe(2025);
+    expect(getFiscalYear_(new Date('2026-04-01'))).toBe(2026);
   });
 
   test('1月・2月は前年度', () => {
-    expect(getFiscalYear(new Date('2026-01-01'))).toBe(2025);
-    expect(getFiscalYear(new Date('2026-02-28'))).toBe(2025);
+    expect(getFiscalYear_(new Date('2026-01-01'))).toBe(2025);
+    expect(getFiscalYear_(new Date('2026-02-28'))).toBe(2025);
   });
 
   test('12月は同年度', () => {
-    expect(getFiscalYear(new Date('2025-12-31'))).toBe(2025);
+    expect(getFiscalYear_(new Date('2025-12-31'))).toBe(2025);
   });
 
   test('文字列形式の日付も受け付ける', () => {
-    expect(getFiscalYear('2025-04-01T00:00:00')).toBe(2025);
+    expect(getFiscalYear_('2025-04-01T00:00:00')).toBe(2025);
   });
 
   test('パース不能な文字列は 0 を返す', () => {
-    expect(getFiscalYear('invalid')).toBe(0);
-    expect(getFiscalYear('not-a-date')).toBe(0);
+    expect(getFiscalYear_('invalid')).toBe(0);
+    expect(getFiscalYear_('not-a-date')).toBe(0);
   });
 
   test('null は new Date(null) = エポック(1970/1) として扱われ FY1969 を返す', () => {
     // new Date(null) は epoch(0) = 1970-01-01 → 1月は < 3 → FY = 1969
-    expect(getFiscalYear(null)).toBe(1969);
+    expect(getFiscalYear_(null)).toBe(1969);
   });
 });
 

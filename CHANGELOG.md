@@ -15,13 +15,17 @@
 - **「最新に更新」ボタン**（画面右上・「HH:MM 時点」表示）: 押すとその場で作り直して受け取る（`getInitialData(true)`）。
 - **下書きバッジの遅延取得**: 利用者ごとに違うため完成品から外し、画面表示後に `getMyDraftCaseIds()` で取る。
 - **Sheets API 一括読込（段階導入・既定オフ）**: スクリプトプロパティ `SNAPSHOT_READ_MODE=sheetsApi` で、作り直し時の読込を `values:batchGet`（日時判定用に2回並列）にする。失敗時は SpreadsheetApp に戻す。切替前に管理者が `diagnoseSheetsApiRead()` で全セル一致を確認する（計測用 `perfProbeSheetsApi` を置き換え）。
-- `getMasters().spreadsheetUrl` を ID から組み立てる（DB を開かない）。
+- `getMasters_().spreadsheetUrl` を ID から組み立てる（DB を開かない）。
+
+### Security
+- **公開関数のサーバー側権限確認（SDD SEC-01b）**: 画面の `google.script.run` から組織内の誰でも呼べる公開関数のうち、約25個が権限を確認していなかったのを是正。内部専用の `getStaffByEmail`・`getMasters`・`getFiscalYear`・`createZoomMeeting`・`createGoogleMeetEvent` は名前を `_` で終えて非公開化。画面から呼ぶ `getAllCasesJoined`・`getScheduleAvailability`・`checkScheduleConflict` にタダメン確認を追加。GAS エディタで実行する保守用関数（`add…Setting`・`fixSettingsSheet`・`setupAttachmentFeatureSchema`・`disablePendingScheduledEmails`・旧予約送信トリガー系・`verifyCcDryRun`）は管理者のみ実行可能（`runAdminWrite_`）。通常操作中の自動移行（`ensureAttachmentSchema_`）は本体（`…Impl_`）を直接呼ぶため、一般のタダメンの操作は止まらない。
 
 ### Fixed
 - 日程連絡メールの既定文面（`MAIL_SCHEDULE_BODY`）・設定シートの説明文（対応ツール一覧）・画面のコメントにあった文字化けを修正。
 
 ### Tests
 - 単体 +33（147→180）: `snapshot.test.js`（完成品の判定・分割・シリアル値→日時・一括読込の整形・全セル比較。コード.js から関数を直接取り出して検査）、`snapshot-flow.test.js`（GAS の各サービスを模した環境で コード.js ごと動かし、作り直し→DB を開かない配信→書込後の作り直し→「最新に更新」→一括読込で同じ案件→診断→非スタッフ拒否を検査。開発中に未定義関数の呼び出しを1件検出）、`snapshot-write-guard.test.js`（公開関数がすべて「書込＝runWrite_ で包む」か「読むだけ」に分類されているか）。`buildBatchGetUrl` の写しのテスト1件は直接検査へ統合。
+- 単体 +4（180→184）: `public-auth-guard.test.js`（公開関数がすべて権限確認を行うか理由つきの例外か・内部専用関数の非公開・保守用関数の包み方）。
 - E2E +3（72→75）: `14-snapshot-refresh.spec.ts`（時点表示・「最新に更新」・更新後も下書きバッジが残る）。
 
 ---
