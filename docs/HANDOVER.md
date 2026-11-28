@@ -34,7 +34,7 @@ keepWarm（DB の温め）では効果が薄かったため、画面を開くた
 | 完成品の作り直しトリガー（`keepWarm`） | **使う（2026/11/28 利用者判断：冷えた状態からの起動が重いため）**。2026/11/27 に一度停止したため、管理者アカウントで `setupKeepWarmTrigger()` を実行して再設定する（未実施） |
 
 **次にやること（順番）**
-0. 分割版をテスト用デプロイに反映（`npm run build` → `clasp push --force` → `clasp deploy -i <テスト用ID>`。ユーザー確認のうえ）。そのあと管理者アカウントで GAS エディタの `00_管理者メニュー` を開き `setupKeepWarmTrigger()` を実行し、`keepWarm` トリガー（5分ごと）を再設定する
+0. **（2026/11/28 済）分割版をテスト用デプロイ @166（v1.14.0 1bd73b1）に反映。GAS の HEAD も分割版。** 残り: 管理者アカウントで GAS エディタの `00_管理者メニュー` を開き `setupKeepWarmTrigger()` を実行し、`keepWarm` トリガー（5分ごと）を再設定する
 1. **（2026/11/27 済）テスト用デプロイを @165（v1.14.0 8a16b18）に更新。** 実機確認（`clasp push` / `clasp deploy -i <テスト用ID>` はユーザー確認のうえ）。見ること: ①2回目以降の起動で `[perf] initial data` の `server.ms` が `snapshotRead` と `auth` だけ（`rebuild` が無い）こと、②担当などの書込後に別タブで開くと反映されていること、③「最新に更新」、④実行ログの `keepWarm` の `detail`（`saved.chunks`・`discarded`）
 2. 管理者アカウントで `diagnoseSheetsApiRead()` を数回実行し、`ok: true` なら `SNAPSHOT_READ_MODE=sheetsApi` に切り替えて `keepWarm` の `detail.read` を比べる（RUNBOOK §1-4-3）
 3. 検証が済んだら v1.13.0 と合わせて PR → テスト用デプロイを `clasp undeploy` → デプロイ担当へ依頼
