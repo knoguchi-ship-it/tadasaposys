@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>タダサポ管理</title>
-  <meta name="app-version" content="1.13.0"><!-- 版数の同期対象（AI_RULES.md グランドルール6・npm run check が照合） -->
+  <meta name="app-version" content="1.14.0"><!-- 版数の同期対象（AI_RULES.md グランドルール6・npm run check が照合） -->
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230d9488'/><text x='50%25' y='55%25' dominant-baseline='middle' text-anchor='middle' fill='white' font-size='18' font-weight='bold'>T</text></svg>">
 
   <!-- v1.13.0 B2（ADR-013）: 初期データの先行取得。doGet は HTML を即返し、ここで google.script.run を
@@ -137,7 +137,7 @@
       Mail, Send, Reply, RotateCcw, Search, Filter, XCircle,
       Paperclip, UploadCloud, Trash2, Shield, Settings2, Save,
       Bell, BellOff, ExternalLink, Plus, ClipboardList, Copy, Pencil,
-      HelpCircle, BookOpen, ArrowRight, ChevronDown, ChevronUp
+      HelpCircle, BookOpen, ArrowRight, ChevronDown, ChevronUp, RefreshCw
     } from 'lucide-react';
 
     // ======================================================================
@@ -437,16 +437,27 @@
     };
 
     const Api = {
-      getInitialData: () => {
+      // v1.14.0（ADR-015）: サーバーは完成品（スナップショット）を返す。forceRefresh=true で作り直してから返す。
+      // 下書きバッジは利用者ごとに違うため含まれない（getMyDraftCaseIds で別に取る）
+      getInitialData: (forceRefresh) => {
         if (IS_LOCAL) {
           return new Promise(resolve => setTimeout(() => {
-            var draftCaseIds = Object.keys(mockDrafts).map(k => k.split('|')[0]);
-            var uniqueDraftCaseIds = [...new Set(draftCaseIds)];
-            resolve({ user: MOCK_USER, cases: buildMockCaseList(), masters: MOCK_MASTERS, draftCaseIds: uniqueDraftCaseIds, forcedCc: 'tadasapo@tadakayo.jp' });
+            resolve({ user: MOCK_USER, cases: buildMockCaseList(), masters: MOCK_MASTERS, forcedCc: 'tadasapo@tadakayo.jp',
+              snapshot: { builtAt: Date.now(), source: forceRefresh === true ? 'rebuild' : 'cache', readMode: 'mock' } });
           }, 300));
         }
         return new Promise((resolve, reject) => {
-          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message || "Unknown error"))).getInitialData();
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message || "Unknown error"))).getInitialData(forceRefresh === true);
+        });
+      },
+      getMyDraftCaseIds: () => {
+        if (IS_LOCAL) {
+          return new Promise(resolve => setTimeout(() => {
+            resolve([...new Set(Object.keys(mockDrafts).map(k => k.split('|')[0]))]);
+          }, 100));
+        }
+        return new Promise((resolve, reject) => {
+          google.script.run.withSuccessHandler(resolve).withFailureHandler(e => reject(new Error(e.message || "Unknown error"))).getMyDraftCaseIds();
         });
       },
       saveDraft: (payload) => {
@@ -1379,6 +1390,15 @@
       // v1.11.0: 下書きがある案件ID集合（バッジ表示用）
       const [draftCaseIds, setDraftCaseIds] = useState([]);
       const draftCaseIdSet = useMemo(() => new Set(draftCaseIds), [draftCaseIds]);
+      // v1.14.0: 表示中のデータ（完成品）の作成時刻と、「最新に更新」の実行中フラグ
+      const [snapshotInfo, setSnapshotInfo] = useState(null);
+      const [refreshingData, setRefreshingData] = useState(false);
+      const snapshotLabel = useMemo(() => {
+        if (!snapshotInfo || !snapshotInfo.builtAt) return '';
+        const d = new Date(snapshotInfo.builtAt);
+        if (isNaN(d.getTime())) return '';
+        return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+      }, [snapshotInfo]);
 
       const [activeTab, setActiveTab] = useState('unhandled');
       const [selectedCaseId, setSelectedCaseId] = useState(null);
@@ -1532,16 +1552,44 @@
             setUser(data.user);
             setCases(data.cases);
             setMasters(data.masters);
-            setDraftCaseIds(data.draftCaseIds || []);
             setForcedCc(data.forcedCc || '');
+            setSnapshotInfo(data.snapshot || null);
             setLoading(false);
             if (data.user?.email) restoreSeen(data.user.email);
+            loadMyDraftCaseIds(); // v1.14.0: 画面を出してから下書きバッジを取る
           })
           .catch(err => {
             setAuthError(err.message || "データの読み込みに失敗しました");
             setLoading(false);
           });
       }, []);
+
+      // v1.14.0: 下書きバッジ（利用者ごと）は画面表示後に別に取る。失敗しても画面は止めない
+      const loadMyDraftCaseIds = useCallback(() => {
+        Api.getMyDraftCaseIds()
+          .then(ids => setDraftCaseIds(Array.isArray(ids) ? ids : []))
+          .catch(e => console.warn('[drafts] 下書きバッジの取得に失敗', e));
+      }, []);
+
+      // v1.14.0: 「最新に更新」— サーバーで完成品を作り直して受け取る（フォーム申込・シートの直接編集を即時反映）
+      const handleRefreshData = async () => {
+        if (refreshingData) return;
+        setRefreshingData(true);
+        try {
+          const data = await Api.getInitialData(true);
+          setUser(data.user);
+          setCases(data.cases);
+          setMasters(data.masters);
+          setForcedCc(data.forcedCc || '');
+          setSnapshotInfo(data.snapshot || null);
+          loadMyDraftCaseIds();
+          showToast('最新のデータに更新しました。', { type: 'success', title: '更新' });
+        } catch (e) {
+          showToast(e.message || String(e), { type: 'error', title: '更新エラー' });
+        } finally {
+          setRefreshingData(false);
+        }
+      };
 
       const hasActiveSearch = searchWord.trim() !== ''
         || searchDateFrom !== ''
@@ -3265,6 +3313,14 @@
               <span className="font-black text-base tracking-tighter hidden sm:inline">タダサポ管理</span>
             </div>
             <div className="flex items-center gap-2">
+              {/* v1.14.0: 表示中のデータの時点と「最新に更新」（ADR-015） */}
+              <button onClick={handleRefreshData} disabled={refreshingData}
+                aria-label="最新に更新"
+                title={snapshotLabel ? '表示中のデータは ' + snapshotLabel + ' 時点です。押すと最新に更新します' : '最新に更新'}
+                className="h-8 px-2 rounded-full flex items-center gap-1 hover:bg-slate-100 transition-colors text-slate-500 hover:text-teal-600 disabled:opacity-60">
+                <RefreshCw size={16} className={refreshingData ? 'animate-spin' : ''} aria-hidden="true" />
+                {snapshotLabel && <span data-testid="snapshot-time" className="text-[10px] font-bold hidden sm:inline">{snapshotLabel} 時点</span>}
+              </button>
               <button onClick={() => setHelpOpen(true)} title="操作マニュアル"
                 className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-slate-100 transition-colors text-slate-500 hover:text-teal-600">
                 <HelpCircle size={18} />
@@ -4829,7 +4885,7 @@
                     )}
                   </>
                 )}
-                {/* キャンセルボタン（1回目のみ・担当者・サブ担当・管��者・非キャ���セル案件） */}
+                {/* キャンセルボタン（1回目のみ・担当者・サブ担当・管理者・非キャンセル案件） */}
                 {(selectedCase.supportCount || 1) <= 1 && selectedCase.status !== 'cancelled' && selectedCase.status !== 'rejected' && (
                   selectedCase.staffEmail === user?.email ||
                   (Array.isArray(selectedCase.subStaff) && selectedCase.subStaff.some(s => s.email === user?.email)) ||

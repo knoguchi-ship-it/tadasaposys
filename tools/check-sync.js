@@ -19,6 +19,8 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname, '..');
+// v1.14.0〜 バックエンドは gas/ に役割別（ADR-016）。版数コメントと const IDX はこのファイルにある
+const BACKEND_CORE = 'gas/01_定数と設定.js';
 // Windows（core.autocrlf=true）の作業ツリーは CRLF のため、LF に正規化して読む
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8').replace(/\r\n/g, '\n');
 const exists = (rel) => fs.existsSync(path.join(ROOT, rel));
@@ -37,7 +39,7 @@ function createReport() {
 // ---------------------------------------------------------------- 1. 版数
 /** 版数の同期対象（AI_RULES.md グランドルール6）と、その書式 */
 const VERSION_TARGETS = [
-  { file: 'コード.js', re: /Backend Logic \(v(\d+\.\d+\.\d+)\)/ },
+  { file: BACKEND_CORE, re: /Backend Logic \(v(\d+\.\d+\.\d+)\)/ },
   { file: 'index.html', re: /<meta name="app-version" content="(\d+\.\d+\.\d+)"/ },
   { file: 'CHANGELOG.md', re: /^## \[(\d+\.\d+\.\d+)\]/m },
   { file: 'AI_RULES.md', re: /\*\*現行バージョン:\*\* v(\d+\.\d+\.\d+)/ },
@@ -57,10 +59,10 @@ function checkVersions(r, readFile = read) {
 }
 
 // ---------------------------------------------------------------- 2. IDX 定数
-/** コード.js の const IDX = {...} を評価して取り出す */
+/** バックエンド（gas/01_定数と設定.js）の const IDX = {...} を評価して取り出す */
 function parseCodeIdx(src) {
   const start = src.indexOf('const IDX = {');
-  if (start < 0) throw new Error('コード.js に const IDX が見つからない');
+  if (start < 0) throw new Error(BACKEND_CORE + ' に const IDX が見つからない');
   let depth = 0;
   let i = src.indexOf('{', start);
   const from = i;
@@ -125,7 +127,7 @@ function diffFields(a, b) {
 }
 
 function checkIdx(r, readFile = read) {
-  const code = parseCodeIdx(readFile('コード.js'));
+  const code = parseCodeIdx(readFile(BACKEND_CORE));
   const rules = parseRulesIdx(readFile('AI_RULES.md'));
   for (const name of Object.keys(code)) {
     if (!rules[name]) { r.error('IDX', `AI_RULES.md データモデル節に ${name} がない`); continue; }
@@ -133,11 +135,11 @@ function checkIdx(r, readFile = read) {
     if (d.length) r.error('IDX', `AI_RULES.md の ${name} がコードと不一致: ${d.join(', ')}`);
   }
   for (const name of Object.keys(rules)) {
-    if (!code[name]) r.error('IDX', `AI_RULES.md の ${name} はコード.js の IDX にない`);
+    if (!code[name]) r.error('IDX', `AI_RULES.md の ${name} は ${BACKEND_CORE} の IDX にない`);
   }
   const sdd = readFile('docs/SDD.md');
   for (const [name, sid] of Object.entries(SDD_SECTIONS)) {
-    if (!code[name]) { r.error('IDX', `SDD対応表の ${name} はコード.js の IDX にない`); continue; }
+    if (!code[name]) { r.error('IDX', `SDD対応表の ${name} は ${BACKEND_CORE} の IDX にない`); continue; }
     const fields = parseSddSection(sdd, sid);
     if (!fields) { r.error('IDX', `docs/SDD.md に ### ${sid} 節がない（${name}）`); continue; }
     // STAFF は A列(ID) を IDX に持たないため、コード側のキーだけ比較する

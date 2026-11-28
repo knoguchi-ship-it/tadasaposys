@@ -1,17 +1,17 @@
 # 開発者向け引継ぎ資料 (HANDOVER.md)
 
 **Project:** タダサポ管理システム
-**Version:** 1.13.0（本番未反映。本番は v1.12.13 @159）
-**Date:** 2026/11/27
+**Version:** 1.14.0（本番未反映。本番は v1.12.13 @159）
+**Date:** 2026/11/28
 **Author:** Development Team
 
 ---
 
 ## 📌 次の担当者へ（最初にこの節だけ読めば現状が掴めます）
 
-> **現在地:** v1.13.0 / 本番 @159（v1.12.13） / 単体 147件 / E2E 72件
+> **現在地:** v1.14.0 / 本番 @159（v1.12.13） / 単体 190件 / E2E 75件
 >
-> 版・本番デプロイ番号・テスト件数は**この1行だけ**に書く（本文に書き写さない。AI_RULES.md グランドルール6）。`npm run check` がこの行を package.json・実テスト・§1・§8 と照合する。最終確認 2026/11/25（単体・E2E 全合格、`npm run check` エラー0）。
+> 版・本番デプロイ番号・テスト件数は**この1行だけ**に書く（本文に書き写さない。AI_RULES.md グランドルール6）。`npm run check` がこの行を package.json・実テスト・§1・§8 と照合する。最終確認 2026/11/28（単体・E2E 全合格、`npm run check` エラー0）。
 > ⚠️ デプロイ直後の運用確認として、GAS デプロイ管理画面で Webapp 設定（実行＝アクセスしているユーザー／アクセス＝NPO法人タダカヨ内の全員）をブラウザで目視確認すること（CLIでは確認不可）。
 
 > **2026/10/10 追記: v1.12.13（申込通知チャットへのリンク）を本番 @159 にデプロイ済み（固定 deploymentId / URL 不変）。** bot 側も反映済み（2026/10/10: CHAT_WEBHOOK_URL 設定・コード push・bot 担当メンバーのアカウントでトリガー新規作成）。タダサポのスプシの「チャット連携」シートと IMPORTRANGE も設定済み。**実申込で、通知が1回だけ届くこと・リンクが表示されスレッドが開くことを確認済み**（2026/10/10）。旧トリガーにも権限があり、切替時に通知が二重化したため、bot に重複防止を追加済み。**残り: 旧トリガー（別メンバー作成）の削除のみ**（重複防止があるため急ぎではない）。
@@ -20,7 +20,28 @@
 
 > **2026/11/25 追記（G3・ルール補強＋同期チェック導入・アプリの挙動変更なし）:** キャッチアップで照合が浅くなった反省から、AI_RULES.md「作業前レビュー」に**照合項目9つ**を明記し、うち機械化できるものを **`npm run check`（`tools/check-sync.js`）** に実装。版数（8ファイル）・この「現在地」行と §1/§8・`const IDX` と AI_RULES/SDD・ADR 件数・仕組みの実在・本番識別子/個人名の残存・origin との差を検査する（識別子は移行中のため警告、`npm run check:strict` でエラー）。個人名は Git 対象外の `.private-terms.local.txt`（1行1語）に登録して照合。`index.html` に版数 `<meta name="app-version">` を追加（同期対象なのに版数表記がなかったため）。AI_RULES の IDX 節に欠けていた `CASES_OVERRIDE`/`EMAIL`/`CHAT_LINK` を追加。同日、**フックを必要最小限で導入**: PreToolUse（禁止コマンドを拒否・push/deploy は確認）、SessionStart（`npm run check` の結果を文脈へ）、git pre-commit（`npm run check` エラーでコミット停止）、CI に Jest と `npm run check` を追加。Stop フックは重くなるため採用しない。あわせて文書の本番識別子を除去（残りは `コード.js` の `SPREADSHEET_ID` のみ）、SECURITY.md の共有設定の記述を AI_RULES の基準表に合わせて訂正、自動生成物（`playwright-report/`・`test-results/`）を Git 追跡から外し、古い `docs/RESTART_CHECKLIST.md`（v1.8.1）を削除。
 
-### ▶ 進行中（2026/11/26〜27）: v1.13.0 をテスト用デプロイで実機検証中 — **ここから再開する**
+### ▶ 進行中（2026/11/27〜）: v1.14.0「初期データの完成品配信」— **ここから再開する**
+
+keepWarm（DB の温め）では効果が薄かったため、画面を開くたびに全シートを読み直して結合・集計する方式をやめ、組み立て済みの「完成品（スナップショット）」を ScriptCache から配る方式にした（ADR-015・SDD F-02）。利用者合意: 反映遅れは5分以内＋「最新に更新」、保存先は CacheService のみ、定期作り直しは業務時間のみ。
+
+| 項目 | 状態 |
+|---|---|
+| ブランチ | `feat/v1.14.0-snapshot`（`feat/v1.13.0-perf-security` の上。ローカルのみ・未 push） |
+| 実装 | 完成品の保存・読出し・世代番号による無効化（書込を行う公開関数 39個を `runWrite_` で包む）・`keepWarm` を完成品の作り直しに変更・「最新に更新」ボタン・下書きバッジの遅延取得（`getMyDraftCaseIds`）・Sheets API 一括読込（`SNAPSHOT_READ_MODE=sheetsApi`、既定オフ）・診断 `diagnoseSheetsApiRead`（`perfProbeSheetsApi` を置き換え） |
+| 権限確認の是正（2026/11/28） | 権限確認の無い公開関数が約25個あったのを是正（SDD SEC-01b）。内部専用5関数を非公開化（`getStaffByEmail_` 等）、画面から呼ぶ `getAllCasesJoined`・`getScheduleAvailability`・`checkScheduleConflict` にタダメン確認、GAS エディタで実行する保守用関数に管理者確認（`runAdminWrite_`）。検査は `tests/unit/public-auth-guard.test.js` |
+| バックエンドの分割（2026/11/28） | `コード.js` を `gas/` の役割別12ファイルに分割（ADR-016）。手で実行する関数は `gas/00_管理者メニュー.js`。処理の中身は不変（全宣言がコメント以外一致を機械確認）。**テスト用デプロイ @165 は分割前**。次に push すると GAS 上の旧「コード」は12ファイルに置き換わる（`clasp push --force` がファイル一式を置き換えるため。GAS エディタを開き直す） |
+| テスト | ローカルの単体・E2E は合格（冒頭の現在地）。**GAS 実機では未検証** |
+| 完成品の作り直しトリガー（`keepWarm`） | **使う（2026/11/28 利用者判断：冷えた状態からの起動が重いため）**。2026/11/27 に一度停止したため、管理者アカウントで `setupKeepWarmTrigger()` を実行して再設定する（未実施） |
+
+**次にやること（順番）**
+0. **（2026/11/28 済）分割版をテスト用デプロイ @166（v1.14.0 1bd73b1）に反映。GAS の HEAD も分割版。** 残り: 管理者アカウントで GAS エディタの `00_管理者メニュー` を開き `setupKeepWarmTrigger()` を実行し、`keepWarm` トリガー（5分ごと）を再設定する
+1. **（2026/11/27 済）テスト用デプロイを @165（v1.14.0 8a16b18）に更新。** 実機確認（`clasp push` / `clasp deploy -i <テスト用ID>` はユーザー確認のうえ）。見ること: ①2回目以降の起動で `[perf] initial data` の `server.ms` が `snapshotRead` と `auth` だけ（`rebuild` が無い）こと、②担当などの書込後に別タブで開くと反映されていること、③「最新に更新」、④実行ログの `keepWarm` の `detail`（`saved.chunks`・`discarded`）
+2. 管理者アカウントで `diagnoseSheetsApiRead()` を数回実行し、`ok: true` なら `SNAPSHOT_READ_MODE=sheetsApi` に切り替えて `keepWarm` の `detail.read` を比べる（RUNBOOK §1-4-3）
+3. 検証が済んだら v1.13.0 と合わせて PR → テスト用デプロイを `clasp undeploy` → デプロイ担当へ依頼
+
+---
+
+### 前回（2026/11/26〜27）: v1.13.0 をテスト用デプロイで実機検証
 
 本番 @159 は一切変えずに、**別 URL のテスト用デプロイ**で v1.13.0 を GAS 上で動かし、実測しながら直している。
 
@@ -28,12 +49,12 @@
 
 | 項目 | 状態 |
 |---|---|
-| ブランチ | `feat/v1.13.0-perf-security`。**GitHub に未 push のコミットあり**（`46ec883` 以降。`git log origin/feat/v1.13.0-perf-security..HEAD` で確認）。push 後に PR の説明を更新する |
+| ブランチ | `feat/v1.13.0-perf-security`。GitHub に push 済み（2026/11/28 確認・origin との差なし）。PR #5（マージ先は PR #4 の `chore/g3-rules-hooks`）。PR の説明は v1.13.0 の最終内容に合わせて更新する |
 | GAS の HEAD | `f22c8fd` のビルド（`dist/`）を push 済み。手元の `.clasp.json` は `rootDir: "dist"` |
 | テスト用デプロイ | **@164**（説明欄「【テスト・本番ではない】v1.13.0 1b20c70 / 本番は @159（v1.12.13）」）。`clasp list-deployments` で確認できる。ID は作業者の手元の `.clasp.deploy.json` の `test`。**検証が終わったら `clasp undeploy <テスト用ID>` で削除する**。PR マージまで GAS エディタから「新しいバージョン」でデプロイしない（HEAD が未マージの v1.13.0 のため） |
 | スクリプトプロパティ | `SPREADSHEET_ID` 設定済み（v1.13.0 は URL を貼っても動く）。`SCHEMA_VERSION_APPLIED` はアプリが自動で書く |
 | 高度なサービス | **Sheets API v4 を GAS エディタから追加済み**（手元の `appsscript.json` にも反映済み） |
-| DB の温めトリガー | **設定済み（2026/11/27・検証担当のアカウント）**。「トリガー」に `keepWarm`（5分ごと）が1つ。時間帯は既定（毎日8〜20時）。本番反映時は管理者アカウントで設定し直す（`setupKeepWarmTrigger` は作り直して1つにする）。不要なら `removeKeepWarmTrigger` |
+| DB の温めトリガー | 2026/11/27 に利用者が一度停止 → **2026/11/28 に使うと決定**（v1.14.0 の進行中の表を参照。再設定は未実施）。v1.14.0 では `keepWarm` は完成品の5分ごとの作り直しを担う。止めている間は、完成品の期限切れ（既定10分）後に最初に開いた人が作り直しを待ち、フォーム申込の反映は期限切れ・書込・「最新に更新」のいずれかまで遅れる。再開は管理者アカウントで `setupKeepWarmTrigger()` |
 | タダメンマスタの空行 | **削除済み（2026/11/27）**。本番反映時の手順 7-3 は確認だけでよい |
 | 本番 | **@159（v1.12.13）のまま**。毎回 `clasp list-deployments` で確認済み |
 
@@ -90,8 +111,8 @@
 5. `npm run deploy`
 6. GAS デプロイ管理画面で Webapp 設定を目視確認 → 本番で起動・案件表示・日程確定（Zoom）を確認
 7. 管理者で「設定管理 → 連携 → 秘密情報をプロパティへ移行」→ Zoom の Client Secret を再発行して入力（RUNBOOK §2-3-1）
-7-1. GAS エディタの「サービス」に Sheets API があることを確認（無ければ「＋」から追加。計測用 `perfProbeSheetsApi` が使う）
-7-2. 管理者アカウントで GAS エディタから `setupKeepWarmTrigger()` を1回実行（DB の温め。RUNBOOK §1-4-1）
+7-1. GAS エディタの「サービス」に Sheets API があることを確認（無ければ「＋」から追加。v1.14.0 の `diagnoseSheetsApiRead`・一括読込が使う）
+7-2. 管理者アカウントで GAS エディタから `setupKeepWarmTrigger()` を1回実行（v1.14.0〜 完成品の作り直し。RUNBOOK §1-4-1）
 7-3. タダメンマスタの、最後のメンバーより下で D・E 列だけが入った空行を行ごと削除（RUNBOOK §6）
 8. 付いた @nn を報告 → 本節の「現在地」と §1 を更新
 
@@ -191,7 +212,7 @@
 ```
 tadasaposys/
 ├── index.html              ← フロントエンドの原本（React SPA、5700行超。開発時はブラウザ内 Babel）
-├── コード.js               ← バックエンド（GAS、5200行超）
+├── gas/                    ← バックエンド（GAS。役割別の12ファイル。00_管理者メニュー.js が手で実行する関数。ADR-016）
 ├── dist/                   ← 本番ビルド成果物（npm run build。Git 対象外。clasp はここを push）
 ├── appsscript.json         ← GASマニフェスト
 ├── AI_RULES.md             ← AI エージェント共通の開発指示（グランドルールの正本）
@@ -224,7 +245,7 @@ tadasaposys/
 └── docs/
     ├── SDD.md              ← 設計書
     ├── HANDOVER.md         ← 本ドキュメント
-    ├── ADR.md              ← アーキテクチャ判断記録（ADR-001〜014）
+    ├── ADR.md              ← アーキテクチャ判断記録（ADR-001〜016）
     ├── RUNBOOK.md          ← 運用手順書
     ├── Manual.md           ← 操作マニュアル
     ├── RD.md               ← 要件定義
@@ -293,7 +314,7 @@ tadasaposys/
 | 予約送信キュー | v1.12.1で予約送信廃止。既存キュー履歴・無効化確認用（16列） |
 | 年間利用補正 | 管理者による年度利用回数の手動補正（メール+年度→補正量。5列）（v1.12.4） |
 
-### IDX定数（`コード.js` の `const IDX`）
+### IDX定数（`gas/01_定数と設定.js` の `const IDX`）
 
 一覧は `AI_RULES.md` データモデル節、列の詳細は `docs/SDD.md` §1（本書には書き写さない。`npm run check` がコードと両文書を照合する）。
 
@@ -314,14 +335,15 @@ inProgress/completed → cancelled
 
 ---
 
-## 5. バックエンド関数一覧（コード.js）
+## 5. バックエンド関数一覧（gas/。v1.14.0〜 役割別ファイル。各ファイル先頭のコメントに担当範囲）
 
 ### 公開関数（google.script.run 経由）
 
 | 関数 | 説明 |
 |------|------|
 | `doGet()` | Web App エントリポイント（初期データHTML埋め込み） |
-| `getInitialData()` | 起動時データ取得 |
+| `getInitialData(forceRefresh)` | 起動時データ取得（v1.14.0〜 完成品を ScriptCache から返す。`true` で作り直し） |
+| `getMyDraftCaseIds()` | 下書きを持つ案件IDの一覧（v1.14.0〜 画面表示後に取得） |
 | `getAllCasesJoined()` | 全案件結合データ取得 |
 | `assignCase(caseId, user, tools)` | 案件アサイン（メール送信なし） |
 | `assignAndSendEmail(...)` | アサイン＋初回メール送信 |
@@ -333,8 +355,8 @@ inProgress/completed → cancelled
 | `sendNewCaseEmail(...)` | 新規スレッドメール送信 |
 | `sendCaseEmail(...)` | スレッド返信 |
 | `getThreadMessages(caseId)` | スレッドグループ取得 |
-| `getMasters()` | マスタデータ取得 |
-| `getStaffByEmail(email)` | スタッフ情報取得 |
+| `getMasters_()` | マスタデータ取得（内部専用・v1.14.0 で非公開化） |
+| `getStaffByEmail_(email)` | スタッフ情報取得（内部専用・v1.14.0 で非公開化） |
 | `getAdminPanelData()` | 管理パネル初期データ |
 | `upsertStaffMember(payload)` | 既存スタッフの権限更新 |
 | `deactivateStaffMember(email)` | スタッフ無効化 |
@@ -347,9 +369,9 @@ inProgress/completed → cancelled
 | `updateMeetUrl(caseId, newUrl)` | Meet/Zoom URL変更＋カレンダー同期 |
 | `updateSupportHistory(caseId, roundIndex, patch)` | 過去対応記録の編集 |
 | `deleteCaseAdmin(caseId)` | 管理者による案件削除 |
-| `createGoogleMeetEvent(...)` | Google Meetイベント作成 |
-| `createZoomMeeting(...)` | Zoomミーティング作成 |
-| `verifyCcDryRun()` | CC設定のドライラン検証 |
+| `createGoogleMeetEvent_(...)` | Google Meetイベント作成（内部専用・v1.14.0 で非公開化） |
+| `createZoomMeeting_(...)` | Zoomミーティング作成（内部専用・v1.14.0 で非公開化） |
+| `verifyCcDryRun()` | CC設定のドライラン検証（管理者のみ） |
 | `saveDraft / loadDraft / deleteDraft / listDraftsForCase` | メール下書き管理（v1.11.0） |
 | `scheduleEmail / cancelScheduledEmail / listScheduledForCase` | v1.12.1で廃止。新規予約登録・一覧表示は行わない |
 | `processScheduledEmails_()` | 旧トリガー互換。送信せず未送信予約を `disabled` 化 |
@@ -442,10 +464,11 @@ npm run test:report
 - `11-closing-email`: サポート終了メール（送信前に編集・OFF で開かない）（2件）
 - `12-chat-link`: 申込通知チャットへのリンク（3件）
 - `13-secret-settings`: 秘密情報の書込専用設定（password 表示・移行・食い違いを消さない・保存後に値を返さない）（4件）
+- `14-snapshot-refresh`: 初期データの完成品と「最新に更新」（時点表示・更新・更新後も下書きバッジが残る）（3件）
 
 E2E は既定で `dist/`（本番ビルド）を検証する。原本を検証するときは `E2E_TARGET=src npm test`。
 
-> **モック整備（T1）**: ローカル/E2E で Zoom 機能を再現するため、`index.html` の `MOCK_MASTERS.methods` に `Zoom` を追加（本番 `getMasters` の `zoomEnabled` 時と同形状＝index1 に挿入）。モックは `IS_LOCAL` 専用で本番挙動に影響なし。
+> **モック整備（T1）**: ローカル/E2E で Zoom 機能を再現するため、`index.html` の `MOCK_MASTERS.methods` に `Zoom` を追加（本番 `getMasters_` の `zoomEnabled` 時と同形状＝index1 に挿入）。モックは `IS_LOCAL` 専用で本番挙動に影響なし。
 
 詳細: `docs/playwright-guide.html`
 
@@ -455,7 +478,7 @@ E2E は既定で `dist/`（本番ビルド）を検証する。原本を検証�
 npm run test:unit  # 件数は冒頭の現在地 / 約1秒
 ```
 
-対象: `getFiscalYear` / `sanitizeForSheet_` / `parseNullablePositiveInteger_` / `normalizeEmail_` / `parseBoolean_` 等の純粋関数（`business-logic.test.js`）と、同期チェックの検査ロジック（`check-sync.test.js`）、PreToolUse フックの判定（`guard.test.js`）、本番ビルドとデプロイ事前検査（`build-deploy.test.js`）。件数照合のため `test.each` は使わず1件ずつ `test()` で書く
+対象: `getFiscalYear_` / `sanitizeForSheet_` / `parseNullablePositiveInteger_` / `normalizeEmail_` / `parseBoolean_` 等の純粋関数（`business-logic.test.js`）と、同期チェックの検査ロジック（`check-sync.test.js`）、PreToolUse フックの判定（`guard.test.js`）、本番ビルドとデプロイ事前検査（`build-deploy.test.js`）。件数照合のため `test.each` は使わず1件ずつ `test()` で書く
 
 ### ドキュメント同期チェック
 
@@ -511,7 +534,7 @@ npm run deploy   # 検査 → テスト → ビルド → 確認入力 → clasp
 
 ### 設計変更時の更新対象
 
-1. `コード.js` — バックエンドロジック
+1. `gas/` — バックエンドロジック（役割別。手で実行する関数は `00_管理者メニュー.js`）
 2. `index.html` — フロントエンドUI + モックデータ
 3. `docs/SDD.md` — 設計書（データモデル・関数仕様）
 4. `docs/HANDOVER.md` — 本ドキュメント
@@ -521,7 +544,7 @@ npm run deploy   # 検査 → テスト → ビルド → 確認入力 → clasp
 
 ### バージョン管理ルール
 
-- `コード.js` 先頭コメント・`index.html`・SDD・HANDOVER・Manual・CHANGELOG・AI_RULES.md・package.json のバージョンは常に一致させること
+- `gas/01_定数と設定.js` 先頭コメント・`index.html`・SDD・HANDOVER・Manual・CHANGELOG・AI_RULES.md・package.json のバージョンは常に一致させること
 - 現行: 冒頭の「現在地」を参照（`npm run check` が全対象の一致を検査）
 
 ### 🔒 デプロイ時の絶対グランドルール（正本は AI_RULES.md）
@@ -584,6 +607,7 @@ npm run deploy   # 検査 → テスト → ビルド → 確認入力 → clasp
 | **v1.12.10** | 2026/06/16 | メール下書きの再編集・送信導線を追加（不具合修正）: 保存済み下書き（特に既存スレッドへの返信）が案件詳細から一覧・再編集・送信できなかった問題を、案件詳細の「下書き一覧」新設で解消（`index.html`）。種別/件名/本文プレビュー/更新日時を表示し「開く」でメールモーダル復元→再編集・送信、「削除」で破棄。未対応案件でも読込。保存/送信/削除と「下書きあり」バッジを同期。メールモーダル閉じるボタンに `aria-label` 付与。バックエンド変更なし（既存 `listDraftsForCase` 等を利用）。E2E `10-draft-list.spec.ts`（2件）追加・E2E 61→63件・単体92件 全PASS。**@156 デプロイ済み（固定 deploymentId / URL 不変）** |
 | **v1.12.11** | 2026/06/16 | サポート終了メールの送信機能を追加: 完了報告モーダルに「サポート終了メールを送信する」チェック（既定ON）を新設し、完了と同時に相談者へ終了連絡メールを既存スレッドへ返信送信（無ければ新規・サブ担当を自動CC・ステータス追加変更なし・送信失敗は非致死）。件名/本文は設定キー `MAIL_CLOSING_SUBJECT`/`MAIL_CLOSING_BODY` で編集可能（設定管理「メール」タブ）。送信は既存 `sendCaseEmail`/`sendNewCaseEmail` を再利用（DRY）。E2E `11-closing-email.spec.ts`（2件）追加・E2E 63→65件・単体92件 全PASS。**@157 デプロイ済み（固定 deploymentId / URL 不変）** |
 | **v1.12.12** | 2026/06/16 | サポート終了メールを「送信前に編集」する方式へ変更: v1.12.11 のテンプレ自動送信を、完了報告後にメール作成モーダルを開きログイン中メンバーが件名・本文をその場で書き換えて送信する方式に（既存スレッドへ返信／無ければ新規・×で閉じれば送信なし・下書き保存可）。メールモーダルに新モード `closing` を追加し送信は既存 `sendCaseEmail`/`sendNewCaseEmail` を再利用（`handleSendEmail` reply-or-new 分岐に合流・DRY）。テンプレ初期値は管理設定で編集可（v1.12.11）。バックエンド変更なし（フロントのみ）。E2E `11-closing-email.spec.ts` を新フローへ更新・E2E 65件・単体92件 全PASS。**@158 デプロイ済み（固定 deploymentId / URL 不変）** |
+| **v1.14.0** | 2026/11/27 | 初期データの完成品配信（ADR-015）: 組み立て済みの案件一覧等を ScriptCache から返し DB を開かない。書込を行う公開関数を `runWrite_` で包み世代番号で無効化、`keepWarm` が5分ごとに作り直し、「最新に更新」ボタン、下書きバッジの遅延取得、Sheets API 一括読込（既定オフ・診断後に切替）。文字化け修正。単体180件・E2E75件。**本番未反映** |
 | **v1.12.13** | 2026/10/10 | 申込通知チャットへのリンク: 案件詳細「相談内容」横に「チャットを開く」。申込通知 bot（回答スプシの別GAS）が Webhook 応答のスレッド名を「チャット連携」シートへ記録 → タダサポへ IMPORTRANGE（参照のみ・SDD S-10）→ `getAllCasesJoined` が申込日時（壁時計）+正規化メールで突合し `chatThreadUrl` を付与。bot の Webhook URL をスクリプトプロパティへ移行。単体98件・E2E +3。**@159 デプロイ済み（固定 deploymentId / URL 不変）。bot 側反映済み** |
 
 ---
@@ -751,7 +775,7 @@ backup ブランチの3修正を本番ラインへ統合し、リポジトリを
 
 実施コマンド:
 ```bash
-clasp push --force   # appsscript.json / index.html / コード.js の3ファイル
+clasp push --force   # dist/ の appsscript.json / index.html / バックエンド一式（gas/ からビルドでコピー）
 clasp deploy -i <DEPLOYMENT_ID> -d "v1.12.2"
 # → @148。clasp deployments で固定IDのみ(新規なし)を確認済み
 ```
@@ -778,10 +802,10 @@ G1（グランドルール見直し）は 2026/05/28 に完了。**2026/11/25 �
 
 ### 6. 困ったとき
 
-- **設計の意図を知りたい**: `docs/ADR.md`（ADR-001〜014）
+- **設計の意図を知りたい**: `docs/ADR.md`（ADR-001〜016）
 - **データモデルの詳細**: `docs/SDD.md` §1
 - **デプロイ事故対応**: `docs/RUNBOOK.md` §4-5
-- **コードの場所を探す**: `コード.js` は約4500行・1ファイル / `index.html` は約5400行・1ファイル（モックデータも含む）。`docs/HANDOVER.md` §5 にバックエンド関数一覧あり
+- **コードの場所を探す**: バックエンドは `gas/` の役割別ファイル（v1.14.0〜。手で実行する関数は `00_管理者メニュー.js`）/ `index.html` は約5400行・1ファイル（モックデータも含む）。`docs/HANDOVER.md` §5 にバックエンド関数一覧あり
 
 ### 7. 連絡先・関連リソース
 

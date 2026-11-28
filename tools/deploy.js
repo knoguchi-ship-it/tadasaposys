@@ -92,7 +92,7 @@ async function main() {
   console.log('\n================ 本番デプロイ確認 ================');
   console.log(`版: v${version} / コミット: ${commit}（${branch}）`);
   console.log('反映先: 固定 deploymentId（.clasp.deploy.json の production。URL は変わらない）');
-  console.log('push 対象: dist/（index.html・コード.js・appsscript.json）');
+  console.log('push 対象: dist/（index.html・gas/ のバックエンド一式・appsscript.json）');
   console.log('==================================================');
   const prop = await ask('GAS「プロジェクトの設定 → スクリプト プロパティ」に SPREADSHEET_ID を設定済みですか？ [yes/no]: ');
   if (prop !== 'yes') fail('先に SPREADSHEET_ID を設定する（未設定のまま反映するとアプリが起動しない。RUNBOOK §3）');

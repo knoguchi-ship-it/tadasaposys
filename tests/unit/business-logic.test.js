@@ -1,12 +1,12 @@
 /**
  * ビジネスロジック 単体テスト
- * 対象: コード.js のピュア関数（GAS API 非依存）
+ * 対象: gas/ のピュア関数（GAS API 非依存）
  */
 
 'use strict';
 
 const {
-  getFiscalYear,
+  getFiscalYear_,
   caseFiscalYear,
   annualUsageKey,
   effectiveAnnualCount,
@@ -33,51 +33,50 @@ const {
   planSecretMigration,
   normalizeSpreadsheetId,
   schemaMigrationNeeded,
-  buildBatchGetUrl,
   planStaffDefaults,
   isWithinKeepWarmWindow,
 } = require('./src/pure-functions');
 
 // ============================================================
-// getFiscalYear — 年度計算（4月始まり）
+// getFiscalYear_ — 年度計算（4月始まり）
 // ============================================================
-describe('getFiscalYear', () => {
+describe('getFiscalYear_', () => {
   test('4月は同年度の開始', () => {
-    expect(getFiscalYear(new Date('2025-04-01'))).toBe(2025);
-    expect(getFiscalYear(new Date('2026-04-01'))).toBe(2026);
+    expect(getFiscalYear_(new Date('2025-04-01'))).toBe(2025);
+    expect(getFiscalYear_(new Date('2026-04-01'))).toBe(2026);
   });
 
   test('3月は前年度の末', () => {
-    expect(getFiscalYear(new Date('2026-03-31'))).toBe(2025);
-    expect(getFiscalYear(new Date('2025-03-01'))).toBe(2024);
+    expect(getFiscalYear_(new Date('2026-03-31'))).toBe(2025);
+    expect(getFiscalYear_(new Date('2025-03-01'))).toBe(2024);
   });
 
   test('年度境界: 3月末 → 4月始め', () => {
-    expect(getFiscalYear(new Date('2026-03-31'))).toBe(2025);
-    expect(getFiscalYear(new Date('2026-04-01'))).toBe(2026);
+    expect(getFiscalYear_(new Date('2026-03-31'))).toBe(2025);
+    expect(getFiscalYear_(new Date('2026-04-01'))).toBe(2026);
   });
 
   test('1月・2月は前年度', () => {
-    expect(getFiscalYear(new Date('2026-01-01'))).toBe(2025);
-    expect(getFiscalYear(new Date('2026-02-28'))).toBe(2025);
+    expect(getFiscalYear_(new Date('2026-01-01'))).toBe(2025);
+    expect(getFiscalYear_(new Date('2026-02-28'))).toBe(2025);
   });
 
   test('12月は同年度', () => {
-    expect(getFiscalYear(new Date('2025-12-31'))).toBe(2025);
+    expect(getFiscalYear_(new Date('2025-12-31'))).toBe(2025);
   });
 
   test('文字列形式の日付も受け付ける', () => {
-    expect(getFiscalYear('2025-04-01T00:00:00')).toBe(2025);
+    expect(getFiscalYear_('2025-04-01T00:00:00')).toBe(2025);
   });
 
   test('パース不能な文字列は 0 を返す', () => {
-    expect(getFiscalYear('invalid')).toBe(0);
-    expect(getFiscalYear('not-a-date')).toBe(0);
+    expect(getFiscalYear_('invalid')).toBe(0);
+    expect(getFiscalYear_('not-a-date')).toBe(0);
   });
 
   test('null は new Date(null) = エポック(1970/1) として扱われ FY1969 を返す', () => {
     // new Date(null) は epoch(0) = 1970-01-01 → 1月は < 3 → FY = 1969
-    expect(getFiscalYear(null)).toBe(1969);
+    expect(getFiscalYear_(null)).toBe(1969);
   });
 });
 
@@ -827,16 +826,7 @@ describe('schemaMigrationNeeded（スキーマ移行確認の要否）', () => {
 });
 
 // ── v1.13.0: 計測用 Sheets API 一括読込の URL ──
-describe('buildBatchGetUrl（Sheets API values:batchGet の URL）', () => {
-  test('シート名を引用符で囲んで URL エンコードし、書式なし・シリアル日時で受け取る', () => {
-    const url = buildBatchGetUrl('dummy-id', ['タダメンマスタ', "O'Brien"]);
-    expect(url.startsWith('https://sheets.googleapis.com/v4/spreadsheets/dummy-id/values:batchGet?')).toBe(true);
-    const ranges = new URL(url).searchParams.getAll('ranges');
-    expect(ranges).toEqual(["'タダメンマスタ'", "'O''Brien'"]);
-    expect(url).toContain('valueRenderOption=UNFORMATTED_VALUE');
-    expect(url).toContain('dateTimeRenderOption=SERIAL_NUMBER');
-  });
-});
+// buildBatchGetUrl_ は v1.14.0 から tests/unit/snapshot.test.js（gas/ から直接取り出して検査）
 
 // ── v1.13.0: タダメンマスタの ROLE / IS_ACTIVE 補完（空行に書かない） ──
 describe('planStaffDefaults（タダメンマスタの補完計画）', () => {
